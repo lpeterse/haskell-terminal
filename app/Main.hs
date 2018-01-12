@@ -1,3 +1,4 @@
+{-# LANGUAGE BinaryLiterals             #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 module Main where
@@ -6,6 +7,7 @@ import           Control.Concurrent
 import           Control.Monad
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.State
+import           Data.Bits
 import qualified Data.ByteString           as BS
 import           Data.Word
 import           System.IO
@@ -18,7 +20,7 @@ main = runInputT $ forever $
 decode :: MonadInput m => m InputSegment
 decode = getNext >>= \case
   27 -> decodeEscape
-  x  -> undefined
+  x  -> decodeUtf8Char1 (fromIntegral x)
   where
     decodeEscape = getNextNonBlock >>= \case
       Nothing -> do
@@ -31,6 +33,26 @@ decode = getNext >>= \case
       | x < 97    = undefined
       | x < 123   = pure $ "ALT + " ++ [toEnum $ fromIntegral x]
       | otherwise = undefined
+
+    decodeUtf8Char1 x1
+      | x1                 < 0b10000000 = seq1
+      | x1 .&. 0b11100000 == 0b11000000 = seq2
+      | x1 .&. 0b11110000 == 0b11100000 = seq3
+      | x1 .&. 0b11111000 == 0b11110000 = seq4
+      | otherwise                       = reject
+      where
+        char c  = pure $ "CHAR " ++ [toEnum c :: Char]
+        reject  = pure $ "CHAR " ++ ['�']
+        seq1    = pure $ "CHAR " ++ [toEnum x1 :: Char]
+        seq2    = withNext $ \x2-> char $
+          ((x1 .&. 0b00011111) `unsafeShiftL` 6) + x2
+        seq3    = withNext $ \x2-> withNext $ \x3-> char $
+          ((x1 .&. 0b00001111) `unsafeShiftL` 12) + (x2 `unsafeShiftL` 6) + x3
+        seq4    = withNext $ \x2-> withNext $ \x3-> withNext $ \x4-> char $
+          ((x1 .&. 0b00000111) `unsafeShiftL` 18) + (x2 `unsafeShiftL` 12) + (x3 `unsafeShiftL` 6) + x4
+        withNext f = getNext >>= \case
+          x | x .&. 0b11000000 == 0b10000000 -> f (fromIntegral x .&. 0b00111111)
+            | otherwise                      -> reject
 
 class Monad m => MonadInput m where
   getNext         :: m Word8
