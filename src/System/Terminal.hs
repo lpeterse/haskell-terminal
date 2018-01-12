@@ -2,6 +2,8 @@
 {-# LANGUAGE LambdaCase                 #-}
 module System.Terminal
     ( MonadTerm (..)
+    , AnsiTermT (..)
+    , runAnsiTermT
     ) where
 
 import           Control.Concurrent           (forkIO, threadDelay)
@@ -17,7 +19,6 @@ import           Control.Monad                (forever)
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 import           Control.Monad.STM
-import           Control.Monad.STM
 import           Control.Monad.Trans
 import           Data.Function                (fix)
 import           Data.Word
@@ -28,6 +29,7 @@ import           System.Posix.Signals
 
 import           Prelude                      hiding (getChar, getLine, putChar,
                                                putStr)
+import qualified Prelude                      as P
 
 data Color
   = Color { colorR :: !Word8, colorG :: !Word8, colorB :: !Word8 }
@@ -42,14 +44,17 @@ newtype AnsiTermT m a = AnsiTermT (ReaderT AnsiTermState m a)
   deriving (Functor, Applicative, Monad, MonadIO)
 
 class MonadPrinter m where
-  putChar              :: Char -> m ()
-  putString            :: String -> m ()
-  putCR                :: m ()
-  putNL                :: m ()
+  printChar            :: Char -> m ()
+  printString          :: String -> m ()
+  printStringRaw       :: String -> m ()
+  cr                   :: m ()
+  lf                   :: m ()
+  nl                   :: m ()
   setForegroundColor   :: Color -> m ()
   setBackgroundColor   :: Color -> m ()
   setBold              :: m ()
   setUnderline         :: m ()
+  reset                :: m ()
 
 class MonadTerm m where
   askInterruptEvent    :: m (STM ())
@@ -57,11 +62,11 @@ class MonadTerm m where
   moveCursorHorizontal :: Int -> m ()
   clearScreen          :: m ()
 
-instance MonadPrinter (AnsiTermT m) where
-  putChar
-    = AnsiTermT . liftIO . putChar . escapeCharSub
-  putString s
-    = AnsiTermT . liftIO . putStr . fmap escapeCharSub
+instance MonadIO m => MonadPrinter (AnsiTermT m) where
+  printChar
+    = AnsiTermT . liftIO . P.putChar
+  printString
+    = AnsiTermT . liftIO . P.putStr
 
 instance MonadIO m => MonadTerm (AnsiTermT m) where
   -- As soon as the interrupt flag becomes true, unblock and set it to false again.
@@ -116,5 +121,3 @@ runAnsiTermT (AnsiTermT r) = do
         isInterruptFlag = interruptFlag
       }
 
-escapeCharSub :: Char -> Char
-escapeCharSub = \c-> if isPrint c then c else '\SUB'
