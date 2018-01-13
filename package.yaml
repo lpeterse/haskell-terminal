@@ -28,7 +28,6 @@ dependencies:
 - transformers
 - unix
 - ansi-terminal
-- vty
 
 library:
   source-dirs: src

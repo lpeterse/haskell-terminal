@@ -3,18 +3,18 @@ module System.Terminal.Events where
 import           Data.ByteString
 
 data Key
-  = KChar Char
+  = KChar [Modifier] Char
   | KDelete
-  | KBackspace
+  | KSpace Int
+  | KBackspace Int
   | KEsc
-  | KLeft | KRight | KUp | KDown
+  | KTab Int
+  | KBackTab Int
+  | KLeft Int | KRight Int | KUp Int | KDown Int
   | KUpLeft | KUpRight | KDownLeft | KDownRight | KCenter
-  | KFun Int | KBackTab | KPrtScr | KPause | KIns
+  | KFun Int | KPrtScr | KPause | KInsert
   | KHome | KPageUp | KEnd | KPageDown | KBegin | KMenu
   deriving (Eq,Show,Read,Ord)
-
-keyEsc :: Key
-keyEsc  = KChar '['
 
 -- | Modifier keys. Key codes are interpreted such that users are more
 -- likely to have Meta than Alt; for instance on the PC Linux console,
@@ -56,3 +56,12 @@ data Event
   | EvGainedFocus
   -- ^ The terminal running the application gained input focus.
   deriving (Eq,Show,Read,Ord)
+
+isKeyTab     :: Key -> Bool
+isKeyTab KTab {}             = True
+isKeyTab (KChar [MCtrl] 'I') = True
+isKeyTab _                   = False
+
+isKeyBackTab :: Key -> Bool
+isKeyBackTab KBackTab {} = True
+isKeyBackTab _           = False

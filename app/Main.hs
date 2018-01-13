@@ -54,25 +54,63 @@ decodeAnsi = decode1 =<< getNext
     decode1 :: MonadInput m => Word8 -> m E.Event
     decode1 x
       | x == 27   = decodeEscape
-      | x <= 31   = pure $ E.EvKey (E.KChar $ toEnum $ 64 + fromIntegral x) [E.MCtrl]
-      | x == 127  = pure $ E.EvKey E.KBackspace []
-      | otherwise = flip E.EvKey [] . E.KChar <$> decodeUtf8Sequence x
+      | x <= 31   = pure $ E.EvKey (E.KChar [E.MCtrl] $ toEnum $ 64 + fromIntegral x) []
+      | x == 127  = pure $ E.EvKey (E.KBackspace 1) []
+      | otherwise = flip E.EvKey [] . E.KChar [] <$> decodeUtf8Sequence x
 
     decodeEscape :: (MonadInput m) => m E.Event
     decodeEscape = getNextNonBlock >>= \case
       Nothing -> do
         wait -- a single escape can only be distinguished by timing
         getNextNonBlock >>= \case
-          Nothing -> pure $ E.EvKey (E.KChar '[') [E.MCtrl]
+          Nothing -> pure $ E.EvKey (E.KChar [E.MCtrl] '[') []
           Just x  -> decodeEscapeSequence x
       Just x  -> decodeEscapeSequence x
 
     decodeEscapeSequence :: (MonadInput m) => Word8 -> m E.Event
     decodeEscapeSequence x
-      | x == 8    = pure $ E.EvKey E.KBackspace []
-      | x == 10   = pure $ E.EvKey (E.KChar '\n') [E.MAlt]
-      | x == 27   = getNext >>= \x-> getNext >>= \y-> getNext >>= \z-> error (show  [x,y,z])-- pure $ E.EvKey E.KEsc []
+      | x == 10   = pure $ E.EvKey (E.KChar [E.MAlt] 'J') [] -- gnome-terminal
+      | x == 27   = getNext >>= \case
+                      91 -> decodeCSI >>= \case
+                        E.EvKey k ms -> pure $ E.EvKey k (E.MAlt:ms) -- urxvt
+                        _ -> undefined
+                      _ -> undefined
+      | x == 33   = pure $ E.EvKey (E.KChar [] '1') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
+      | x == 35   = pure $ E.EvKey (E.KChar [] '3') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
+      | x == 36   = pure $ E.EvKey (E.KChar [] '4') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
+      | x == 37   = pure $ E.EvKey (E.KChar [] '5') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
+      | x == 38   = pure $ E.EvKey (E.KChar [] '7') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
+      | x == 39   = undefined
+      | x == 40   = pure $ E.EvKey (E.KChar [] '9') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
+      | x == 41   = pure $ E.EvKey (E.KChar [] '0') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
+      | x == 42   = pure $ E.EvKey (E.KChar [] '8') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
+      | x == 43   = pure $ E.EvKey (E.KChar [] '=') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
+      | x == 45   = pure $ E.EvKey (E.KChar [] '_') [E.MAlt]
+      | x == 48   = pure $ E.EvKey (E.KChar [] '0') [E.MAlt]
+      | x == 49   = pure $ E.EvKey (E.KChar [] '1') [E.MAlt]
+      | x == 50   = pure $ E.EvKey (E.KChar [] '2') [E.MAlt]
+      | x == 51   = pure $ E.EvKey (E.KChar [] '3') [E.MAlt]
+      | x == 52   = pure $ E.EvKey (E.KChar [] '4') [E.MAlt]
+      | x == 53   = pure $ E.EvKey (E.KChar [] '5') [E.MAlt]
+      | x == 54   = pure $ E.EvKey (E.KChar [] '6') [E.MAlt]
+      | x == 55   = pure $ E.EvKey (E.KChar [] '7') [E.MAlt]
+      | x == 56   = pure $ E.EvKey (E.KChar [] '8') [E.MAlt]
+      | x == 57   = pure $ E.EvKey (E.KChar [] '9') [E.MAlt]
+      | x == 60   = pure $ E.EvKey (E.KChar [] '<') [E.MAlt]
+      | x == 61   = getNext >>= \case
+                      27 -> pure $ E.EvKey (E.KChar [E.MAlt] '=') [E.MAlt]
+                      y  -> error (show y)
+      | x == 62   = pure $ E.EvKey (E.KChar [] '<') [E.MAlt, E.MShift]
+      | x == 64   = pure $ E.EvKey (E.KChar [] '2') [E.MAlt, E.MShift]
+      | x == 65   = pure $ E.EvKey (E.KChar [] 'A') [E.MAlt, E.MShift]
+      | x == 79   = getNext >>= \case
+                      80 -> pure $ E.EvKey (E.KFun  1) [] -- gnome-terminal (?)
+                      81 -> pure $ E.EvKey (E.KFun  2) [] -- gnome-terminal
+                      82 -> pure $ E.EvKey (E.KFun  3) [] -- gnome-terminal
+                      83 -> pure $ E.EvKey (E.KFun  4) [] -- gnome-terminal
       | x == 91   = decodeCSI
+      | x == 94   = pure $ E.EvKey (E.KChar [] '6') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
+      | x == 95   = pure $ E.EvKey (E.KChar [] '_') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
       | x < 97    = error $ show x
       | x < 123   = decode1 x
       | x == 127  = pure $ E.EvKey E.KDelete []
@@ -80,59 +118,99 @@ decodeAnsi = decode1 =<< getNext
 
     decodeCSI :: (MonadInput m) => m E.Event
     decodeCSI = withParams $ \ps-> \case
-      65  -> pure $ E.EvKey E.KUp []
-      66  -> pure $ E.EvKey E.KDown []
-      67  -> pure $ E.EvKey E.KRight []
-      68  -> pure $ E.EvKey E.KLeft []
-      69  -> undefined -- pure $ E.Event $ E.EvKey E.KDownLeft   -- cursor next line
-      70  -> undefined -- pure $ E.Event $ E.EvKey E.KUpLeft     -- cursor previous line
-      71  -> undefined -- withN 1 ps (pure . CursorHorizontalAbsolute)
-      72  -> undefined -- withNM 1 1 ps ((pure .) . CursorPosition)
-      73  -> undefined
-      74  -> undefined -- withN 0 ps (pure . EraseInDisplay)
-      75  -> undefined -- withN 0 ps (pure . EraseInLine)
-      76  -> undefined
-      77  -> undefined
-      78  -> undefined
-      79  -> undefined
-      80  -> undefined
-      81  -> undefined
-      82  -> undefined
-      83  -> undefined
-      84  -> undefined
-      102 -> undefined -- withNM 1 1 ps ((pure .) .  HorizontalVerticalPosition)
-      109 -> undefined -- SGR <$> decodeSGR ps
-      126 -> case ps of
-        [    50] {-  2 -} -> pure $ E.EvKey E.KIns []
-        [    51] {-  3 -} -> pure $ E.EvKey E.KDelete []
-        [    53] {-  5 -} -> pure $ E.EvKey E.KPageUp []
-        [    54] {-  6 -} -> pure $ E.EvKey E.KPageDown []
-        [    55] {-  9 -} -> undefined -- pure Pos1
-        [    56] {- 10 -} -> undefined -- pure End
-        [49, 49] {- 11 -} -> pure $ E.EvKey (E.KFun 1) []
-        [49, 50] {- 12 -} -> pure $ E.EvKey (E.KFun 2) []
-        [49, 51] {- 13 -} -> pure $ E.EvKey (E.KFun 3) []
-        [49, 52] {- 14 -} -> pure $ E.EvKey (E.KFun 4) []
-        [49, 53] {- 15 -} -> pure $ E.EvKey (E.KFun 5) []
-        [49, 55] {- 17 -} -> pure $ E.EvKey (E.KFun 6) []
-        [49, 56] {- 18 -} -> pure $ E.EvKey (E.KFun 7) []
-        [49, 57] {- 19 -} -> pure $ E.EvKey (E.KFun 8) []
-        [50, 48] {- 20 -} -> pure $ E.EvKey (E.KFun 9) []
-        [50, 49] {- 21 -} -> pure $ E.EvKey (E.KFun 10) []
-        [50, 51] {- 22 -} -> pure $ E.EvKey (E.KFun 11) []
-        [50, 52] {- 23 -} -> pure $ E.EvKey (E.KFun 12) []
-        [50, 53] {- 24 -} -> pure $ E.EvKey (E.KFun 13) []
-        [50, 54] {- 25 -} -> pure $ E.EvKey (E.KFun 14) []
-        [50, 56] {- 27 -} -> pure $ E.EvKey (E.KFun 15) []
-        [50, 57] {- 28 -} -> pure $ E.EvKey (E.KFun 16) []
-        [51, 49] {- 31 -} -> pure $ E.EvKey (E.KFun 17) []
-        [51, 50] {- 32 -} -> pure $ E.EvKey (E.KFun 18) []
-        [51, 51] {- 33 -} -> pure $ E.EvKey (E.KFun 19) []
-        [51, 52] {- 32 -} -> pure $ E.EvKey (E.KFun 20) []
-        _        -> error $ show ps
-      90  -> pure $ E.EvKey E.KBackTab []
+      36         -> pure $ E.EvKey E.KDelete [E.MAlt, E.MShift] -- urxvt, gnome-terminal
+      64 {- @ -} -> withN 1 ps $ \n-> pure $ E.EvKey (E.KSpace  n) []
+      65 {- A -} -> withN 1 ps $ \n-> pure $ E.EvKey (E.KUp     n) []
+      66 {- B -} -> withN 1 ps $ \n-> pure $ E.EvKey (E.KDown   n) []
+      67 {- C -} -> withN 1 ps $ \n-> pure $ E.EvKey (E.KRight  n) []
+      68 {- D -} -> withN 1 ps $ \n-> pure $ E.EvKey (E.KLeft   n) []
+      69 {- E -} -> undefined
+      70 {- F -} -> pure $ E.EvKey E.KEnd []
+      71 {- G -} -> undefined
+      72 {- H -} -> pure $ E.EvKey E.KHome []
+      73 {- I -} -> withN 1 ps $ \n-> pure $ E.EvKey (E.KTab    n) []
+      74 {- J -} -> undefined
+      75 {- K -} -> undefined
+      76 {- L -} -> undefined
+      77 {- M -} -> undefined
+      78 {- N -} -> undefined
+      79 {- O -} -> undefined
+      80 {- P -} -> pure $ E.EvKey (E.KFun 1) [E.MCtrl]
+      81 {- Q -} -> pure $ E.EvKey (E.KFun 2) [E.MCtrl]
+      82 {- R -} -> pure $ E.EvKey (E.KFun 3) [E.MCtrl]
+      83 {- S -} -> pure $ E.EvKey (E.KFun 4) [E.MCtrl]
+      84 {- T -} -> undefined
+      85 {- U -} -> undefined
+      86 {- V -} -> undefined
+      87 {- W -} -> undefined
+      88 {- X -} -> undefined
+      89 {- Y -} -> undefined
+      90 {- Z -} -> withN 1 ps $ \n-> pure $ E.EvKey (E.KBackTab n) []
+      94  -> case ps of
+        [    51] {-  3 -} -> pure $ E.EvKey E.KDelete [E.MCtrl]
+        [49, 49] {- 11 -} -> pure $ E.EvKey (E.KFun 1) [E.MCtrl]
+        [49, 50] {- 12 -} -> pure $ E.EvKey (E.KFun 2) [E.MCtrl]
+        [49, 51] {- 13 -} -> pure $ E.EvKey (E.KFun 3) [E.MCtrl]
+        [49, 52] {- 14 -} -> pure $ E.EvKey (E.KFun 4) [E.MCtrl]
+        [49, 53] {- 15 -} -> pure $ E.EvKey (E.KFun 5) [E.MCtrl]
+        [49, 55] {- 17 -} -> pure $ E.EvKey (E.KFun 6) [E.MCtrl]
+        [49, 56] {- 18 -} -> pure $ E.EvKey (E.KFun 7) [E.MCtrl]
+        [49, 57] {- 19 -} -> pure $ E.EvKey (E.KFun 8) [E.MCtrl]
+        [50, 48] {- 20 -} -> pure $ E.EvKey (E.KFun 9) [E.MCtrl]
+        [50, 49] {- 21 -} -> pure $ E.EvKey (E.KFun 10) [E.MCtrl]
+        [50, 51] {- 22 -} -> pure $ E.EvKey (E.KFun 11) [E.MCtrl]
+        [50, 52] {- 23 -} -> pure $ E.EvKey (E.KFun 12) [E.MCtrl]
+        [50, 53] {- 24 -} -> pure $ E.EvKey (E.KFun 13) [E.MCtrl]
+        [50, 54] {- 25 -} -> pure $ E.EvKey (E.KFun 14) [E.MCtrl]
+        [50, 56] {- 27 -} -> pure $ E.EvKey (E.KFun 15) [E.MCtrl]
+        [50, 57] {- 28 -} -> pure $ E.EvKey (E.KFun 16) [E.MCtrl]
+        [51, 49] {- 31 -} -> pure $ E.EvKey (E.KFun 17) [E.MCtrl]
+        [51, 50] {- 32 -} -> pure $ E.EvKey (E.KFun 18) [E.MCtrl]
+        [51, 51] {- 33 -} -> pure $ E.EvKey (E.KFun 19) [E.MCtrl]
+        [51, 52] {- 32 -} -> pure $ E.EvKey (E.KFun 20) [E.MCtrl]
+        _        -> error ("FOOB" ++ show ps)
+      102 -> undefined
       105 -> pure $ E.EvKey E.KPrtScr []
-      x   -> error $ show x
+      109 -> undefined -- SGR
+      126 -> case ps of
+        [    50]      {-  2 -} -> pure $ E.EvKey E.KInsert []
+        [    51]      {-  3 -} -> pure $ E.EvKey E.KDelete []
+        [    53]      {-  5 -} -> pure $ E.EvKey E.KPageUp []
+        [    54]      {-  6 -} -> pure $ E.EvKey E.KPageDown []
+        [    55]      {-  9 -} -> pure $ E.EvKey E.KHome []
+        [    56]      {- 10 -} -> pure $ E.EvKey E.KEnd []
+        [49, 49]      {- 11 -} -> pure $ E.EvKey (E.KFun 1) []
+        [49, 50]      {- 12 -} -> pure $ E.EvKey (E.KFun 2) []
+        [49, 51]      {- 13 -} -> pure $ E.EvKey (E.KFun 3) []
+        [49, 52]      {- 14 -} -> pure $ E.EvKey (E.KFun 4) []
+        [49, 53]      {- 15 -} -> pure $ E.EvKey (E.KFun 5) []
+        [49, 55]      {- 17 -} -> pure $ E.EvKey (E.KFun 6) []
+        [49, 56]      {- 18 -} -> pure $ E.EvKey (E.KFun 7) []
+        [49, 57]      {- 19 -} -> pure $ E.EvKey (E.KFun 8) []
+        [50, 48]      {- 20 -} -> pure $ E.EvKey (E.KFun 9) []
+        [50, 49]      {- 21 -} -> pure $ E.EvKey (E.KFun 10) []
+        [50, 51]      {- 22 -} -> pure $ E.EvKey (E.KFun 11) []
+        [50, 52]      {- 23 -} -> pure $ E.EvKey (E.KFun 12) []
+        [50, 53]      {- 24 -} -> pure $ E.EvKey (E.KFun 13) []
+        [50, 54]      {- 25 -} -> pure $ E.EvKey (E.KFun 14) []
+        [50, 56]      {- 27 -} -> pure $ E.EvKey (E.KFun 15) []
+        [50, 57]      {- 28 -} -> pure $ E.EvKey (E.KFun 16) []
+        [51, 49]      {- 31 -} -> pure $ E.EvKey (E.KFun 17) []
+        [51, 50]      {- 32 -} -> pure $ E.EvKey (E.KFun 18) []
+        [51, 51]      {- 33 -} -> pure $ E.EvKey (E.KFun 19) []
+        [51, 52]      {- 32 -} -> pure $ E.EvKey (E.KFun 20) []
+        [49,53,59,53] -> pure $ E.EvKey (E.KFun  5) [E.MCtrl] -- gnome-terminal
+        [49,55,59,53] -> pure $ E.EvKey (E.KFun  6) [E.MCtrl] -- gnome-terminal
+        [49,56,59,53] -> pure $ E.EvKey (E.KFun  7) [E.MCtrl] -- gnome-terminal
+        [49,57,59,53] -> pure $ E.EvKey (E.KFun  8) [E.MCtrl] -- gnome-terminal
+        [50,48,59,53] -> pure $ E.EvKey (E.KFun  9) [E.MCtrl] -- gnome-terminal
+        [50,49,59,53] -> pure $ E.EvKey (E.KFun 10) [E.MCtrl] -- gnome-terminal
+        [50,51,59,53] -> pure $ E.EvKey (E.KFun 11) [E.MCtrl] -- gnome-terminal
+        [50,52,59,53] -> pure $ E.EvKey (E.KFun 12) [E.MCtrl] -- gnome-terminal
+        [50,59,51]    -> pure $ E.EvKey E.KInsert [E.MAlt] -- gnome-terminal
+        [51,59,51]    -> pure $ E.EvKey E.KDelete [E.MAlt] -- gnome-terminal
+        _             -> error $ show ps
+      x   -> error $ "HERE" ++ show x
 
 decodeSGR :: (MonadInput m) => [Word8] -> m SGR
 decodeSGR []
