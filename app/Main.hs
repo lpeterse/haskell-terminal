@@ -53,8 +53,20 @@ decodeAnsi = decode1 =<< getNext
   where
     decode1 :: MonadInput m => Word8 -> m E.Event
     decode1 x
+      -- The first 31 values are control codes.
+      -- They are mapped as lower case letter + MCtrl modifier.
+      | x ==  0   = pure $ E.EvKey (E.KChar [] '`') [E.MCtrl] -- urxvt
+      | x <= 26   = pure $ E.EvKey (E.KChar [] $ toEnum $ 96 + fromIntegral x) [E.MCtrl]
+      -- The escape control code might or might not introduce an escape sequence.
+      -- `decodeEscape` handles this by analysing the timing.
       | x == 27   = decodeEscape
-      | x <= 31   = pure $ E.EvKey (E.KChar [E.MCtrl] $ toEnum $ 64 + fromIntegral x) []
+      -- The next 4 are '\\', ']', '^' and '-'.
+      -- They have a different offset as they are above the upper case letters.
+      | x == 28   = pure $ E.EvKey (E.KChar [] '\\') [E.MCtrl]
+      | x == 29   = pure $ E.EvKey (E.KChar [] ']') [E.MCtrl]
+      | x == 30   = pure $ E.EvKey (E.KChar [] '^') [E.MCtrl]
+      | x == 31   = pure $ E.EvKey (E.KChar [] '-') [E.MCtrl]
+      -- All following values are printable except 127 which is interpreted as backspace (terminal dependant!)
       | x == 127  = pure $ E.EvKey (E.KBackspace 1) []
       | otherwise = flip E.EvKey [] . E.KChar [] <$> decodeUtf8Sequence x
 
@@ -69,23 +81,32 @@ decodeAnsi = decode1 =<< getNext
 
     decodeEscapeSequence :: (MonadInput m) => Word8 -> m E.Event
     decodeEscapeSequence x
-      | x == 10   = pure $ E.EvKey (E.KChar [E.MAlt] 'J') [] -- gnome-terminal
+      | x >= 1 && x <= 25 = pure $ E.EvKey (E.KChar [] $ toEnum $ 64 + fromIntegral x) [E.MCtrl, E.MAlt] -- urxvt
       | x == 27   = getNext >>= \case
-                      91 -> decodeCSI >>= \case
+                      79 -> getNext >>= \case -- seems to just add MAlt to all sequences
+                        97  -> pure $ E.EvKey (E.KUp    1) [E.MCtrl, E.MAlt] -- urxvt
+                        98  -> pure $ E.EvKey (E.KDown  1) [E.MCtrl, E.MAlt] -- urxvt
+                        99  -> pure $ E.EvKey (E.KRight 1) [E.MCtrl, E.MAlt] -- urxvt
+                        100 -> pure $ E.EvKey (E.KLeft  1) [E.MCtrl, E.MAlt] -- urxvt
+                        y   -> unknownSequence [27, 27, 79, y]
+                      91 -> getNext >>= \y-> decodeCSI y >>= \case
                         E.EvKey k ms -> pure $ E.EvKey k (E.MAlt:ms) -- urxvt
-                        _ -> undefined
-                      _ -> undefined
+                        ev           -> pure ev
+      | x == 31   = pure $ E.EvKey (E.KChar [] '-') [E.MAlt, E.MShift] -- urxvt
       | x == 33   = pure $ E.EvKey (E.KChar [] '1') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
       | x == 35   = pure $ E.EvKey (E.KChar [] '3') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
       | x == 36   = pure $ E.EvKey (E.KChar [] '4') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
       | x == 37   = pure $ E.EvKey (E.KChar [] '5') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
       | x == 38   = pure $ E.EvKey (E.KChar [] '7') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
-      | x == 39   = undefined
+      | x == 39   = pure $ E.EvKey (E.KChar [] '\'') [E.MAlt] -- urxvt, gnome-terminal
       | x == 40   = pure $ E.EvKey (E.KChar [] '9') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
       | x == 41   = pure $ E.EvKey (E.KChar [] '0') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
       | x == 42   = pure $ E.EvKey (E.KChar [] '8') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
       | x == 43   = pure $ E.EvKey (E.KChar [] '=') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
-      | x == 45   = pure $ E.EvKey (E.KChar [] '_') [E.MAlt]
+      | x == 44   = pure $ E.EvKey (E.KChar [] ',') [E.MAlt] -- urxvt, gnome-terminal
+      | x == 45   = pure $ E.EvKey (E.KChar [] '-') [E.MAlt]
+      | x == 46   = pure $ E.EvKey (E.KChar [] '.') [E.MAlt] -- urxvt, gnome-terminal
+      | x == 47   = pure $ E.EvKey (E.KChar [] '/') [E.MAlt] -- urxvt, gnome-terminal
       | x == 48   = pure $ E.EvKey (E.KChar [] '0') [E.MAlt]
       | x == 49   = pure $ E.EvKey (E.KChar [] '1') [E.MAlt]
       | x == 50   = pure $ E.EvKey (E.KChar [] '2') [E.MAlt]
@@ -96,34 +117,46 @@ decodeAnsi = decode1 =<< getNext
       | x == 55   = pure $ E.EvKey (E.KChar [] '7') [E.MAlt]
       | x == 56   = pure $ E.EvKey (E.KChar [] '8') [E.MAlt]
       | x == 57   = pure $ E.EvKey (E.KChar [] '9') [E.MAlt]
+      | x == 59   = pure $ E.EvKey (E.KChar [] ';') [E.MAlt]
       | x == 60   = pure $ E.EvKey (E.KChar [] '<') [E.MAlt]
-      | x == 61   = getNext >>= \case
-                      27 -> pure $ E.EvKey (E.KChar [E.MAlt] '=') [E.MAlt]
-                      y  -> error (show y)
+      | x == 61   = getNextNonBlock >>= \case
+                      Nothing -> pure $ E.EvKey (E.KChar [] '=') [E.MAlt]
+                      Just y  -> error (show y)
       | x == 62   = pure $ E.EvKey (E.KChar [] '<') [E.MAlt, E.MShift]
       | x == 64   = pure $ E.EvKey (E.KChar [] '2') [E.MAlt, E.MShift]
       | x == 65   = pure $ E.EvKey (E.KChar [] 'A') [E.MAlt, E.MShift]
       | x == 79   = getNext >>= \case
-                      80 -> pure $ E.EvKey (E.KFun  1) [] -- gnome-terminal (?)
-                      81 -> pure $ E.EvKey (E.KFun  2) [] -- gnome-terminal
-                      82 -> pure $ E.EvKey (E.KFun  3) [] -- gnome-terminal
-                      83 -> pure $ E.EvKey (E.KFun  4) [] -- gnome-terminal
-      | x == 91   = decodeCSI
+                      80  -> pure $ E.EvKey (E.KFun   1) [] -- gnome-terminal (?)
+                      81  -> pure $ E.EvKey (E.KFun   2) [] -- gnome-terminal
+                      82  -> pure $ E.EvKey (E.KFun   3) [] -- gnome-terminal
+                      83  -> pure $ E.EvKey (E.KFun   4) [] -- gnome-terminal
+                      97  -> pure $ E.EvKey (E.KUp    1) [E.MCtrl] -- urxvt
+                      98  -> pure $ E.EvKey (E.KDown  1) [E.MCtrl] -- urxvt
+                      99  -> pure $ E.EvKey (E.KRight 1) [E.MCtrl] -- urxvt
+                      100 -> pure $ E.EvKey (E.KLeft  1) [E.MCtrl] -- urxvt
+                      xs  -> error (show xs)
+      | x == 91   = wait >> getNextNonBlock >>= \case
+                      Nothing -> pure $ E.EvKey (E.KChar [] '[') [E.MAlt] -- urxvt, gnome-terminal
+                      Just y  -> decodeCSI y
+      | x == 92   = pure $ E.EvKey (E.KChar [] '\\') [E.MAlt] -- urxvt, gnome-terminal
+      | x == 93   = pure $ E.EvKey (E.KChar [] ']') [E.MAlt] -- urxvt, gnome-terminal
       | x == 94   = pure $ E.EvKey (E.KChar [] '6') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
       | x == 95   = pure $ E.EvKey (E.KChar [] '_') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
-      | x < 97    = error $ show x
-      | x < 123   = decode1 x
+      | x == 96   = pure $ E.EvKey (E.KChar [] '`') [E.MAlt] -- urxvt, gnome-terminal
+      | x >= 97 && x <= 122 = pure $ E.EvKey (E.KChar [] $ toEnum $ fromIntegral x) [E.MAlt]
+      | x == 126  = pure $ E.EvKey (E.KChar [] '`') [E.MAlt, E.MShift] -- urxvt, gnome-terminal
       | x == 127  = pure $ E.EvKey E.KDelete []
       | otherwise = error $ show x
 
-    decodeCSI :: (MonadInput m) => m E.Event
-    decodeCSI = withParams $ \ps-> \case
-      36         -> pure $ E.EvKey E.KDelete [E.MAlt, E.MShift] -- urxvt, gnome-terminal
-      64 {- @ -} -> withN 1 ps $ \n-> pure $ E.EvKey (E.KSpace  n) []
-      65 {- A -} -> withN 1 ps $ \n-> pure $ E.EvKey (E.KUp     n) []
-      66 {- B -} -> withN 1 ps $ \n-> pure $ E.EvKey (E.KDown   n) []
-      67 {- C -} -> withN 1 ps $ \n-> pure $ E.EvKey (E.KRight  n) []
-      68 {- D -} -> withN 1 ps $ \n-> pure $ E.EvKey (E.KLeft   n) []
+    decodeCSI :: (MonadInput m) => Word8 -> m E.Event
+    decodeCSI y = withParams1 y $ \ps-> \case
+      27         -> pure $ E.EvKey (E.KChar [] '[') [E.MAlt]          -- urxvt
+      36         -> pure $ E.EvKey E.KDelete [E.MAlt, E.MShift]       -- urxvt, gnome-terminal
+      64 {- @ -} -> withN 1 ps $ \n-> pure $ E.EvKey (E.KSpace  n) [] -- in urxvt shift+ctrl+pageup/down causes n==5/6
+      65 {- A -} -> decodeArrowKey ps E.KUp
+      66 {- B -} -> decodeArrowKey ps E.KDown
+      67 {- C -} -> decodeArrowKey ps E.KRight
+      68 {- D -} -> decodeArrowKey ps E.KLeft
       69 {- E -} -> undefined
       70 {- F -} -> pure $ E.EvKey E.KEnd []
       71 {- G -} -> undefined
@@ -147,16 +180,21 @@ decodeAnsi = decode1 =<< getNext
       89 {- Y -} -> undefined
       90 {- Z -} -> withN 1 ps $ \n-> pure $ E.EvKey (E.KBackTab n) []
       94  -> case ps of
-        [    51] {-  3 -} -> pure $ E.EvKey E.KDelete [E.MCtrl]
-        [49, 49] {- 11 -} -> pure $ E.EvKey (E.KFun 1) [E.MCtrl]
-        [49, 50] {- 12 -} -> pure $ E.EvKey (E.KFun 2) [E.MCtrl]
-        [49, 51] {- 13 -} -> pure $ E.EvKey (E.KFun 3) [E.MCtrl]
-        [49, 52] {- 14 -} -> pure $ E.EvKey (E.KFun 4) [E.MCtrl]
-        [49, 53] {- 15 -} -> pure $ E.EvKey (E.KFun 5) [E.MCtrl]
-        [49, 55] {- 17 -} -> pure $ E.EvKey (E.KFun 6) [E.MCtrl]
-        [49, 56] {- 18 -} -> pure $ E.EvKey (E.KFun 7) [E.MCtrl]
-        [49, 57] {- 19 -} -> pure $ E.EvKey (E.KFun 8) [E.MCtrl]
-        [50, 48] {- 20 -} -> pure $ E.EvKey (E.KFun 9) [E.MCtrl]
+        [    50] {-    -} -> pure $ E.EvKey E.KInsert   [E.MCtrl]
+        [    51] {-  3 -} -> pure $ E.EvKey E.KDelete   [E.MCtrl]
+        [    53] {-  4 -} -> pure $ E.EvKey E.KPageUp   [E.MCtrl]
+        [    54] {-  4 -} -> pure $ E.EvKey E.KPageDown [E.MCtrl]
+        [    55] {-  6 -} -> pure $ E.EvKey E.KHome     [E.MCtrl]
+        [    56] {-  6 -} -> pure $ E.EvKey E.KEnd      [E.MCtrl]
+        [49, 49] {- 11 -} -> pure $ E.EvKey (E.KFun  1) [E.MCtrl]
+        [49, 50] {- 12 -} -> pure $ E.EvKey (E.KFun  2) [E.MCtrl]
+        [49, 51] {- 13 -} -> pure $ E.EvKey (E.KFun  3) [E.MCtrl]
+        [49, 52] {- 14 -} -> pure $ E.EvKey (E.KFun  4) [E.MCtrl]
+        [49, 53] {- 15 -} -> pure $ E.EvKey (E.KFun  5) [E.MCtrl]
+        [49, 55] {- 17 -} -> pure $ E.EvKey (E.KFun  6) [E.MCtrl]
+        [49, 56] {- 18 -} -> pure $ E.EvKey (E.KFun  7) [E.MCtrl]
+        [49, 57] {- 19 -} -> pure $ E.EvKey (E.KFun  8) [E.MCtrl]
+        [50, 48] {- 20 -} -> pure $ E.EvKey (E.KFun  9) [E.MCtrl]
         [50, 49] {- 21 -} -> pure $ E.EvKey (E.KFun 10) [E.MCtrl]
         [50, 51] {- 22 -} -> pure $ E.EvKey (E.KFun 11) [E.MCtrl]
         [50, 52] {- 23 -} -> pure $ E.EvKey (E.KFun 12) [E.MCtrl]
@@ -199,18 +237,37 @@ decodeAnsi = decode1 =<< getNext
         [51, 50]      {- 32 -} -> pure $ E.EvKey (E.KFun 18) []
         [51, 51]      {- 33 -} -> pure $ E.EvKey (E.KFun 19) []
         [51, 52]      {- 32 -} -> pure $ E.EvKey (E.KFun 20) []
-        [49,53,59,53] -> pure $ E.EvKey (E.KFun  5) [E.MCtrl] -- gnome-terminal
-        [49,55,59,53] -> pure $ E.EvKey (E.KFun  6) [E.MCtrl] -- gnome-terminal
-        [49,56,59,53] -> pure $ E.EvKey (E.KFun  7) [E.MCtrl] -- gnome-terminal
-        [49,57,59,53] -> pure $ E.EvKey (E.KFun  8) [E.MCtrl] -- gnome-terminal
-        [50,48,59,53] -> pure $ E.EvKey (E.KFun  9) [E.MCtrl] -- gnome-terminal
-        [50,49,59,53] -> pure $ E.EvKey (E.KFun 10) [E.MCtrl] -- gnome-terminal
-        [50,51,59,53] -> pure $ E.EvKey (E.KFun 11) [E.MCtrl] -- gnome-terminal
-        [50,52,59,53] -> pure $ E.EvKey (E.KFun 12) [E.MCtrl] -- gnome-terminal
-        [50,59,51]    -> pure $ E.EvKey E.KInsert [E.MAlt] -- gnome-terminal
-        [51,59,51]    -> pure $ E.EvKey E.KDelete [E.MAlt] -- gnome-terminal
-        _             -> error $ show ps
+        [49,53,59,53] {- .. -} -> pure $ E.EvKey (E.KFun  5) [E.MCtrl] -- gnome-terminal
+        [49,55,59,53] {- .. -} -> pure $ E.EvKey (E.KFun  6) [E.MCtrl] -- gnome-terminal
+        [49,56,59,53] {- .. -} -> pure $ E.EvKey (E.KFun  7) [E.MCtrl] -- gnome-terminal
+        [49,57,59,53] {- .. -} -> pure $ E.EvKey (E.KFun  8) [E.MCtrl] -- gnome-terminal
+        [50,48,59,53] {- .. -} -> pure $ E.EvKey (E.KFun  9) [E.MCtrl] -- gnome-terminal
+        [50,49,59,53] {- .. -} -> pure $ E.EvKey (E.KFun 10) [E.MCtrl] -- gnome-terminal
+        [50,51,59,53] {- .. -} -> pure $ E.EvKey (E.KFun 11) [E.MCtrl] -- gnome-terminal
+        [50,52,59,53] {- .. -} -> pure $ E.EvKey (E.KFun 12) [E.MCtrl] -- gnome-terminal
+        [50,59,51]    {- .. -} -> pure $ E.EvKey E.KInsert [E.MAlt]    -- gnome-terminal
+        [51,59,51]    {- .. -} -> pure $ E.EvKey E.KDelete [E.MAlt]    -- gnome-terminal
+        [53,59,53]    {- .. -} -> pure $ E.EvKey E.KPageUp [E.MCtrl]   -- gnome-terminal
+        [54,59,53]    {- .. -} -> pure $ E.EvKey E.KPageDown [E.MCtrl]   -- gnome-terminal
+        [53,59,51]    {- .. -} -> pure $ E.EvKey E.KPageUp [E.MAlt]   -- gnome-terminal
+        [54,59,51]    {- .. -} -> pure $ E.EvKey E.KPageDown [E.MAlt]   -- gnome-terminal
+        [53,59,55]    {- .. -} -> pure $ E.EvKey E.KPageUp [E.MCtrl, E.MAlt]   -- gnome-terminal
+        [54,59,55]    {- .. -} -> pure $ E.EvKey E.KPageDown [E.MCtrl, E.MAlt]   -- gnome-terminal
+        _             {- .. -} -> error $ show ps
       x   -> error $ "HERE" ++ show x
+      where
+        decodeArrowKey ps key = withNumbers ps $ \case
+          []    -> pure $ E.EvKey (key 1) []
+          [n]   -> pure $ E.EvKey (key n) []
+          [1,3] -> pure $ E.EvKey (key 1) [E.MAlt]          -- gnome-terminal
+          [1,5] -> pure $ E.EvKey (key 1) [E.MCtrl]         -- gnome-terminal
+          [1,7] -> pure $ E.EvKey (key 1) [E.MCtrl, E.MAlt] -- gnome-terminal
+          xs    -> error (show xs)
+
+unknownSequence :: (MonadInput m) => [Word8] -> m a
+unknownSequence xs = getNextNonBlock >>= \case
+  Just x  -> unknownSequence $ xs ++ [x]
+  Nothing -> error $ "unknown sequence " ++ show xs
 
 decodeSGR :: (MonadInput m) => [Word8] -> m SGR
 decodeSGR []
@@ -257,13 +314,15 @@ decodeSGR (x:xs) = case x of
   106 -> pure $ SetBackgroundColor $ Color4Bit Black   True
   107 -> pure $ SetBackgroundColor $ Color4Bit Black   True
 
-withParams :: MonadInput m => ([Word8] -> Word8 -> m a) -> m a
-withParams f = withParameters 256 []
+withParams1 :: MonadInput m => Word8 -> ([Word8] -> Word8 -> m a) -> m a
+withParams1 x f
+  | x >= 0x30 && x <= 0x3f = withParameters 256 [x]
+  | otherwise              = f [] x
   where
     withParameters 0 _            = fail "CSI: LENGTH LIMIT EXCEEDED"
     withParameters limit ps       = getNext >>= \case
-      x | x >= 0x30 && x <= 0x3F -> withParameters (limit - 1) $! x:ps
-        | otherwise              -> f (reverse ps) x
+      y | y >= 0x30 && y <= 0x3F -> withParameters (limit - 1) $! y:ps
+        | otherwise              -> f (reverse ps) y
 
 withN :: Monad m => Int -> [Word8] -> (Int -> m a) -> m a
 withN defN [] f               = f defN
@@ -272,7 +331,7 @@ withN _    ps f               = g ps 0
     g [] i                    = f i
     g (x:xs) i
       | x >= 48 && x <= 57    = g xs $! i * 256 - 48 + fromIntegral x
-      | otherwise             = fail "CSI: INVALID NUMBER"
+      | otherwise             = error $ "CSI: INVALID NUMBER " ++ show x
 
 withNM :: Monad m => Int -> Int -> [Word8] -> (Int -> Int -> m a) -> m a
 withNM defN defM []      f = f defN defM
