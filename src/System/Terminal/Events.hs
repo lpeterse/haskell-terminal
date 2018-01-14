@@ -8,6 +8,7 @@ data Key
   | KSpace Int
   | KBackspace Int
   | KEsc
+  | KNull
   | KTab Int
   | KBackTab Int
   | KLeft Int | KRight Int | KUp Int | KDown Int
@@ -65,3 +66,8 @@ isKeyTab _                   = False
 isKeyBackTab :: Key -> Bool
 isKeyBackTab KBackTab {} = True
 isKeyBackTab _           = False
+
+isBackspace :: Event -> Bool
+isBackspace (EvKey KBackspace {} [])       = True
+isBackspace (EvKey (KChar [] 'h') [MCtrl]) = True
+isBackspace _                              = False

@@ -45,8 +45,11 @@ data SGR
   deriving (Eq, Ord, Show)
 
 main :: IO ()
-main = withoutEcho $ withRawMode $ runInputT $ forever $
-  decodeAnsi >>= liftIO . print
+main = withoutEcho $ withRawMode $ runInputT $ forever $ do
+  ev <- decodeAnsi
+  liftIO $ putStr (show ev ++ ": ")
+  liftIO $ when (E.isBackspace ev) (putStr " isBackspace ")
+  liftIO $ putStrLn ""
 
 decodeAnsi :: MonadInput m => m E.Event
 decodeAnsi = decode1 =<< getNext
@@ -55,7 +58,7 @@ decodeAnsi = decode1 =<< getNext
     decode1 x
       -- The first 31 values are control codes.
       -- They are mapped as lower case letter + MCtrl modifier.
-      | x ==  0   = pure $ E.EvKey (E.KChar [] '`') [E.MCtrl] -- urxvt
+      | x ==  0   = pure $ E.EvKey E.KNull  []
       | x <= 26   = pure $ E.EvKey (E.KChar [] $ toEnum $ 96 + fromIntegral x) [E.MCtrl]
       -- The escape control code might or might not introduce an escape sequence.
       -- `decodeEscape` handles this by analysing the timing.
@@ -63,9 +66,9 @@ decodeAnsi = decode1 =<< getNext
       -- The next 4 are '\\', ']', '^' and '-'.
       -- They have a different offset as they are above the upper case letters.
       | x == 28   = pure $ E.EvKey (E.KChar [] '\\') [E.MCtrl]
-      | x == 29   = pure $ E.EvKey (E.KChar [] ']') [E.MCtrl]
-      | x == 30   = pure $ E.EvKey (E.KChar [] '^') [E.MCtrl]
-      | x == 31   = pure $ E.EvKey (E.KChar [] '-') [E.MCtrl]
+      | x == 29   = pure $ E.EvKey (E.KChar [] ']')  [E.MCtrl]
+      | x == 30   = pure $ E.EvKey (E.KChar [] '^')  [E.MCtrl]
+      | x == 31   = pure $ E.EvKey (E.KChar [] '_')  [E.MCtrl]
       -- All following values are printable except 127 which is interpreted as backspace (terminal dependant!)
       | x == 127  = pure $ E.EvKey (E.KBackspace 1) []
       | otherwise = flip E.EvKey [] . E.KChar [] <$> decodeUtf8Sequence x
@@ -246,6 +249,7 @@ decodeAnsi = decode1 =<< getNext
         [50,51,59,53] {- .. -} -> pure $ E.EvKey (E.KFun 11) [E.MCtrl] -- gnome-terminal
         [50,52,59,53] {- .. -} -> pure $ E.EvKey (E.KFun 12) [E.MCtrl] -- gnome-terminal
         [50,59,51]    {- .. -} -> pure $ E.EvKey E.KInsert [E.MAlt]    -- gnome-terminal
+        [51,59,53]    {- .. -} -> pure $ E.EvKey E.KDelete [E.MCtrl]   -- xterm
         [51,59,51]    {- .. -} -> pure $ E.EvKey E.KDelete [E.MAlt]    -- gnome-terminal
         [53,59,53]    {- .. -} -> pure $ E.EvKey E.KPageUp [E.MCtrl]   -- gnome-terminal
         [54,59,53]    {- .. -} -> pure $ E.EvKey E.KPageDown [E.MCtrl]   -- gnome-terminal
@@ -258,7 +262,7 @@ decodeAnsi = decode1 =<< getNext
       where
         decodeArrowKey ps key = withNumbers ps $ \case
           []    -> pure $ E.EvKey (key 1) []
-          [n]   -> pure $ E.EvKey (key n) []
+          [n]   -> pure $ E.EvKey (key $ if n == 0 then 1 else n) []
           [1,3] -> pure $ E.EvKey (key 1) [E.MAlt]          -- gnome-terminal
           [1,5] -> pure $ E.EvKey (key 1) [E.MCtrl]         -- gnome-terminal
           [1,7] -> pure $ E.EvKey (key 1) [E.MCtrl, E.MAlt] -- gnome-terminal
