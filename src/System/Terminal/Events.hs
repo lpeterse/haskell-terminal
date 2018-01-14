@@ -58,16 +58,4 @@ data Event
   -- ^ The terminal running the application gained input focus.
   deriving (Eq,Show,Read,Ord)
 
-isKeyTab     :: Key -> Bool
-isKeyTab KTab {}             = True
-isKeyTab (KChar [MCtrl] 'I') = True
-isKeyTab _                   = False
 
-isKeyBackTab :: Key -> Bool
-isKeyBackTab KBackTab {} = True
-isKeyBackTab _           = False
-
-isBackspace :: Event -> Bool
-isBackspace (EvKey KBackspace {} [])       = True
-isBackspace (EvKey (KChar [] 'h') [MCtrl]) = True
-isBackspace _                              = False

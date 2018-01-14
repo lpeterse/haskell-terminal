@@ -11,9 +11,11 @@ import           Control.Monad.Trans.State
 import           Data.Bits
 import qualified Data.ByteString           as BS
 import           Data.Word
+import           System.Environment
 import           System.IO
 import qualified System.Terminal           as T
 import qualified System.Terminal.Events    as E
+import qualified System.Terminal.Modes     as M
 
 data Color
   = ColorDefault
@@ -48,7 +50,9 @@ main :: IO ()
 main = withoutEcho $ withRawMode $ runInputT $ forever $ do
   ev <- decodeAnsi
   liftIO $ putStr (show ev ++ ": ")
-  liftIO $ when (E.isBackspace ev) (putStr " isBackspace ")
+  isKeyBackspace ev >>= \case
+    True -> liftIO $ putStr " isKeyBackspace "
+    False -> pure ()
   liftIO $ putStrLn ""
 
 decodeAnsi :: MonadInput m => m E.Event
@@ -59,7 +63,8 @@ decodeAnsi = decode1 =<< getNext
       -- The first 31 values are control codes.
       -- They are mapped as lower case letter + MCtrl modifier.
       | x ==  0   = pure $ E.EvKey E.KNull  []
-      | x <= 26   = pure $ E.EvKey (E.KChar [] $ toEnum $ 96 + fromIntegral x) [E.MCtrl]
+      -- | x <= 26   = pure $ E.EvKey (E.KChar [] $ toEnum $ 96 + fromIntegral x) [E.MCtrl]
+      | x <= 26   = pure $ E.EvKey (E.KChar [] $ toEnum $ fromIntegral x) []
       -- The escape control code might or might not introduce an escape sequence.
       -- `decodeEscape` handles this by analysing the timing.
       | x == 27   = decodeEscape
@@ -388,6 +393,7 @@ decodeUtf8Sequence x
         | otherwise                      -> reject
 
 class Monad m => MonadInput m where
+  askModes        :: m M.TermModes
   getNext         :: m Word8
   getNextNonBlock :: m (Maybe Word8)
   wait            :: m ()
@@ -400,6 +406,9 @@ runInputT :: Monad m => InputT m a -> m a
 runInputT (InputT m) = evalStateT m BS.empty
 
 instance MonadIO m => MonadInput (InputT m) where
+  askModes = InputT $ do
+    term <- liftIO $ getEnv "TERM"
+    pure (M.termModes term)
   getNext = InputT $ do
     bbs <- get
     case BS.uncons bbs of
@@ -428,3 +437,8 @@ withRawMode :: IO a -> IO a
 withRawMode = bracket
   (hGetBuffering stdin >>= \b-> hSetBuffering stdin NoBuffering >> pure b)
   (hSetBuffering stdin) . const
+
+isKeyBackspace :: MonadInput m => E.Event -> m Bool
+isKeyBackspace (E.EvKey E.KBackspace {} []) = pure True
+isKeyBackspace (E.EvKey (E.KChar [] c) [])  = askModes >>= \ms-> pure (M.modeVERASE ms == Just c)
+isKeyBackspace _                            = pure False
