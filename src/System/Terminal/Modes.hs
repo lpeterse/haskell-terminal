@@ -183,9 +183,10 @@ instance Monoid TermModes where
       f _        (Just y) = Just y
 
 termModes :: String -> TermModes
-termModes "xterm"                  = termModesXterm
-termModes "rxvt-unicode-256-color" = termModesRxvtUnicode
-termModes _                        = mempty
+termModes "xterm"                 = termModesXterm
+termModes "xterm-256color"        = termModesXterm256Color
+termModes "rxvt-unicode-256color" = termModesRxvtUnicode
+termModes _                       = mempty
 
 termModesDefault :: TermModes
 termModesDefault = mempty
@@ -197,6 +198,9 @@ termModesXterm :: TermModes
 termModesXterm = termModesDefault
   { modeVERASE = Just '\b'
   }
+
+termModesXterm256Color :: TermModes
+termModesXterm256Color = termModesXterm
 
 termModesRxvtUnicode :: TermModes
 termModesRxvtUnicode = termModesDefault

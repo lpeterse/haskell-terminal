@@ -47,13 +47,19 @@ data SGR
   deriving (Eq, Ord, Show)
 
 main :: IO ()
-main = withoutEcho $ withRawMode $ runInputT $ forever $ do
-  ev <- decodeAnsi
-  liftIO $ putStr (show ev ++ ": ")
-  isKeyBackspace ev >>= \case
-    True -> liftIO $ putStr " isKeyBackspace "
-    False -> pure ()
-  liftIO $ putStrLn ""
+main = withoutEcho $ withRawMode $ runInputT $ do
+  liftIO $ getEnv "TERM" >>= print
+  askModes >>= liftIO . print
+  forever $ do
+    ev <- decodeAnsi
+    liftIO $ putStr (show ev ++ ": ")
+    isKeyBackspace ev >>= \case
+      True -> liftIO $ putStr " isKeyBackspace "
+      False -> pure ()
+    isKeyDelete ev >>= \case
+      True -> liftIO $ putStr " isKeyDelete "
+      False -> pure ()
+    liftIO $ putStrLn ""
 
 decodeAnsi :: MonadInput m => m E.Event
 decodeAnsi = decode1 =<< getNext
@@ -75,7 +81,7 @@ decodeAnsi = decode1 =<< getNext
       | x == 30   = pure $ E.EvKey (E.KChar [] '^')  [E.MCtrl]
       | x == 31   = pure $ E.EvKey (E.KChar [] '_')  [E.MCtrl]
       -- All following values are printable except 127 which is interpreted as backspace (terminal dependant!)
-      | x == 127  = pure $ E.EvKey (E.KBackspace 1) []
+      | x == 127  = pure $ E.EvKey (E.KChar [] '\DEL') []
       | otherwise = flip E.EvKey [] . E.KChar [] <$> decodeUtf8Sequence x
 
     decodeEscape :: (MonadInput m) => m E.Event
@@ -437,6 +443,11 @@ withRawMode :: IO a -> IO a
 withRawMode = bracket
   (hGetBuffering stdin >>= \b-> hSetBuffering stdin NoBuffering >> pure b)
   (hSetBuffering stdin) . const
+
+isKeyDelete :: MonadInput m => E.Event -> m Bool
+isKeyDelete (E.EvKey E.KDelete {} [])       = pure True
+isKeyDelete (E.EvKey (E.KChar [] c) [])     = askModes >>= \ms-> pure (c == '\DEL' && M.modeVERASE ms /= Just c)
+isKeyDelete _                               = pure False
 
 isKeyBackspace :: MonadInput m => E.Event -> m Bool
 isKeyBackspace (E.EvKey E.KBackspace {} []) = pure True
