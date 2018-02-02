@@ -20,19 +20,28 @@ dependencies:
 - stm
 - mtl
 - transformers
-- unix
-- ansi-terminal
-- unix
 
 library:
   ghc-options: -Werror
   source-dirs: src
+  when:
+    - condition: os(windows)
+      then:
+        cpp-options: -DWINDOWS
+        dependencies:
+        - Win32
+      else:
+        build-tools:
+        - hsc2hs
+        dependencies:
+        - unix
 
 executables:
   terminal-exe:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
+    - -Werror
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N

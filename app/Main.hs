@@ -1,18 +1,12 @@
 {-# LANGUAGE LambdaCase #-}
 module Main where
 
-import           Control.Concurrent
-import           Control.Exception
 import           Control.Monad
 import           Control.Monad.IO.Class
-import           Control.Monad.Trans.State
 import           System.Environment
-import           System.IO
 
-import qualified System.Terminal           as T
-import qualified System.Terminal.Events    as E
-import qualified System.Terminal.Input     as T
-import qualified System.Terminal.Modes     as M
+import qualified System.Terminal        as T
+import qualified System.Terminal.Input  as T
 
 main :: IO ()
 main = T.withoutEcho $ T.withRawMode $ T.runInputT $ do

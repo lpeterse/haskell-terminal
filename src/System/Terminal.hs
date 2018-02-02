@@ -12,10 +12,8 @@ module System.Terminal
     , module M
     ) where
 
-import           Control.Concurrent           (forkIO, threadDelay)
 import           Control.Concurrent.Async     (waitSTM, withAsync)
 import           Control.Concurrent.MVar
-import           Control.Concurrent.STM.TChan
 import           Control.Concurrent.STM.TMVar
 import           Control.Concurrent.STM.TVar
 import           Control.Exception            (AsyncException (..),
@@ -32,7 +30,6 @@ import           Data.Word
 import           Prelude                      hiding (getChar, getLine, putChar,
                                                putStr)
 import qualified Prelude                      as P
-import qualified System.Console.ANSI          as A
 import           System.Environment
 import           System.IO
 import           System.Posix.Signals
