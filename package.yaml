@@ -20,6 +20,7 @@ dependencies:
 - stm
 - mtl
 - transformers
+- exceptions
 
 library:
   ghc-options: -Werror
@@ -28,6 +29,12 @@ library:
     - condition: os(windows)
       then:
         cpp-options: -DWINDOWS
+        include-dirs:
+          - platform/windows/include
+        hs-src-dirs:
+          - platform/windows/src
+        c-sources:
+          - platform/windows/cbits/hs_terminal.c
         dependencies:
         - Win32
       else:
@@ -39,6 +46,18 @@ library:
 executables:
   terminal-exe:
     main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -Werror
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - terminal
+
+executables:
+  terminal-output:
+    main:                Output.hs
     source-dirs:         app
     ghc-options:
     - -Werror

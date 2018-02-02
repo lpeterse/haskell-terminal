@@ -10,7 +10,7 @@ import qualified System.Terminal.Input  as T
 
 main :: IO ()
 main = T.withoutEcho $ T.withRawMode $ T.runInputT $ do
-  liftIO $ getEnv "TERM" >>= print
+  liftIO $ lookupEnv "TERM" >>= print
   T.askModes >>= liftIO . print
   forever $ do
     ev <- T.decodeAnsi

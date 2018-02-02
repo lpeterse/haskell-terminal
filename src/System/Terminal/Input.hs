@@ -9,6 +9,7 @@ import           Control.Monad.Trans
 import           Control.Monad.Trans.State
 import           Data.Bits
 import qualified Data.ByteString           as BS
+import           Data.Maybe
 import           Data.Word
 import           System.Environment
 import           System.IO
@@ -27,8 +28,8 @@ newtype InputT m a
 
 instance MonadIO m => MonadInput (InputT m) where
   askModes = InputT $ do
-    term <- liftIO $ getEnv "TERM"
-    pure (M.termModes term)
+    term <- liftIO $ lookupEnv "TERM"
+    pure $ fromMaybe M.termModesDefault (M.termModes <$> term)
   getNext = InputT $ do
     bbs <- get
     case BS.uncons bbs of
@@ -47,24 +48,6 @@ instance MonadIO m => MonadInput (InputT m) where
           Just (c,cs) -> put cs >> pure (Just c)
           Nothing     -> pure Nothing
   wait = InputT $ liftIO $ threadDelay 100000
-
-data Color
-  = ColorDefault
-  | Color4Bit  Color3Bit Bool
-  | Color8Bit  Word8
-  | Color24Bit Word8 Word8 Word8
-  deriving (Eq, Ord, Show)
-
-data Color3Bit
-  = Black
-  | Red
-  | Green
-  | Yellow
-  | Blue
-  | Magenta
-  | Cyan
-  | White
-  deriving (Eq, Ord, Show)
 
 decodeAnsi :: MonadInput m => m E.Event
 decodeAnsi = decode1 =<< getNext
@@ -329,12 +312,6 @@ withNumbers xs f = numbers' xs 0 >>= f
       | x >= 48 && x <= 57 = numbers' xs (i * 256 - 48 + fromIntegral x)
       | x == 59            = (i:) <$> numbers' xs 0
       | otherwise          = fail ""
-
-withColor :: (Monad n) => [Word8] -> (Color -> n a) -> n a
-withColor xs f = withNumbers xs $ \case
-  [5,n]     -> f $ Color8Bit n
-  [2,r,g,b] -> f $ Color24Bit r g b
-  _         -> fail ""
 
 decodeUtf8Sequence :: MonadInput m => Word8 -> m Char
 decodeUtf8Sequence x

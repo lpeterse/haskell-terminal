@@ -2,9 +2,9 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 module System.Terminal
-    ( AnsiTermT (..)
-    , runAnsiTermT
-    , withRawMode
+    ( --AnsiTermT (..)
+    --, runAnsiTermT
+      withRawMode
     , withoutEcho
     , runInputT
     , module E
@@ -32,7 +32,7 @@ import           Prelude                      hiding (getChar, getLine, putChar,
 import qualified Prelude                      as P
 import           System.Environment
 import           System.IO
-import           System.Posix.Signals
+--import           System.Posix.Signals
 import qualified System.Terminal.Events       as E
 import qualified System.Terminal.Input        as T
 import qualified System.Terminal.Modes        as M
@@ -48,6 +48,7 @@ newtype AnsiTermT m a = AnsiTermT (ReaderT AnsiTermState m a)
 runInputT :: Monad m => T.InputT m a -> m a
 runInputT (T.InputT m) = evalStateT m BS.empty
 
+{-
 runAnsiTermT :: AnsiTermT IO a -> IO a
 runAnsiTermT (AnsiTermT r) = do
   interruptFlag <- newTVarIO False
@@ -71,8 +72,9 @@ runAnsiTermT (AnsiTermT r) = do
       (flip (installHandler sigINT) Nothing) $ const $ action (readTVar sig >>= check >> writeTVar sig False)
 
   action interruptFlag = runReaderT r AnsiTermState {
-        isInterruptFlag = interruptFlag
-      }
+      isInterruptFlag = interruptFlag
+    }
+-}
 
 withoutEcho :: IO a -> IO a
 withoutEcho = bracket
@@ -83,4 +85,5 @@ withRawMode :: IO a -> IO a
 withRawMode = bracket
   (hGetBuffering stdin >>= \b-> hSetBuffering stdin NoBuffering >> pure b)
   (hSetBuffering stdin) . const
+
 
