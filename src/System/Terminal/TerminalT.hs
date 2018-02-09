@@ -17,6 +17,8 @@ import           Data.Bits
 import qualified Data.ByteString           as BS
 import           Data.Char
 import           Data.Maybe
+import qualified Data.Text                 as Text
+import qualified Data.Text.IO              as Text
 import           Data.Word
 import           System.Environment
 import qualified System.IO                 as IO
@@ -28,74 +30,140 @@ import qualified System.Terminal.Platform  as T
 import qualified System.Terminal.Pretty    as T
 
 newtype TerminalT m a
-  = TerminalT (StateT BS.ByteString m a)
+  = TerminalT (StateT TerminalState m a)
   deriving (Functor, Applicative, Monad, MonadIO)
+
+data TerminalState
+  = TerminalState
+  { tsInput      :: BS.ByteString
+  , tsAttributes :: TerminalStateAttributes
+  } deriving (Eq, Ord, Show)
+
+data TerminalStateAttributes
+  = TerminalStateAttributes
+  { tsNegative        :: !Bool
+  , tsUnderline       :: !Bool
+  , tsCursorVisible   :: !Bool
+  , tsForegroundColor :: !T.Color
+  , tsBackgroundColor :: !T.Color
+  } deriving (Eq, Ord, Show)
+
+defaultTerminalState :: TerminalState
+defaultTerminalState =
+  TerminalState
+  { tsInput           = mempty
+  , tsAttributes      = defaultTerminalStateAttributes
+  }
+
+defaultTerminalStateAttributes :: TerminalStateAttributes
+defaultTerminalStateAttributes =
+  TerminalStateAttributes
+  { tsNegative        = False
+  , tsUnderline       = False
+  , tsCursorVisible   = True
+  , tsForegroundColor = T.ColorDefault
+  , tsBackgroundColor = T.ColorDefault
+  }
+
+modAttrs :: Monad m => (TerminalStateAttributes -> TerminalStateAttributes) -> TerminalT m ()
+modAttrs f = TerminalT $ do
+  st <- get
+  put st { tsAttributes = f (tsAttributes st) }
+
+modFgColor :: Monad m => T.Color -> TerminalT m ()
+modFgColor c = modAttrs (\as -> as { tsForegroundColor = c })
+
+modBgColor :: Monad m => T.Color -> TerminalT m ()
+modBgColor c = modAttrs (\as -> as { tsBackgroundColor = c })
+
+modUnderline :: Monad m => Bool -> TerminalT m ()
+modUnderline b = modAttrs (\as -> as { tsUnderline = b })
+
+modNegative :: Monad m => Bool -> TerminalT m ()
+modNegative b = modAttrs (\as -> as { tsNegative = b })
 
 runTerminalT :: (MonadMask m, MonadIO m) => TerminalT m a -> m a
 runTerminalT (TerminalT m) = T.withTerminal $
-  evalStateT m BS.empty
+  evalStateT m defaultTerminalState
 
 instance MonadIO m => T.MonadEvent (TerminalT m) where
   getEvent = decodeAnsi
 
-instance MonadIO m => T.MonadPrinter (TerminalT m) where
-  isolate = id
+instance (MonadIO m, MonadMask m) => T.MonadPrinter (TerminalT m) where
+  isolate (TerminalT ma) = TerminalT $ bracket get
+    (\st1-> do
+        st2 <- get
+        let TerminalT nb = putDiff (tsAttributes st1) (tsAttributes st2)
+        evalStateT nb st2
+        put st2 { tsAttributes = tsAttributes st1 }
+    )
+    ( const ma )
+    where
+      putDiff a b = do
+        -- when (tsNegative a  /= tsNegative  b) $ if tsNegative a then setNegative else setPositive
+        when (tsUnderline a /= tsUnderline b) $ T.setUnderline (tsUnderline a)
+        when (tsForegroundColor a /= tsForegroundColor b) $ T.setForegroundColor (tsForegroundColor a)
+        when (tsBackgroundColor a /= tsBackgroundColor b) $ T.setBackgroundColor (tsBackgroundColor a)
+
+  flush = liftIO $ IO.hFlush IO.stdout
+
   putChar c = liftIO $ when (isPrint c || isSpace c) $ IO.putChar c
   putString = liftIO . IO.putStr . filter (\c-> isPrint c || isSpace c)
-  putStringLn s = T.putString s >> T.nl
-  nl = liftIO $ IO.putStr "\n"
-  cr = liftIO $ IO.putStr "\r"
-  reset = liftIO $ IO.putStr "\ESC[!p"
-  flush = liftIO $ IO.hFlush IO.stdout
-  setDefault                                 = liftIO $ IO.putStr "\ESC[m"
-  setForegroundColor T.ColorDefault            = liftIO $ IO.putStr "\ESC[39m"
-  setForegroundColor (T.Color T.Black     False) = liftIO $ IO.putStr "\ESC[30m"
-  setForegroundColor (T.Color T.Red       False) = liftIO $ IO.putStr "\ESC[31m"
-  setForegroundColor (T.Color T.Green     False) = liftIO $ IO.putStr "\ESC[32m"
-  setForegroundColor (T.Color T.Yellow    False) = liftIO $ IO.putStr "\ESC[33m"
-  setForegroundColor (T.Color T.Blue      False) = liftIO $ IO.putStr "\ESC[34m"
-  setForegroundColor (T.Color T.Magenta   False) = liftIO $ IO.putStr "\ESC[35m"
-  setForegroundColor (T.Color T.Cyan      False) = liftIO $ IO.putStr "\ESC[36m"
-  setForegroundColor (T.Color T.White     False) = liftIO $ IO.putStr "\ESC[37m"
-  setForegroundColor (T.Color T.Black      True) = liftIO $ IO.putStr "\ESC[90m"
-  setForegroundColor (T.Color T.Red        True) = liftIO $ IO.putStr "\ESC[91m"
-  setForegroundColor (T.Color T.Green      True) = liftIO $ IO.putStr "\ESC[92m"
-  setForegroundColor (T.Color T.Yellow     True) = liftIO $ IO.putStr "\ESC[93m"
-  setForegroundColor (T.Color T.Blue       True) = liftIO $ IO.putStr "\ESC[94m"
-  setForegroundColor (T.Color T.Magenta    True) = liftIO $ IO.putStr "\ESC[95m"
-  setForegroundColor (T.Color T.Cyan       True) = liftIO $ IO.putStr "\ESC[96m"
-  setForegroundColor (T.Color T.White      True) = liftIO $ IO.putStr "\ESC[97m"
-  setBackgroundColor T.ColorDefault            = liftIO $ IO.putStr "\ESC[49m"
-  setBackgroundColor (T.Color T.Black     False) = liftIO $ IO.putStr "\ESC[40m"
-  setBackgroundColor (T.Color T.Red       False) = liftIO $ IO.putStr "\ESC[41m"
-  setBackgroundColor (T.Color T.Green     False) = liftIO $ IO.putStr "\ESC[42m"
-  setBackgroundColor (T.Color T.Yellow    False) = liftIO $ IO.putStr "\ESC[43m"
-  setBackgroundColor (T.Color T.Blue      False) = liftIO $ IO.putStr "\ESC[44m"
-  setBackgroundColor (T.Color T.Magenta   False) = liftIO $ IO.putStr "\ESC[45m"
-  setBackgroundColor (T.Color T.Cyan      False) = liftIO $ IO.putStr "\ESC[46m"
-  setBackgroundColor (T.Color T.White     False) = liftIO $ IO.putStr "\ESC[47m"
-  setBackgroundColor (T.Color T.Black      True) = liftIO $ IO.putStr "\ESC[100m"
-  setBackgroundColor (T.Color T.Red        True) = liftIO $ IO.putStr "\ESC[101m"
-  setBackgroundColor (T.Color T.Green      True) = liftIO $ IO.putStr "\ESC[102m"
-  setBackgroundColor (T.Color T.Yellow     True) = liftIO $ IO.putStr "\ESC[103m"
-  setBackgroundColor (T.Color T.Blue       True) = liftIO $ IO.putStr "\ESC[104m"
-  setBackgroundColor (T.Color T.Magenta    True) = liftIO $ IO.putStr "\ESC[105m"
-  setBackgroundColor (T.Color T.Cyan       True) = liftIO $ IO.putStr "\ESC[106m"
-  setBackgroundColor (T.Color T.White      True) = liftIO $ IO.putStr "\ESC[107m"
-  setUnderline                         True  = liftIO $ IO.putStr "\ESC[4m"
-  setUnderline                         False = liftIO $ IO.putStr "\ESC[24m"
-  setPositive                                = liftIO $ IO.putStr "\ESC[27m"
-  setNegative                                = liftIO $ IO.putStr "\ESC[7m"
+  putStringLn s = T.putString s >> T.putLn
+  putText = liftIO . Text.putStr . Text.filter (\c-> isPrint c || isSpace c)
+  putTextLn t = T.putText t >> T.putLn
+  putLn = liftIO $ IO.putStr "\n"
+  putCr = liftIO $ IO.putStr "\r"
 
-instance MonadIO m => T.MonadScreen (TerminalT m) where
+  setDefault                                       = liftIO $ IO.putStr "\ESC[m"
+  setForegroundColor c@T.ColorDefault              = modFgColor c >> liftIO (IO.putStr "\ESC[39m")
+  setForegroundColor c@(T.Color T.Black     False) = modFgColor c >> liftIO (IO.putStr "\ESC[30m")
+  setForegroundColor c@(T.Color T.Red       False) = modFgColor c >> liftIO (IO.putStr "\ESC[31m")
+  setForegroundColor c@(T.Color T.Green     False) = modFgColor c >> liftIO (IO.putStr "\ESC[32m")
+  setForegroundColor c@(T.Color T.Yellow    False) = modFgColor c >> liftIO (IO.putStr "\ESC[33m")
+  setForegroundColor c@(T.Color T.Blue      False) = modFgColor c >> liftIO (IO.putStr "\ESC[34m")
+  setForegroundColor c@(T.Color T.Magenta   False) = modFgColor c >> liftIO (IO.putStr "\ESC[35m")
+  setForegroundColor c@(T.Color T.Cyan      False) = modFgColor c >> liftIO (IO.putStr "\ESC[36m")
+  setForegroundColor c@(T.Color T.White     False) = modFgColor c >> liftIO (IO.putStr "\ESC[37m")
+  setForegroundColor c@(T.Color T.Black      True) = modFgColor c >> liftIO (IO.putStr "\ESC[90m")
+  setForegroundColor c@(T.Color T.Red        True) = modFgColor c >> liftIO (IO.putStr "\ESC[91m")
+  setForegroundColor c@(T.Color T.Green      True) = modFgColor c >> liftIO (IO.putStr "\ESC[92m")
+  setForegroundColor c@(T.Color T.Yellow     True) = modFgColor c >> liftIO (IO.putStr "\ESC[93m")
+  setForegroundColor c@(T.Color T.Blue       True) = modFgColor c >> liftIO (IO.putStr "\ESC[94m")
+  setForegroundColor c@(T.Color T.Magenta    True) = modFgColor c >> liftIO (IO.putStr "\ESC[95m")
+  setForegroundColor c@(T.Color T.Cyan       True) = modFgColor c >> liftIO (IO.putStr "\ESC[96m")
+  setForegroundColor c@(T.Color T.White      True) = modFgColor c >> liftIO (IO.putStr "\ESC[97m")
+  setBackgroundColor c@T.ColorDefault              = modBgColor c >> liftIO (IO.putStr "\ESC[49m")
+  setBackgroundColor c@(T.Color T.Black     False) = modBgColor c >> liftIO (IO.putStr "\ESC[40m")
+  setBackgroundColor c@(T.Color T.Red       False) = modBgColor c >> liftIO (IO.putStr "\ESC[41m")
+  setBackgroundColor c@(T.Color T.Green     False) = modBgColor c >> liftIO (IO.putStr "\ESC[42m")
+  setBackgroundColor c@(T.Color T.Yellow    False) = modBgColor c >> liftIO (IO.putStr "\ESC[43m")
+  setBackgroundColor c@(T.Color T.Blue      False) = modBgColor c >> liftIO (IO.putStr "\ESC[44m")
+  setBackgroundColor c@(T.Color T.Magenta   False) = modBgColor c >> liftIO (IO.putStr "\ESC[45m")
+  setBackgroundColor c@(T.Color T.Cyan      False) = modBgColor c >> liftIO (IO.putStr "\ESC[46m")
+  setBackgroundColor c@(T.Color T.White     False) = modBgColor c >> liftIO (IO.putStr "\ESC[47m")
+  setBackgroundColor c@(T.Color T.Black      True) = modBgColor c >> liftIO (IO.putStr "\ESC[100m")
+  setBackgroundColor c@(T.Color T.Red        True) = modBgColor c >> liftIO (IO.putStr "\ESC[101m")
+  setBackgroundColor c@(T.Color T.Green      True) = modBgColor c >> liftIO (IO.putStr "\ESC[102m")
+  setBackgroundColor c@(T.Color T.Yellow     True) = modBgColor c >> liftIO (IO.putStr "\ESC[103m")
+  setBackgroundColor c@(T.Color T.Blue       True) = modBgColor c >> liftIO (IO.putStr "\ESC[104m")
+  setBackgroundColor c@(T.Color T.Magenta    True) = modBgColor c >> liftIO (IO.putStr "\ESC[105m")
+  setBackgroundColor c@(T.Color T.Cyan       True) = modBgColor c >> liftIO (IO.putStr "\ESC[106m")
+  setBackgroundColor c@(T.Color T.White      True) = modBgColor c >> liftIO (IO.putStr "\ESC[107m")
+  setUnderline                               True  = modUnderline True  >> liftIO (IO.putStr "\ESC[4m")
+  setUnderline                               False = modUnderline False >> liftIO (IO.putStr "\ESC[24m")
+  setPositive                                      = modNegative  False >> liftIO (IO.putStr "\ESC[27m")
+  setNegative                                      = modNegative  True  >> liftIO (IO.putStr "\ESC[7m")
+
+instance (MonadIO m, MonadMask m) => T.MonadScreen (TerminalT m) where
   clear                 = liftIO $ IO.putStr "\ESC[H"
   cursorUp i            = liftIO $ IO.putStr $ "\ESC[" ++ show (safeN i) ++ "A"
   cursorDown i          = liftIO $ IO.putStr $ "\ESC[" ++ show (safeN i) ++ "B"
   cursorForward i       = liftIO $ IO.putStr $ "\ESC[" ++ show (safeN i) ++ "C"
   cursorBackward i      = liftIO $ IO.putStr $ "\ESC[" ++ show (safeN i) ++ "D"
   cursorPosition x y    = liftIO $ IO.putStr $ "\ESC[" ++ show (safeN x) ++  ";" ++ show (safeN y) ++ "H"
-  cursorHide            = liftIO $ IO.putStr $ "\ESC[?25l"
-  cursorShow            = liftIO $ IO.putStr $ "\ESC[?25h"
+  cursorHide            = liftIO $ IO.putStr "\ESC[?25l"
+  cursorShow            = liftIO $ IO.putStr "\ESC[?25h"
 
 safeN :: Int -> Int
 safeN n
@@ -117,21 +185,21 @@ instance MonadIO m => MonadInput (TerminalT m) where
     term <- liftIO $ lookupEnv "TERM"
     pure $ fromMaybe T.termModesDefault (T.termModes <$> term)
   getNext = TerminalT $ do
-    bbs <- get
-    case BS.uncons bbs of
-      Just (b,bs) -> put bs >> pure b
+    st <- get
+    case BS.uncons (tsInput st) of
+      Just (b,bs) -> put st { tsInput = bs } >> pure b
       Nothing -> do
         ccs <- liftIO $ BS.hGetSome IO.stdin 1024
-        put (BS.tail ccs)
+        put st { tsInput = BS.tail ccs }
         pure (BS.head ccs)
   getNextNonBlock = TerminalT $ do
-    bbs <- get
-    case BS.uncons bbs of
-      Just (b,bs) -> put bs >> pure (Just b)
+    st <- get
+    case BS.uncons (tsInput st) of
+      Just (b,bs) -> put st { tsInput = bs } >> pure (Just b)
       Nothing -> do
         ccs <- liftIO $ BS.hGetNonBlocking IO.stdin 1024
         case BS.uncons ccs of
-          Just (c,cs) -> put cs >> pure (Just c)
+          Just (c,cs) -> put st { tsInput = cs } >> pure (Just c)
           Nothing     -> pure Nothing
   wait = TerminalT $ liftIO $ threadDelay 100000
 
@@ -430,5 +498,3 @@ isKeyBackspace :: MonadInput m => T.Event -> m Bool
 isKeyBackspace (T.EvKey T.KBackspace {} []) = pure True
 isKeyBackspace (T.EvKey (T.KChar [] c) [])  = askModes >>= \ms-> pure (T.modeVERASE ms == Just c)
 isKeyBackspace _                            = pure False
-
-

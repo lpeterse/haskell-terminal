@@ -1,6 +1,7 @@
 module System.Terminal.Pretty where
 
 import           Data.String
+import qualified Data.Text   as Text
 
 data Color
   = Color Color8 Bool
@@ -25,6 +26,7 @@ data Doc
   = Empty
   | Char Char
   | String String
+  | Text Text.Text
   | Colored Color Doc
   | Underlined Doc
   | Italic Doc

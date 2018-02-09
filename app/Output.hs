@@ -12,22 +12,16 @@ import qualified System.Terminal.Pretty    as T
 import qualified System.Terminal.TerminalT as T
 
 main :: IO ()
-main = T.withoutEcho $ T.withRawMode $ T.runTerminalT $ foo
+main = T.withoutEcho $ T.withRawMode $ T.runTerminalT foo
 
 foo :: (T.MonadScreen m, MonadIO m) => m ()
 foo = do
   T.putString "Hallo Welt!"
-  T.nl
-  --T.setForegroundColor (T.Color T.Red True)
-  T.putStringLn "This should be red!"
-  --T.setForegroundColor T.ColorDefault
+  T.putLn
+  T.isolate $ do
+    T.setForegroundColor (T.Color T.Red True)
+    T.putStringLn "This should be red!"
   T.putStringLn "This should have default color again!"
-  --T.setBackgroundColor (T.Color T.Cyan False)
-  T.putString "ABC"
-  T.cr
-  T.putString "DEF"
-  T.nl
-  T.putString "HIJ"
   T.cursorDown 6
   T.cursorForward 20
   T.cursorHide

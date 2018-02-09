@@ -21,6 +21,7 @@ dependencies:
 - mtl
 - transformers
 - exceptions
+- text
 
 library:
   ghc-options: -Werror

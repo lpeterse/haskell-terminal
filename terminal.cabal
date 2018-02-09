@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: cca57d52955fb6b370c4fbd255119e2b4c5e6bdc0478fc2782b6bba299de603d
+-- hash: 03be7177777652729b48cc0f50dd538dd7d675def982a79a39cc96a556fa1742
 
 name:           terminal
 version:        0.1.0.0
@@ -37,6 +37,7 @@ library
     , exceptions
     , mtl
     , stm
+    , text
     , transformers
   if os(windows)
     hs-source-dirs:
@@ -76,6 +77,7 @@ executable terminal-output
     , mtl
     , stm
     , terminal
+    , text
     , transformers
   other-modules:
       Main
@@ -96,6 +98,7 @@ test-suite terminal-test
     , mtl
     , stm
     , terminal
+    , text
     , transformers
   other-modules:
       Paths_terminal

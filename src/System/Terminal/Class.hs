@@ -9,6 +9,7 @@ import           Control.Monad.Trans.State
 import           Data.Bits
 import qualified Data.ByteString           as BS
 import           Data.Maybe
+import qualified Data.Text                 as Text
 import           Data.Word
 import           System.Environment
 import           System.IO
@@ -22,15 +23,16 @@ class Monad m => MonadEvent m where
 
 class Monad m => MonadPrinter m where
   isolate            :: m a -> m a
+  flush              :: m ()
+
   putChar            :: Char -> m ()
   putString          :: String -> m ()
   putStringLn        :: String -> m ()
-  nl                 :: m ()
-  cr                 :: m ()
-  flush              :: m ()
-  reset              :: m ()
-  setForegroundColor :: T.Color -> m ()
-  setBackgroundColor :: T.Color -> m ()
+  putText            :: Text.Text -> m ()
+  putTextLn          :: Text.Text -> m ()
+  putLn              :: m ()
+  putCr              :: m ()
+
   -- ^ Reset all attributes including
   --
   --   * bold
@@ -39,6 +41,8 @@ class Monad m => MonadPrinter m where
   --   * underline
   --   * italic
   setDefault  :: m ()
+  setForegroundColor :: T.Color -> m ()
+  setBackgroundColor :: T.Color -> m ()
   setUnderline :: Bool -> m ()
   setPositive :: m ()
   setNegative :: m ()
