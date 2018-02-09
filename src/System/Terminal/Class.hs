@@ -21,10 +21,10 @@ import qualified System.Terminal.Pretty    as T
 class Monad m => MonadEvent m where
   getEvent :: m T.Event
 
-class Monad m => MonadPrinter m where
+class Monad m => MonadIsolate m where
   isolate            :: m a -> m a
-  flush              :: m ()
 
+class Monad m => MonadPrinter m where
   putChar            :: Char -> m ()
   putString          :: String -> m ()
   putStringLn        :: String -> m ()
@@ -47,6 +47,8 @@ class Monad m => MonadPrinter m where
   setPositive :: m ()
   setNegative :: m ()
 
+  flush              :: m ()
+
 class MonadPrinter m => MonadScreen m where
   clear :: m ()
   cursorUp :: Int -> m ()
@@ -57,7 +59,7 @@ class MonadPrinter m => MonadScreen m where
   cursorHide :: m ()
   cursorShow :: m ()
 
-putDoc :: MonadPrinter m => T.Doc -> m ()
+putDoc :: (MonadIsolate m, MonadPrinter m) => T.Doc -> m ()
 putDoc = \case
   T.Empty -> pure ()
   T.Char c -> putString [c]

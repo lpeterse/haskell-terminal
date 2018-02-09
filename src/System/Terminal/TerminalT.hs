@@ -89,7 +89,7 @@ runTerminalT (TerminalT m) = T.withTerminal $
 instance MonadIO m => T.MonadEvent (TerminalT m) where
   getEvent = decodeAnsi
 
-instance (MonadIO m, MonadMask m) => T.MonadPrinter (TerminalT m) where
+instance (MonadIO m, MonadMask m) => T.MonadIsolate (TerminalT m) where
   isolate (TerminalT ma) = TerminalT $ bracket get
     (\st1-> do
         st2 <- get
@@ -100,13 +100,13 @@ instance (MonadIO m, MonadMask m) => T.MonadPrinter (TerminalT m) where
     ( const ma )
     where
       putDiff a b = do
-        -- when (tsNegative a  /= tsNegative  b) $ if tsNegative a then setNegative else setPositive
+        when (tsNegative a  /= tsNegative  b) $ if tsNegative a then T.setNegative else T.setPositive
         when (tsUnderline a /= tsUnderline b) $ T.setUnderline (tsUnderline a)
         when (tsForegroundColor a /= tsForegroundColor b) $ T.setForegroundColor (tsForegroundColor a)
         when (tsBackgroundColor a /= tsBackgroundColor b) $ T.setBackgroundColor (tsBackgroundColor a)
+        when (tsCursorVisible   a /= tsCursorVisible   b) $ if tsCursorVisible a then T.cursorShow else T.cursorHide
 
-  flush = liftIO $ IO.hFlush IO.stdout
-
+instance (MonadIO m, MonadMask m) => T.MonadPrinter (TerminalT m) where
   putChar c = liftIO $ when (isPrint c || isSpace c) $ IO.putChar c
   putString = liftIO . IO.putStr . filter (\c-> isPrint c || isSpace c)
   putStringLn s = T.putString s >> T.putLn
@@ -154,6 +154,8 @@ instance (MonadIO m, MonadMask m) => T.MonadPrinter (TerminalT m) where
   setUnderline                               False = modUnderline False >> liftIO (IO.putStr "\ESC[24m")
   setPositive                                      = modNegative  False >> liftIO (IO.putStr "\ESC[27m")
   setNegative                                      = modNegative  True  >> liftIO (IO.putStr "\ESC[7m")
+
+  flush = liftIO $ IO.hFlush IO.stdout
 
 instance (MonadIO m, MonadMask m) => T.MonadScreen (TerminalT m) where
   clear                 = liftIO $ IO.putStr "\ESC[H"

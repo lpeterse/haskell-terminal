@@ -14,7 +14,7 @@ import qualified System.Terminal.TerminalT as T
 main :: IO ()
 main = T.withoutEcho $ T.withRawMode $ T.runTerminalT foo
 
-foo :: (T.MonadScreen m, MonadIO m) => m ()
+foo :: (T.MonadIsolate m, T.MonadScreen m, MonadIO m) => m ()
 foo = do
   T.putString "Hallo Welt!"
   T.putLn
