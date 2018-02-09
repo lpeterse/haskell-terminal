@@ -13,7 +13,7 @@ import qualified System.Terminal.Pretty    as T
 import qualified System.Terminal.TerminalT as T
 
 main :: IO ()
-main = T.withoutEcho $ T.withRawMode $ T.runTerminalT foo
+main = T.runTerminalT foo
 
 foo :: (T.MonadTerminal m, MonadIO m) => m ()
 foo = do

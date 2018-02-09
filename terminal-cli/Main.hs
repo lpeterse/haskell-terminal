@@ -15,7 +15,7 @@ import qualified System.Terminal.Pretty    as T
 import qualified System.Terminal.TerminalT as T
 
 main :: IO ()
-main = T.withoutEcho $ T.withRawMode $ T.runTerminalT $ do
+main = T.runTerminalT $ do
   liftIO $ lookupEnv "TERM" >>= print
   ev <- T.getEvent
   liftIO $ print ev

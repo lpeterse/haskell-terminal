@@ -17,7 +17,7 @@ import           Control.Monad                (forever, when)
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
-import           Control.Monad.Trans
+import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Reader
 import           Control.Monad.Trans.State
 import           Data.Bits
@@ -94,7 +94,7 @@ runTerminalT (TerminalT ma) = T.withTerminal $ do
       ev <- decodeAnsi
       liftIO $ atomically $ pushEvent ev
 
-    -- runAction :: TVar Bool -> STM T.Event -> IO a
+    -- runAction :: TVar Bool -> STM T.Event -> IO _
     runAction interruptFlag =
       runReaderT (evalStateT ma defaultTerminalState)
 

@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: b7bb18578ba2f1ff53fd68fe9c4d6f063727739b9e43a546016fa4f1a7a1df38
+-- hash: 73e911d7d41f620119094486e739aa89f0d0a6d73512b387f50df83f7412cbf5
 
 name:           terminal
 version:        0.1.0.0
@@ -35,7 +35,6 @@ library
     , base >=4.7 && <5
     , bytestring
     , exceptions
-    , mtl
     , stm
     , text
     , transformers
@@ -76,7 +75,6 @@ executable terminal-cli
     , base >=4.7 && <5
     , bytestring
     , exceptions
-    , mtl
     , stm
     , terminal
     , text
@@ -96,7 +94,6 @@ executable terminal-out
     , base >=4.7 && <5
     , bytestring
     , exceptions
-    , mtl
     , stm
     , terminal
     , text
@@ -117,7 +114,6 @@ test-suite terminal-test
     , base >=4.7 && <5
     , bytestring
     , exceptions
-    , mtl
     , stm
     , terminal
     , text
