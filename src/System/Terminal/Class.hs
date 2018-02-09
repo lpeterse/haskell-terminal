@@ -1,41 +1,48 @@
 {-# LANGUAGE LambdaCase #-}
 module System.Terminal.Class where
 
-import           Control.Concurrent
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
-import           Control.Monad.Trans
-import           Control.Monad.Trans.State
-import           Data.Bits
-import qualified Data.ByteString           as BS
+import           Control.Monad.STM
 import           Data.Maybe
-import qualified Data.Text                 as Text
+import qualified Data.Text              as Text
 import           Data.Word
-import           System.Environment
-import           System.IO
+import           Prelude                hiding (putChar)
 
-import qualified System.Terminal.Color     as T
-import qualified System.Terminal.Events    as T
-import qualified System.Terminal.Modes     as T
-import qualified System.Terminal.Pretty    as T
+import qualified System.Terminal.Color  as T
+import qualified System.Terminal.Events as T
+import qualified System.Terminal.Modes  as T
+import qualified System.Terminal.Pretty as T
 
 class (MonadEvent m, MonadIsolate m, MonadColorPrinter m, MonadScreen m) => MonadTerminal m where
 
-class Monad m => MonadEvent m where
-  getEvent :: m T.Event
+class MonadIO m => MonadEvent m where
+  getEvent     :: m T.Event
+  getEvent      = withEventSTM id
+  tryGetEvent  :: m (Maybe T.Event)
+  tryGetEvent   = withEventSTM $ \e-> (Just <$> e) `orElse` pure Nothing
+  withEventSTM :: (STM T.Event -> STM a) -> m a
+  {-# MINIMAL withEventSTM #-}
 
 class Monad m => MonadIsolate m where
   isolate            :: m a -> m a
 
 class Monad m => MonadPrinter m where
   putLn              :: m ()
+  putLn               = putChar '\n'
   putChar            :: Char -> m ()
   putString          :: String -> m ()
+  putString           = mapM_ putChar
   putStringLn        :: String -> m ()
+  putStringLn s       = putString s >> putLn
   putText            :: Text.Text -> m ()
+  putText             = putString . Text.unpack
   putTextLn          :: Text.Text -> m ()
+  putTextLn           = putStringLn . Text.unpack
 
   flush              :: m ()
+  flush               = pure ()
+  {-# MINIMAL putChar #-}
 
 class MonadPrinter m => MonadColorPrinter m where
   -- ^ Reset all attributes including

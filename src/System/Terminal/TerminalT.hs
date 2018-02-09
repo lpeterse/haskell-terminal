@@ -1,4 +1,5 @@
 {-# LANGUAGE BinaryLiterals             #-}
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 module System.Terminal.TerminalT
@@ -8,31 +9,94 @@ module System.Terminal.TerminalT
 where
 
 import           Control.Concurrent
-import           Control.Monad             (when)
+import qualified Control.Concurrent.Async     as A
+import           Control.Concurrent.STM.TChan
+import           Control.Concurrent.STM.TVar
+import qualified Control.Exception            as E
+import           Control.Monad                (forever, when)
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
+import           Control.Monad.STM
 import           Control.Monad.Trans
+import           Control.Monad.Trans.Reader
 import           Control.Monad.Trans.State
 import           Data.Bits
-import qualified Data.ByteString           as BS
+import qualified Data.ByteString              as BS
 import           Data.Char
+import           Data.Function                (fix)
 import           Data.Maybe
-import qualified Data.Text                 as Text
-import qualified Data.Text.IO              as Text
+import qualified Data.Text                    as Text
+import qualified Data.Text.IO                 as Text
 import           Data.Word
 import           System.Environment
-import qualified System.IO                 as IO
+import qualified System.IO                    as IO
+import qualified System.Posix.Signals         as Posix
 
-import qualified System.Terminal.Class     as T
-import qualified System.Terminal.Color     as T
-import qualified System.Terminal.Events    as T
-import qualified System.Terminal.Modes     as T
-import qualified System.Terminal.Platform  as T
-import qualified System.Terminal.Pretty    as T
+import qualified System.Terminal.Class        as T
+import qualified System.Terminal.Color        as T
+import qualified System.Terminal.Events       as T
+import qualified System.Terminal.Modes        as T
+import qualified System.Terminal.Platform     as T
+import qualified System.Terminal.Pretty       as T
 
 newtype TerminalT m a
-  = TerminalT (StateT TerminalState m a)
+  = TerminalT (StateT TerminalState (ReaderT (STM T.Event) m) a)
   deriving (Functor, Applicative, Monad, MonadIO)
+
+runTerminalT :: TerminalT IO a -> IO a
+runTerminalT (TerminalT ma) = T.withTerminal $ do
+  eventChan     <- newTChanIO
+  interruptFlag <- newTVarIO False
+  withoutEcho $
+    withRawMode $
+      withHookedSignals $ \waitSignal->
+        A.withAsync (runInput $ writeTChan eventChan) $ \inputThread->
+        A.withAsync (runAction interruptFlag $ readTChan eventChan) $ \actionThread->
+        fix $ \proceed-> do
+          let waitInput  = A.waitSTM inputThread >> pure Nothing
+          let waitAction = Just <$> A.waitSTM actionThread
+          let waitInterrupt = waitSignal >> swapTVar interruptFlag True >>= \case
+                True  -> throwSTM E.UserInterrupt -- No one has handled an earlier interrupt - exit!
+                False -> pure Nothing
+          -- The input thread is designed to never return, but it might
+          -- throw an exception which will be rethrown automatically.
+          -- The action thread might return which can be detected through the
+          -- `Just` constructor. It might also throw an exception.
+          -- `waitInterrupt` waits for an incoming incoming interrupt signal.
+          -- It always tries to forward it to the action thread, but
+          -- if it finds a previous interrupt to not been handled it assumes
+          -- the action thread is too busy or deadlocked and throws a
+          -- `E.UserInterrupt` exception terminating everything.
+          -- This assures that the application always responds to Ctrl-C.
+          atomically (waitInput `orElse` waitAction `orElse` waitInterrupt) >>= \case
+                Just a  -> pure a
+                Nothing -> proceed
+  where
+    withoutEcho :: IO a -> IO a
+    withoutEcho = bracket
+      (IO.hGetEcho IO.stdin >>= \x-> IO.hSetEcho IO.stdin False >> pure x)
+      (IO.hSetEcho IO.stdin) . const
+
+    withRawMode :: IO a -> IO a
+    withRawMode = bracket
+      (IO.hGetBuffering IO.stdin >>= \b-> IO.hSetBuffering IO.stdin IO.NoBuffering >> pure b)
+      (IO.hSetBuffering IO.stdin) . const
+
+    withHookedSignals :: (STM () -> IO a) -> IO a
+    withHookedSignals action = do
+      sig <- newTVarIO False
+      bracket
+        (flip (Posix.installHandler Posix.sigINT) Nothing  $ Posix.Catch $ atomically $ writeTVar sig True)
+        (flip (Posix.installHandler Posix.sigINT) Nothing) $ const $ action (readTVar sig >>= check >> writeTVar sig False)
+
+    runInput :: (T.Event -> STM ()) -> IO ()
+    runInput pushEvent = flip evalStateT BS.empty $ forever $ do
+      ev <- decodeAnsi
+      liftIO $ atomically $ pushEvent ev
+
+    -- runAction :: TVar Bool -> STM T.Event -> IO a
+    runAction interruptFlag =
+      runReaderT (evalStateT ma defaultTerminalState)
 
 data TerminalState
   = TerminalState
@@ -83,21 +147,20 @@ modUnderline b = modAttrs (\as -> as { tsUnderline = b })
 modNegative :: Monad m => Bool -> TerminalT m ()
 modNegative b = modAttrs (\as -> as { tsNegative = b })
 
-runTerminalT :: (MonadMask m, MonadIO m) => TerminalT m a -> m a
-runTerminalT (TerminalT m) = T.withTerminal $
-  evalStateT m defaultTerminalState
-
 instance (MonadIO m, MonadMask m) => T.MonadTerminal (TerminalT m) where
 
 instance MonadIO m => T.MonadEvent (TerminalT m) where
-  getEvent = decodeAnsi
+  withEventSTM f = TerminalT $ do
+    ev <- lift ask
+    liftIO $ atomically $ f ev
 
 instance (MonadIO m, MonadMask m) => T.MonadIsolate (TerminalT m) where
   isolate (TerminalT ma) = TerminalT $ bracket get
     (\st1-> do
         st2 <- get
+        ev  <- lift ask
         let TerminalT nb = putDiff (tsAttributes st1) (tsAttributes st2)
-        evalStateT nb st2
+        runReaderT (evalStateT nb st2) ev
         put st2 { tsAttributes = tsAttributes st1 }
     )
     ( const ma )
@@ -185,28 +248,28 @@ class Monad m => MonadInput m where
   getNextNonBlock :: m (Maybe Word8)
   wait            :: m ()
 
-instance MonadIO m => MonadInput (TerminalT m) where
-  askModes = TerminalT $ do
+instance MonadInput (StateT BS.ByteString IO) where
+  askModes = do
     term <- liftIO $ lookupEnv "TERM"
     pure $ fromMaybe T.termModesDefault (T.termModes <$> term)
-  getNext = TerminalT $ do
+  getNext = do
     st <- get
-    case BS.uncons (tsInput st) of
-      Just (b,bs) -> put st { tsInput = bs } >> pure b
+    case BS.uncons st of
+      Just (b,bs) -> put bs >> pure b
       Nothing -> do
         ccs <- liftIO $ BS.hGetSome IO.stdin 1024
-        put st { tsInput = BS.tail ccs }
+        put (BS.tail ccs)
         pure (BS.head ccs)
-  getNextNonBlock = TerminalT $ do
+  getNextNonBlock = do
     st <- get
-    case BS.uncons (tsInput st) of
-      Just (b,bs) -> put st { tsInput = bs } >> pure (Just b)
+    case BS.uncons st of
+      Just (b,bs) -> put bs >> pure (Just b)
       Nothing -> do
         ccs <- liftIO $ BS.hGetNonBlocking IO.stdin 1024
         case BS.uncons ccs of
-          Just (c,cs) -> put st { tsInput = cs } >> pure (Just c)
+          Just (c,cs) -> put cs >> pure (Just c)
           Nothing     -> pure Nothing
-  wait = TerminalT $ liftIO $ threadDelay 100000
+  wait = liftIO $ threadDelay 100000
 
 decodeAnsi :: MonadInput m => m T.Event
 decodeAnsi = decode1 =<< getNext
