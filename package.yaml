@@ -52,9 +52,9 @@ library:
           - platform/posix/src
 
 executables:
-  terminal-exe:
+  terminal-cli:
     main:                Main.hs
-    source-dirs:         app
+    source-dirs:         terminal-cli
     ghc-options:
     - -Werror
     - -threaded
@@ -62,11 +62,9 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - terminal
-
-executables:
-  terminal-output:
-    main:                Output.hs
-    source-dirs:         app
+  terminal-out:
+    main:                Main.hs
+    source-dirs:         terminal-out
     ghc-options:
     - -Werror
     - -threaded

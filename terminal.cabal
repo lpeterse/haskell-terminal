@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 8dc2ea740804d4e863e4fd838d46b981272eb9ccd4dc6102e067ed8de0d7b471
+-- hash: c190195aa4742699112868686fdef33de587e1c0d34efc521a7c2b1678d8d65c
 
 name:           terminal
 version:        0.1.0.0
@@ -65,10 +65,10 @@ library
       Paths_terminal
   default-language: Haskell2010
 
-executable terminal-output
-  main-is: Output.hs
+executable terminal-cli
+  main-is: Main.hs
   hs-source-dirs:
-      app
+      terminal-cli
   ghc-options: -Werror -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       async
@@ -81,7 +81,25 @@ executable terminal-output
     , text
     , transformers
   other-modules:
-      Main
+      Paths_terminal
+  default-language: Haskell2010
+
+executable terminal-output
+  main-is: Main.hs
+  hs-source-dirs:
+      terminal-out
+  ghc-options: -Werror -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      async
+    , base >=4.7 && <5
+    , bytestring
+    , exceptions
+    , mtl
+    , stm
+    , terminal
+    , text
+    , transformers
+  other-modules:
       Paths_terminal
   default-language: Haskell2010
 

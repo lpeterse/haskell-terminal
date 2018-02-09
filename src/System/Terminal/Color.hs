@@ -1,11 +1,15 @@
 module System.Terminal.Color where
 
+import           Data.Word
+
 data Color
-  = Color Color8 Bool
-  | ColorDefault
+  = ColorDefault
+  | Color4Bit  Color3Bit Bool
+  | Color8Bit  Word8
+  | Color24bit Word8 Word8 Word8
   deriving (Eq, Ord, Show)
 
-data Color8
+data Color3Bit
   = Black
   | Red
   | Green
@@ -18,5 +22,8 @@ data Color8
 
 def       = ColorDefault
 
-red       = Color Red False
-redBright = Color Red True
+red       = Color4Bit Red False
+redBright = Color4Bit Red True
+
+rgb :: Word8 -> Word8 -> Word8 -> Color
+rgb  = Color24bit

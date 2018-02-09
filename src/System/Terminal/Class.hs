@@ -19,6 +19,8 @@ import qualified System.Terminal.Events    as T
 import qualified System.Terminal.Modes     as T
 import qualified System.Terminal.Pretty    as T
 
+class (MonadEvent m, MonadIsolate m, MonadColorPrinter m, MonadScreen m) => MonadTerminal m where
+
 class Monad m => MonadEvent m where
   getEvent :: m T.Event
 
@@ -26,14 +28,16 @@ class Monad m => MonadIsolate m where
   isolate            :: m a -> m a
 
 class Monad m => MonadPrinter m where
+  putLn              :: m ()
   putChar            :: Char -> m ()
   putString          :: String -> m ()
   putStringLn        :: String -> m ()
   putText            :: Text.Text -> m ()
   putTextLn          :: Text.Text -> m ()
-  putLn              :: m ()
-  putCr              :: m ()
 
+  flush              :: m ()
+
+class MonadPrinter m => MonadColorPrinter m where
   -- ^ Reset all attributes including
   --
   --   * bold
@@ -48,8 +52,6 @@ class Monad m => MonadPrinter m where
   setPositive :: m ()
   setNegative :: m ()
 
-  flush              :: m ()
-
 class MonadPrinter m => MonadScreen m where
   clear :: m ()
   cursorUp :: Int -> m ()
@@ -60,7 +62,7 @@ class MonadPrinter m => MonadScreen m where
   cursorHide :: m ()
   cursorShow :: m ()
 
-putDoc :: (MonadIsolate m, MonadPrinter m) => T.Doc -> m ()
+putDoc :: (MonadIsolate m, MonadColorPrinter m) => T.Doc -> m ()
 putDoc = \case
   T.Empty -> pure ()
   T.Char c -> putString [c]
