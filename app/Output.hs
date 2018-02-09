@@ -8,6 +8,7 @@ import           System.Environment
 
 import qualified System.Terminal           as T
 import qualified System.Terminal.Class     as T
+import qualified System.Terminal.Color     as T
 import qualified System.Terminal.Pretty    as T
 import qualified System.Terminal.TerminalT as T
 

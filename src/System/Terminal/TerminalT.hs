@@ -24,6 +24,7 @@ import           System.Environment
 import qualified System.IO                 as IO
 
 import qualified System.Terminal.Class     as T
+import qualified System.Terminal.Color     as T
 import qualified System.Terminal.Events    as T
 import qualified System.Terminal.Modes     as T
 import qualified System.Terminal.Platform  as T

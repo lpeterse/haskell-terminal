@@ -14,6 +14,7 @@ import           Data.Word
 import           System.Environment
 import           System.IO
 
+import qualified System.Terminal.Color     as T
 import qualified System.Terminal.Events    as T
 import qualified System.Terminal.Modes     as T
 import qualified System.Terminal.Pretty    as T

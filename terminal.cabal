@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 03be7177777652729b48cc0f50dd538dd7d675def982a79a39cc96a556fa1742
+-- hash: 8dc2ea740804d4e863e4fd838d46b981272eb9ccd4dc6102e067ed8de0d7b471
 
 name:           terminal
 version:        0.1.0.0
@@ -54,6 +54,7 @@ library
         platform/posix/src
   exposed-modules:
       System.Terminal
+      System.Terminal.Color
       System.Terminal.Platform
       System.Terminal.Class
       System.Terminal.Events

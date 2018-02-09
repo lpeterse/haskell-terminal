@@ -27,6 +27,7 @@ library:
   ghc-options: -Werror
   exposed-modules:
     - System.Terminal
+    - System.Terminal.Color
     - System.Terminal.Platform
     - System.Terminal.Class
     - System.Terminal.Events
