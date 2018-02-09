@@ -24,6 +24,14 @@ dependencies:
 
 library:
   ghc-options: -Werror
+  exposed-modules:
+    - System.Terminal
+    - System.Terminal.Platform
+    - System.Terminal.Class
+    - System.Terminal.Events
+    - System.Terminal.Modes
+    - System.Terminal.Pretty
+    - System.Terminal.TerminalT
   source-dirs: src
   when:
     - condition: os(windows)
@@ -31,17 +39,15 @@ library:
         cpp-options: -DWINDOWS
         include-dirs:
           - platform/windows/include
-        hs-src-dirs:
+        source-dirs:
           - platform/windows/src
         c-sources:
           - platform/windows/cbits/hs_terminal.c
         dependencies:
-        - Win32
+          - Win32
       else:
-        build-tools:
-        - hsc2hs
-        dependencies:
-        - unix
+        source-dirs:
+          - platform/posix/src
 
 executables:
   terminal-exe:

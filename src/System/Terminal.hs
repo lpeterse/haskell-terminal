@@ -2,14 +2,9 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 module System.Terminal
-    ( --AnsiTermT (..)
-    --, runAnsiTermT
-      withRawMode
+    ( withRawMode
     , withoutEcho
-    , runInputT
-    , module E
     , module T
-    , module M
     ) where
 
 import           Control.Concurrent.Async     (waitSTM, withAsync)
@@ -32,10 +27,10 @@ import           Prelude                      hiding (getChar, getLine, putChar,
 import qualified Prelude                      as P
 import           System.Environment
 import           System.IO
---import           System.Posix.Signals
-import qualified System.Terminal.Events       as E
-import qualified System.Terminal.Input        as T
-import qualified System.Terminal.Modes        as M
+
+import qualified System.Terminal.Events       as T
+import qualified System.Terminal.Modes        as T
+import qualified System.Terminal.Pretty       as T
 
 data AnsiTermState
   = AnsiTermState
@@ -45,8 +40,8 @@ data AnsiTermState
 newtype AnsiTermT m a = AnsiTermT (ReaderT AnsiTermState m a)
   deriving (Functor, Applicative, Monad, MonadIO)
 
-runInputT :: Monad m => T.InputT m a -> m a
-runInputT (T.InputT m) = evalStateT m BS.empty
+--runTerminalT :: Monad m => T.TerminalT m a -> m a
+--runTerminalT (T.TerminalT m) = evalStateT m BS.empty
 
 {-
 runAnsiTermT :: AnsiTermT IO a -> IO a
@@ -85,5 +80,3 @@ withRawMode :: IO a -> IO a
 withRawMode = bracket
   (hGetBuffering stdin >>= \b-> hSetBuffering stdin NoBuffering >> pure b)
   (hSetBuffering stdin) . const
-
-
