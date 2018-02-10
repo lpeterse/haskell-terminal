@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 0d00c724202d4769ccaf9a9ab5566bf8a9ee64e7d0a24aee0791cf76936da075
+-- hash: 75ceb46496e92b125c2183554fe9bf894c2519d04227b006ef5aa11eee44e4f1
 
 name:           terminal
 version:        0.1.0.0
@@ -55,15 +55,14 @@ library
         unix
   exposed-modules:
       System.Terminal
-      System.Terminal.Class
       System.Terminal.Color
       System.Terminal.Events
       System.Terminal.Modes
-      System.Terminal.Platform
       System.Terminal.Pretty
-      System.Terminal.TerminalT
   other-modules:
-      Paths_terminal
+      System.Terminal.Platform
+      System.Terminal.Class
+      System.Terminal.AnsiTerminalT
   default-language: Haskell2010
 
 executable terminal-cli

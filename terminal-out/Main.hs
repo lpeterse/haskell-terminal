@@ -7,13 +7,12 @@ import           Control.Monad
 import           Control.Monad.IO.Class
 import           System.Environment
 
-import qualified System.Terminal           as T
-import qualified System.Terminal.Color     as T
-import qualified System.Terminal.Pretty    as T
-import qualified System.Terminal.TerminalT as T
+import qualified System.Terminal        as T
+import qualified System.Terminal.Color  as T
+import qualified System.Terminal.Pretty as T
 
 main :: IO ()
-main = T.runTerminalT foo
+main = T.runAnsiTerminalT foo
 
 foo :: (T.MonadTerminal m, MonadIO m) => m ()
 foo = do

@@ -2,9 +2,9 @@
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
-module System.Terminal.TerminalT
-  ( TerminalT ()
-  , runTerminalT
+module System.Terminal.AnsiTerminalT
+  ( AnsiTerminalT ()
+  , runAnsiTerminalT
   )
 where
 
@@ -38,12 +38,12 @@ import qualified System.Terminal.Modes        as T
 import qualified System.Terminal.Platform     as T
 import qualified System.Terminal.Pretty       as T
 
-newtype TerminalT m a
-  = TerminalT (StateT TerminalState (ReaderT (STM T.Event) m) a)
+newtype AnsiTerminalT m a
+  = AnsiTerminalT (StateT TerminalState (ReaderT (STM T.Event) m) a)
   deriving (Functor, Applicative, Monad, MonadIO)
 
-runTerminalT :: TerminalT IO a -> IO a
-runTerminalT (TerminalT ma) = T.withTerminal $ do
+runAnsiTerminalT :: AnsiTerminalT IO a -> IO a
+runAnsiTerminalT (AnsiTerminalT ma) = T.withTerminal $ do
   eventChan     <- newTChanIO
   interruptFlag <- newTVarIO False
   withoutEcho $
@@ -122,36 +122,36 @@ defaultTerminalStateAttributes =
   , tsBackgroundColor = T.ColorDefault
   }
 
-modAttrs :: Monad m => (TerminalStateAttributes -> TerminalStateAttributes) -> TerminalT m ()
-modAttrs f = TerminalT $ do
+modAttrs :: Monad m => (TerminalStateAttributes -> TerminalStateAttributes) -> AnsiTerminalT m ()
+modAttrs f = AnsiTerminalT $ do
   st <- get
   put st { tsAttributes = f (tsAttributes st) }
 
-modFgColor :: Monad m => T.Color -> TerminalT m ()
+modFgColor :: Monad m => T.Color -> AnsiTerminalT m ()
 modFgColor c = modAttrs (\as -> as { tsForegroundColor = c })
 
-modBgColor :: Monad m => T.Color -> TerminalT m ()
+modBgColor :: Monad m => T.Color -> AnsiTerminalT m ()
 modBgColor c = modAttrs (\as -> as { tsBackgroundColor = c })
 
-modUnderline :: Monad m => Bool -> TerminalT m ()
+modUnderline :: Monad m => Bool -> AnsiTerminalT m ()
 modUnderline b = modAttrs (\as -> as { tsUnderline = b })
 
-modNegative :: Monad m => Bool -> TerminalT m ()
+modNegative :: Monad m => Bool -> AnsiTerminalT m ()
 modNegative b = modAttrs (\as -> as { tsNegative = b })
 
-instance (MonadIO m, MonadMask m) => T.MonadTerminal (TerminalT m) where
+instance (MonadIO m, MonadMask m) => T.MonadTerminal (AnsiTerminalT m) where
 
-instance MonadIO m => T.MonadEvent (TerminalT m) where
-  withEventSTM f = TerminalT $ do
+instance MonadIO m => T.MonadEvent (AnsiTerminalT m) where
+  withEventSTM f = AnsiTerminalT $ do
     ev <- lift ask
     liftIO $ atomically $ f ev
 
-instance (MonadIO m, MonadMask m) => T.MonadIsolate (TerminalT m) where
-  isolate (TerminalT ma) = TerminalT $ bracket get
+instance (MonadIO m, MonadMask m) => T.MonadIsolate (AnsiTerminalT m) where
+  isolate (AnsiTerminalT ma) = AnsiTerminalT $ bracket get
     (\st1-> do
         st2 <- get
         ev  <- lift ask
-        let TerminalT nb = putDiff (tsAttributes st1) (tsAttributes st2)
+        let AnsiTerminalT nb = putDiff (tsAttributes st1) (tsAttributes st2)
         runReaderT (evalStateT nb st2) ev
         put st2 { tsAttributes = tsAttributes st1 }
     )
@@ -164,7 +164,7 @@ instance (MonadIO m, MonadMask m) => T.MonadIsolate (TerminalT m) where
         when (tsBackgroundColor a /= tsBackgroundColor b) $ T.setBackgroundColor (tsBackgroundColor a)
         when (tsCursorVisible   a /= tsCursorVisible   b) $ T.cursorVisible (tsCursorVisible a)
 
-instance (MonadIO m, MonadMask m) => T.MonadPrinter (TerminalT m) where
+instance (MonadIO m, MonadMask m) => T.MonadPrinter (AnsiTerminalT m) where
   putChar c = liftIO $ when (isPrint c || isSpace c) $ IO.putChar c
   putString = liftIO . IO.putStr . filter (\c-> isPrint c || isSpace c)
   putStringLn s = T.putString s >> T.putLn
@@ -174,7 +174,7 @@ instance (MonadIO m, MonadMask m) => T.MonadPrinter (TerminalT m) where
 
   flush = liftIO $ IO.hFlush IO.stdout
 
-instance (MonadIO m, MonadMask m) => T.MonadColorPrinter (TerminalT m) where
+instance (MonadIO m, MonadMask m) => T.MonadColorPrinter (AnsiTerminalT m) where
   setDefault                                       = liftIO $ IO.putStr "\ESC[m"
   setForegroundColor c@T.ColorDefault              = modFgColor c >> liftIO (IO.putStr "\ESC[39m")
   setForegroundColor c@(T.Color4Bit T.Black     False) = modFgColor c >> liftIO (IO.putStr "\ESC[30m")
@@ -215,7 +215,7 @@ instance (MonadIO m, MonadMask m) => T.MonadColorPrinter (TerminalT m) where
   setNegative                                True  = modNegative  True  >> liftIO (IO.putStr "\ESC[7m")
   setNegative                                False = modNegative  False >> liftIO (IO.putStr "\ESC[27m")
 
-instance (MonadIO m, MonadMask m) => T.MonadScreen (TerminalT m) where
+instance (MonadIO m, MonadMask m) => T.MonadScreen (AnsiTerminalT m) where
   clear               = liftIO $ IO.putStr "\ESC[H"
   cursorUp i          = liftIO $ IO.putStr $ "\ESC[" ++ show (safeN i) ++ "A"
   cursorDown i        = liftIO $ IO.putStr $ "\ESC[" ++ show (safeN i) ++ "B"

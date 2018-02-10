@@ -26,13 +26,14 @@ library:
   ghc-options: -Werror
   exposed-modules:
     - System.Terminal
-    - System.Terminal.Class
     - System.Terminal.Color
     - System.Terminal.Events
     - System.Terminal.Modes
-    - System.Terminal.Platform
     - System.Terminal.Pretty
-    - System.Terminal.TerminalT
+  other-modules:
+    - System.Terminal.Platform
+    - System.Terminal.Class
+    - System.Terminal.AnsiTerminalT
   source-dirs: src
   when:
     - condition: os(windows)

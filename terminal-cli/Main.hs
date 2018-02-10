@@ -7,14 +7,13 @@ import           Control.Monad.IO.Class
 import           Data.Char
 import           System.Environment
 
-import qualified System.Terminal           as T
-import qualified System.Terminal.Color     as T
-import qualified System.Terminal.Events    as T
-import qualified System.Terminal.Pretty    as T
-import qualified System.Terminal.TerminalT as T
+import qualified System.Terminal        as T
+import qualified System.Terminal.Color  as T
+import qualified System.Terminal.Events as T
+import qualified System.Terminal.Pretty as T
 
 main :: IO ()
-main = T.runTerminalT $ do
+main = T.runAnsiTerminalT $ do
   liftIO $ lookupEnv "TERM" >>= print
   ev <- T.getEvent
   liftIO $ print ev

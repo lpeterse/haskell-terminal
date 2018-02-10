@@ -1,6 +1,10 @@
 module System.Terminal
   ( -- * Introduction
+    -- ** MonadTerminal
     MonadTerminal(..)
+    -- ** AnsiTerminalT
+  , AnsiTerminalT ()
+  , runAnsiTerminalT
 
     -- * Printing
     -- ** MonadPrinter
@@ -10,14 +14,16 @@ module System.Terminal
     -- ** MonadIsolate
   , MonadIsolate (..)
 
-  -- * MonadScreen
+  -- * Cursor Positioning
+  -- ** MonadScreen
   , MonadScreen (..)
 
-    -- * Input Events
+    -- * Event Handling
     -- ** MonadEvent
   , MonadEvent (..)
   , getEvent
   , tryGetEvent
   ) where
 
+import           System.Terminal.AnsiTerminalT
 import           System.Terminal.Class
