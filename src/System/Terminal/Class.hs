@@ -1,4 +1,5 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE LambdaCase   #-}
 module System.Terminal.Class where
 
 import           Control.Monad.Catch
@@ -8,6 +9,7 @@ import           Data.Maybe
 import qualified Data.Text              as Text
 import           Data.Word
 import           Prelude                hiding (putChar)
+import qualified System.IO              as SIO
 
 import qualified System.Terminal.Color  as T
 import qualified System.Terminal.Events as T
@@ -66,3 +68,20 @@ class MonadPrinter m => MonadScreen m where
   cursorBackward :: Int -> m ()
   cursorPosition :: Int -> Int -> m ()
   cursorVisible :: Bool -> m ()
+
+instance MonadPrinter IO where
+  putLn              :: IO ()
+  putLn               = SIO.putChar '\n'
+  putChar            :: Char -> IO ()
+  putChar             = SIO.putChar
+  putString          :: String -> IO ()
+  putString           = mapM_ putChar
+  putStringLn        :: String -> IO ()
+  putStringLn s       = putString s >> putLn
+  putText            :: Text.Text -> IO ()
+  putText             = putString . Text.unpack
+  putTextLn          :: Text.Text -> IO ()
+  putTextLn           = putStringLn . Text.unpack
+
+  flush              :: IO ()
+  flush               = pure ()
