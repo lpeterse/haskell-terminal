@@ -32,10 +32,9 @@ foo = do
   T.setUnderline True
   T.putStringLn "FOOBAR"
   T.setUnderline False
-  T.setNegative
-  T.setNegative
+  T.setNegative True
   T.putStringLn "GNURP"
-  T.setPositive
+  T.setNegative False
   T.setForegroundColor T.red
   T.putStringLn "BLASHDAKSHD"
   liftIO $ threadDelay 10000000

@@ -158,7 +158,7 @@ instance (MonadIO m, MonadMask m) => T.MonadIsolate (TerminalT m) where
     ( const ma )
     where
       putDiff a b = do
-        when (tsNegative a  /= tsNegative  b) $ if tsNegative a then T.setNegative else T.setPositive
+        when (tsNegative a  /= tsNegative  b) $ T.setNegative (tsNegative a)
         when (tsUnderline a /= tsUnderline b) $ T.setUnderline (tsUnderline a)
         when (tsForegroundColor a /= tsForegroundColor b) $ T.setForegroundColor (tsForegroundColor a)
         when (tsBackgroundColor a /= tsBackgroundColor b) $ T.setBackgroundColor (tsBackgroundColor a)
@@ -212,8 +212,8 @@ instance (MonadIO m, MonadMask m) => T.MonadColorPrinter (TerminalT m) where
   setBackgroundColor c@(T.Color4Bit T.White      True) = modBgColor c >> liftIO (IO.putStr "\ESC[107m")
   setUnderline                               True  = modUnderline True  >> liftIO (IO.putStr "\ESC[4m")
   setUnderline                               False = modUnderline False >> liftIO (IO.putStr "\ESC[24m")
-  setPositive                                      = modNegative  False >> liftIO (IO.putStr "\ESC[27m")
-  setNegative                                      = modNegative  True  >> liftIO (IO.putStr "\ESC[7m")
+  setNegative                                True  = modNegative  True  >> liftIO (IO.putStr "\ESC[7m")
+  setNegative                                False = modNegative  False >> liftIO (IO.putStr "\ESC[27m")
 
 instance (MonadIO m, MonadMask m) => T.MonadScreen (TerminalT m) where
   clear               = liftIO $ IO.putStr "\ESC[H"
