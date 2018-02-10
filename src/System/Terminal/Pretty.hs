@@ -9,6 +9,7 @@ module System.Terminal.Pretty
   , color
     -- ** onColor
   , onColor
+    -- ** Standard Colors
   , black
   , red
   , green

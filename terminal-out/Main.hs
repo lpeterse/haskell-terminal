@@ -23,10 +23,10 @@ foo = do
   T.putStringLn "This should have default color again!"
   T.cursorDown 6
   T.cursorForward 20
-  T.cursorHide
+  T.cursorVisible False
   T.flush
   liftIO $ threadDelay 5000000
-  T.cursorShow
+  T.cursorVisible True
   T.flush
   liftIO $ threadDelay 5000000
   T.setUnderline True

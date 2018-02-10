@@ -162,7 +162,7 @@ instance (MonadIO m, MonadMask m) => T.MonadIsolate (TerminalT m) where
         when (tsUnderline a /= tsUnderline b) $ T.setUnderline (tsUnderline a)
         when (tsForegroundColor a /= tsForegroundColor b) $ T.setForegroundColor (tsForegroundColor a)
         when (tsBackgroundColor a /= tsBackgroundColor b) $ T.setBackgroundColor (tsBackgroundColor a)
-        when (tsCursorVisible   a /= tsCursorVisible   b) $ if tsCursorVisible a then T.cursorShow else T.cursorHide
+        when (tsCursorVisible   a /= tsCursorVisible   b) $ T.cursorVisible (tsCursorVisible a)
 
 instance (MonadIO m, MonadMask m) => T.MonadPrinter (TerminalT m) where
   putChar c = liftIO $ when (isPrint c || isSpace c) $ IO.putChar c
@@ -216,14 +216,14 @@ instance (MonadIO m, MonadMask m) => T.MonadColorPrinter (TerminalT m) where
   setNegative                                      = modNegative  True  >> liftIO (IO.putStr "\ESC[7m")
 
 instance (MonadIO m, MonadMask m) => T.MonadScreen (TerminalT m) where
-  clear                 = liftIO $ IO.putStr "\ESC[H"
-  cursorUp i            = liftIO $ IO.putStr $ "\ESC[" ++ show (safeN i) ++ "A"
-  cursorDown i          = liftIO $ IO.putStr $ "\ESC[" ++ show (safeN i) ++ "B"
-  cursorForward i       = liftIO $ IO.putStr $ "\ESC[" ++ show (safeN i) ++ "C"
-  cursorBackward i      = liftIO $ IO.putStr $ "\ESC[" ++ show (safeN i) ++ "D"
-  cursorPosition x y    = liftIO $ IO.putStr $ "\ESC[" ++ show (safeN x) ++  ";" ++ show (safeN y) ++ "H"
-  cursorHide            = liftIO $ IO.putStr "\ESC[?25l"
-  cursorShow            = liftIO $ IO.putStr "\ESC[?25h"
+  clear               = liftIO $ IO.putStr "\ESC[H"
+  cursorUp i          = liftIO $ IO.putStr $ "\ESC[" ++ show (safeN i) ++ "A"
+  cursorDown i        = liftIO $ IO.putStr $ "\ESC[" ++ show (safeN i) ++ "B"
+  cursorForward i     = liftIO $ IO.putStr $ "\ESC[" ++ show (safeN i) ++ "C"
+  cursorBackward i    = liftIO $ IO.putStr $ "\ESC[" ++ show (safeN i) ++ "D"
+  cursorPosition x y  = liftIO $ IO.putStr $ "\ESC[" ++ show (safeN x) ++  ";" ++ show (safeN y) ++ "H"
+  cursorVisible False = liftIO $ IO.putStr "\ESC[?25l"
+  cursorVisible True  = liftIO $ IO.putStr "\ESC[?25h"
 
 safeN :: Int -> Int
 safeN n

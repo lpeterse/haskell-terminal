@@ -66,5 +66,4 @@ class MonadPrinter m => MonadScreen m where
   cursorForward :: Int -> m ()
   cursorBackward :: Int -> m ()
   cursorPosition :: Int -> Int -> m ()
-  cursorHide :: m ()
-  cursorShow :: m ()
+  cursorVisible :: Bool -> m ()
