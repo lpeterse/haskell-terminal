@@ -19,7 +19,7 @@ main = T.runTerminalT $ do
   ev <- T.getEvent
   liftIO $ print ev
   forever $ do
-    line <- readLine (T.Colored T.red "bas $ ")
+    line <- readLine (T.color T.red "bas $ ")
     T.putStringLn line
 
 readLine :: (T.MonadTerminal m) => T.Doc -> m String

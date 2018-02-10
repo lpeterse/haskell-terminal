@@ -20,10 +20,30 @@ data Color3Bit
   | White
   deriving (Eq, Ord, Show)
 
-def       = ColorDefault
-
-red       = Color4Bit Red False
-redBright = Color4Bit Red True
-
 rgb :: Word8 -> Word8 -> Word8 -> Color
 rgb  = Color24bit
+
+black :: Color
+black = Color4Bit Black False
+
+red :: Color
+red = Color4Bit Red False
+
+green :: Color
+green = Color4Bit Green False
+
+yellow :: Color
+yellow  = Color4Bit Yellow False
+
+blue :: Color
+blue = Color4Bit Blue False
+
+magenta :: Color
+magenta = Color4Bit Magenta False
+
+cyan :: Color
+cyan = Color4Bit Cyan False
+
+white :: Color
+white = Color4Bit White False
+

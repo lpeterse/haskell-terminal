@@ -12,7 +12,6 @@ import           Prelude                hiding (putChar)
 import qualified System.Terminal.Color  as T
 import qualified System.Terminal.Events as T
 import qualified System.Terminal.Modes  as T
-import qualified System.Terminal.Pretty as T
 
 class (MonadEvent m, MonadIsolate m, MonadColorPrinter m, MonadScreen m) => MonadTerminal m where
 
@@ -69,17 +68,3 @@ class MonadPrinter m => MonadScreen m where
   cursorPosition :: Int -> Int -> m ()
   cursorHide :: m ()
   cursorShow :: m ()
-
-putDoc :: (MonadIsolate m, MonadColorPrinter m) => T.Doc -> m ()
-putDoc = \case
-  T.Empty -> pure ()
-  T.Char c -> putString [c]
-  T.String s -> putString s
-  T.Colored color doc -> isolate $ do
-    setForegroundColor color
-    putDoc doc
-  T.Underlined doc -> isolate $ do
-    setUnderline True
-    putDoc doc
-  T.Italic doc -> putDoc doc
-  T.Bold doc -> putDoc doc

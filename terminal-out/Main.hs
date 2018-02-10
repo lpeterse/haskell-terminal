@@ -1,4 +1,5 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import           Control.Concurrent
@@ -18,9 +19,7 @@ foo :: (T.MonadTerminal m, MonadIO m) => m ()
 foo = do
   T.putString "Hallo Welt!"
   T.putLn
-  T.isolate $ do
-    T.setForegroundColor T.red
-    T.putStringLn "This should be red!"
+  T.putDocLn $ T.color T.red "This should be red!"
   T.putStringLn "This should have default color again!"
   T.cursorDown 6
   T.cursorForward 20

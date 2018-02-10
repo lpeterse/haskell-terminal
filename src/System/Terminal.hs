@@ -1,6 +1,5 @@
 module System.Terminal
   ( -- * Introduction
-    -- ** MonadTerminal
     MonadTerminal(..)
 
     -- * Printing
@@ -10,8 +9,6 @@ module System.Terminal
   , MonadColorPrinter (..)
     -- ** MonadIsolate
   , MonadIsolate (..)
-    -- ** Pretty Printing
-  , putDoc
 
   -- * MonadScreen
   , MonadScreen (..)
@@ -21,7 +18,6 @@ module System.Terminal
   , MonadEvent (..)
   , getEvent
   , tryGetEvent
-
   ) where
 
 import           System.Terminal.Class
