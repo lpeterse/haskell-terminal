@@ -17,12 +17,13 @@ import qualified System.Terminal.Pretty as T
 class (MonadEvent m, MonadIsolate m, MonadColorPrinter m, MonadScreen m) => MonadTerminal m where
 
 class MonadIO m => MonadEvent m where
-  getEvent     :: m T.Event
-  getEvent      = withEventSTM id
-  tryGetEvent  :: m (Maybe T.Event)
-  tryGetEvent   = withEventSTM $ \e-> (Just <$> e) `orElse` pure Nothing
   withEventSTM :: (STM T.Event -> STM a) -> m a
-  {-# MINIMAL withEventSTM #-}
+
+getEvent     :: MonadEvent m => m T.Event
+getEvent      = withEventSTM id
+
+tryGetEvent  :: MonadEvent m => m (Maybe T.Event)
+tryGetEvent   = withEventSTM $ \e-> (Just <$> e) `orElse` pure Nothing
 
 class Monad m => MonadIsolate m where
   isolate            :: m a -> m a

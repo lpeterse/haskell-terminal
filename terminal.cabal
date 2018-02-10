@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 73e911d7d41f620119094486e739aa89f0d0a6d73512b387f50df83f7412cbf5
+-- hash: 0d00c724202d4769ccaf9a9ab5566bf8a9ee64e7d0a24aee0791cf76936da075
 
 name:           terminal
 version:        0.1.0.0
@@ -38,7 +38,6 @@ library
     , stm
     , text
     , transformers
-    , unix
   if os(windows)
     hs-source-dirs:
         platform/windows/src
@@ -52,13 +51,15 @@ library
   else
     hs-source-dirs:
         platform/posix/src
+    build-depends:
+        unix
   exposed-modules:
       System.Terminal
-      System.Terminal.Color
-      System.Terminal.Platform
       System.Terminal.Class
+      System.Terminal.Color
       System.Terminal.Events
       System.Terminal.Modes
+      System.Terminal.Platform
       System.Terminal.Pretty
       System.Terminal.TerminalT
   other-modules:
@@ -79,7 +80,6 @@ executable terminal-cli
     , terminal
     , text
     , transformers
-    , unix
   other-modules:
       Paths_terminal
   default-language: Haskell2010
@@ -98,7 +98,6 @@ executable terminal-out
     , terminal
     , text
     , transformers
-    , unix
   other-modules:
       Paths_terminal
   default-language: Haskell2010
@@ -118,7 +117,6 @@ test-suite terminal-test
     , terminal
     , text
     , transformers
-    , unix
   other-modules:
       Paths_terminal
   default-language: Haskell2010

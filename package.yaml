@@ -21,7 +21,6 @@ dependencies:
 - stm
 - text
 - transformers
-- unix
 
 library:
   ghc-options: -Werror
@@ -50,6 +49,8 @@ library:
       else:
         source-dirs:
           - platform/posix/src
+        dependencies:
+          - unix
 
 executables:
   terminal-cli:

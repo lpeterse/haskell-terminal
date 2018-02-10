@@ -30,7 +30,6 @@ import qualified Data.Text.IO                 as Text
 import           Data.Word
 import           System.Environment
 import qualified System.IO                    as IO
-import qualified System.Posix.Signals         as Posix
 
 import qualified System.Terminal.Class        as T
 import qualified System.Terminal.Color        as T
@@ -49,7 +48,7 @@ runTerminalT (TerminalT ma) = T.withTerminal $ do
   interruptFlag <- newTVarIO False
   withoutEcho $
     withRawMode $
-      withHookedSignals $ \waitSignal->
+      T.withHookedInterruptSignal $ \waitSignal->
         A.withAsync (runInput $ writeTChan eventChan) $ \inputThread->
         A.withAsync (runAction interruptFlag $ readTChan eventChan) $ \actionThread->
         fix $ \proceed-> do
@@ -81,13 +80,6 @@ runTerminalT (TerminalT ma) = T.withTerminal $ do
     withRawMode = bracket
       (IO.hGetBuffering IO.stdin >>= \b-> IO.hSetBuffering IO.stdin IO.NoBuffering >> pure b)
       (IO.hSetBuffering IO.stdin) . const
-
-    withHookedSignals :: (STM () -> IO a) -> IO a
-    withHookedSignals action = do
-      sig <- newTVarIO False
-      bracket
-        (flip (Posix.installHandler Posix.sigINT) Nothing  $ Posix.Catch $ atomically $ writeTVar sig True)
-        (flip (Posix.installHandler Posix.sigINT) Nothing) $ const $ action (readTVar sig >>= check >> writeTVar sig False)
 
     runInput :: (T.Event -> STM ()) -> IO ()
     runInput pushEvent = flip evalStateT BS.empty $ forever $ do
