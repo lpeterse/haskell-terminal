@@ -5,11 +5,12 @@ module System.Terminal.Class where
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
+import           Data.Char
 import           Data.Maybe
 import qualified Data.Text              as Text
+import qualified Data.Text.IO           as Text
 import           Data.Word
 import           Prelude                hiding (putChar)
-import qualified System.IO              as SIO
 
 import qualified System.Terminal.Color  as T
 import qualified System.Terminal.Events as T
@@ -71,17 +72,18 @@ class MonadPrinter m => MonadScreen m where
 
 instance MonadPrinter IO where
   putLn              :: IO ()
-  putLn               = SIO.putChar '\n'
+  putLn               = Text.putStr $ Text.pack "\n"
   putChar            :: Char -> IO ()
-  putChar             = SIO.putChar
+  putChar             = putString . pure
   putString          :: String -> IO ()
-  putString           = mapM_ putChar
+  putString           = putText . Text.pack
   putStringLn        :: String -> IO ()
   putStringLn s       = putString s >> putLn
   putText            :: Text.Text -> IO ()
-  putText             = putString . Text.unpack
+  putText             = Text.putStr . Text.filter isPrint
   putTextLn          :: Text.Text -> IO ()
-  putTextLn           = putStringLn . Text.unpack
+  putTextLn s         = putText s >> putLn
 
   flush              :: IO ()
   flush               = pure ()
+
