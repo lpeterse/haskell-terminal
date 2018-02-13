@@ -1,0 +1,138 @@
+-- This file has been generated from package.yaml by hpack version 0.20.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 9fb7cb4d424bfd65e708f40b78297ffad226e6125f6ccde227cad479f8cf5f08
+
+name:           terminal
+version:        0.1.0.0
+synopsis:       Portable terminal interaction library
+description:    Please see the README on Github at <https://github.com/lpeterse/terminal#readme>
+homepage:       https://github.com/lpeterse/terminal#readme
+bug-reports:    https://github.com/lpeterse/terminal/issues
+author:         Lars Petersen
+maintainer:     info@lars-petersen.net
+copyright:      2018 Lars Petersen
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+cabal-version:  >= 1.10
+
+extra-source-files:
+    CHANGELOG.md
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/lpeterse/terminal
+
+library
+  hs-source-dirs:
+      src
+  ghc-options: -Werror
+  build-depends:
+      async
+    , base >=4.7 && <5
+    , bytestring
+    , exceptions
+    , stm
+    , text
+    , transformers
+  if os(windows)
+    hs-source-dirs:
+        platform/windows/src
+    cpp-options: -DWINDOWS
+    include-dirs:
+        platform/windows/include
+    c-sources:
+        platform/windows/cbits/hs_terminal.c
+  else
+    hs-source-dirs:
+        platform/posix/src
+    build-depends:
+        unix
+  exposed-modules:
+      System.Terminal
+      System.Terminal.Color
+      System.Terminal.Events
+      System.Terminal.Modes
+      System.Terminal.Pretty
+  other-modules:
+      System.Terminal.Ansi
+      System.Terminal.AnsiTerminalT
+      System.Terminal.Class
+      System.Terminal.Platform
+  default-language: Haskell2010
+
+executable terminal-cli
+  main-is: Main.hs
+  hs-source-dirs:
+      terminal-cli
+  ghc-options: -Werror -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      async
+    , base >=4.7 && <5
+    , bytestring
+    , exceptions
+    , stm
+    , terminal
+    , text
+    , transformers
+  other-modules:
+      Paths_terminal
+  default-language: Haskell2010
+
+executable terminal-ev
+  main-is: Main.hs
+  hs-source-dirs:
+      terminal-ev
+  ghc-options: -Werror -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      async
+    , base >=4.7 && <5
+    , bytestring
+    , exceptions
+    , stm
+    , terminal
+    , text
+    , transformers
+  other-modules:
+      Paths_terminal
+  default-language: Haskell2010
+
+executable terminal-out
+  main-is: Main.hs
+  hs-source-dirs:
+      terminal-out
+  ghc-options: -Werror -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      async
+    , base >=4.7 && <5
+    , bytestring
+    , exceptions
+    , stm
+    , terminal
+    , text
+    , transformers
+  other-modules:
+      Paths_terminal
+  default-language: Haskell2010
+
+test-suite terminal-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  hs-source-dirs:
+      test
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      async
+    , base >=4.7 && <5
+    , bytestring
+    , exceptions
+    , stm
+    , terminal
+    , text
+    , transformers
+  other-modules:
+      Paths_terminal
+  default-language: Haskell2010
