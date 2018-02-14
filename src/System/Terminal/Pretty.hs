@@ -1,9 +1,12 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE OverloadedStrings #-}
 module System.Terminal.Pretty
   ( -- * Pretty Printing
-    Doc ()
+    TermDoc
+  , TermStyle (..)
   , putDoc
   , putDocLn
+
     -- * Colors
     -- ** color
   , color
@@ -22,72 +25,52 @@ module System.Terminal.Pretty
 
 import           Data.Semigroup
 import           Data.String
-import qualified Data.Text             as Text
+import qualified Data.Text                 as Text
+import qualified Data.Text.Prettyprint.Doc as PP
 
-import           System.Terminal.Class
+import qualified System.Terminal.Class     as T
 import           System.Terminal.Color
 
-data Doc
-  = Empty
-  | Append Doc Doc
-  | Char Char
-  | String String
-  | Text Text.Text
-  | ColoredForeground Color Doc
-  | ColoredBackground Color Doc
-  | Underlined Doc
-  | Italic Doc
-  | Bold Doc
-  | Line
+type TermDoc = PP.Doc TermStyle
+
+data TermStyle
+  = TermForeground Color
+  | TermBackground Color
+  | TermInverted
+  | TermUnderlined
   deriving (Eq, Ord, Show)
 
-instance IsString Doc where
-  fromString = String
+putDocLn :: (T.MonadColorPrinter m, T.MonadIsolate m) => TermDoc -> m ()
+putDocLn doc = putDoc $ doc <> PP.hardline
 
-instance Monoid Doc where
-  mempty  = empty
-  mappend = append
+putDoc :: (T.MonadColorPrinter m, T.MonadIsolate m) => TermDoc -> m ()
+putDoc doc = T.isolate $ do
+  T.setDefault
+  render [] sdoc >> T.flush
+  where
+    width   = PP.AvailablePerLine 20 0.4
+    options = PP.defaultLayoutOptions { PP.layoutPageWidth = width }
+    sdoc = PP.layoutSmart options doc
+    render anns = \case
+      PP.SFail           -> fail "FAIL"
+      PP.SEmpty          -> pure ()
+      PP.SChar c ss      -> T.putChar c >> render anns ss
+      PP.SText _ t ss    -> T.putText t >> render anns ss
+      PP.SLine n ss      -> T.putLn >> T.putText (Text.replicate n " ") >> render anns ss
+      PP.SAnnPush ann ss -> case ann of
+        TermForeground c -> T.setForegroundColor c >> render (ann:anns) ss
+        TermBackground c -> T.setBackgroundColor c >> render (ann:anns) ss
+        TermInverted     -> T.setNegative True     >> render (ann:anns) ss
+        TermUnderlined   -> T.setUnderline True    >> render (ann:anns) ss
+      PP.SAnnPop ss      -> case anns of
+        []                       -> render [] ss
+        (TermForeground c:anns') -> T.setForegroundColor ColorDefault >> render anns' ss
+        (TermBackground c:anns') -> T.setBackgroundColor ColorDefault >> render anns' ss
+        (TermInverted    :anns') -> T.setNegative False    >> render anns' ss
+        (TermUnderlined  :anns') -> T.setUnderline False   >> render anns' ss
 
-instance Semigroup Doc where
-  (<>) = append
+color   :: Color -> TermDoc -> TermDoc
+color c = PP.annotate (TermForeground c)
 
-empty :: Doc
-empty  = Empty
-
-append :: Doc -> Doc -> Doc
-append  = Append
-
-line :: Doc
-line  = Line
-
-putDocLn :: (MonadColorPrinter m, MonadIsolate m) => Doc -> m ()
-putDocLn doc = putDoc $ doc <> line
-
-putDoc :: (MonadColorPrinter m, MonadIsolate m) => Doc -> m ()
-putDoc = \case
-  Empty -> pure ()
-  Append a b -> putDoc a >> putDoc b
-  Char c -> putString [c]
-  String s -> putString s
-  ColoredForeground color doc -> isolate $ do
-    setForegroundColor color
-    putDoc doc
-  ColoredBackground color doc -> isolate $ do
-    setBackgroundColor color
-    putDoc doc
-  Underlined doc -> isolate $ do
-    setUnderline True
-    putDoc doc
-  Italic doc -> putDoc doc
-  Bold doc -> putDoc doc
-  Line -> putLn
-
--------------------------------------------------------------------------------
--- Colors
--------------------------------------------------------------------------------
-
-color   :: Color -> Doc -> Doc
-color    = ColoredForeground
-
-onColor :: Color -> Doc -> Doc
-onColor  = ColoredBackground
+onColor :: Color -> TermDoc -> TermDoc
+onColor c  = PP.annotate (TermBackground c)

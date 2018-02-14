@@ -29,7 +29,7 @@ main = T.runAnsiTerminalT $ runInputT $ fix $ \continue->
     Just line   -> lift (T.putStringLn line) >> continue
 
 class MonadInput m where
-  getInputLine :: T.Doc -> m (Maybe String)
+  getInputLine :: T.TermDoc -> m (Maybe String)
 
 newtype InputT m a = InputT (StateT () m a)
   deriving (Functor, Applicative, Monad, MonadIO, MonadTrans)

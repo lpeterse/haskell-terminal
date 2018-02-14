@@ -21,6 +21,7 @@ dependencies:
 - stm
 - text
 - transformers
+- prettyprinter
 
 library:
   ghc-options: -Werror 
@@ -41,10 +42,10 @@ library:
     - condition: os(windows)
       then:
         cpp-options: -DWINDOWS
-        include-dirs:
-          - platform/windows/include
         source-dirs:
           - platform/windows/src
+        include-dirs:
+          - platform/windows/include
         c-sources:
           - platform/windows/cbits/hs_terminal.c
       else:
@@ -52,6 +53,10 @@ library:
           - platform/posix/src
         dependencies:
           - unix
+        include-dirs:
+          - platform/posix/include
+        c-sources:
+          - platform/posix/cbits/hs_terminal.c
 
 executables:
   terminal-ev:

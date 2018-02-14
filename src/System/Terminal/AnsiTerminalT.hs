@@ -40,27 +40,28 @@ import qualified System.Terminal.Platform     as T
 import qualified System.Terminal.Pretty       as T
 
 newtype AnsiTerminalT m a
-  = AnsiTerminalT (ReaderT IsolationLevel (ReaderT (STM T.Event, STM (), (Int, Output) -> STM ()) m) a)
+  = AnsiTerminalT (ReaderT IsolationLevel (ReaderT (STM T.Event, (Int, Output) -> STM ()) m) a)
   deriving (Functor, Applicative, Monad, MonadIO)
 
 instance MonadTrans AnsiTerminalT where
   lift = AnsiTerminalT . lift . lift
 
 runAnsiTerminalT :: AnsiTerminalT IO a -> IO a
-runAnsiTerminalT (AnsiTerminalT ma) = T.withTerminal $ do
+runAnsiTerminalT (AnsiTerminalT ma) = T.withTerminal $ \signals-> do
   eventChan     <- newTChanIO :: IO (TChan T.Event)
   outputChan    <- newTChanIO :: IO (TChan (Int,Output))
   interruptFlag <- newTVarIO False
-  let waitSignal = retry
-  --T.withHookedInterruptSignal $ \waitSignal->
+  let getEvent = readTChan eventChan
+                  `orElse` (swapTVar interruptFlag False >>= check >> pure (T.EvKey (T.KChar 'C') [T.MCtrl]))
+                  `orElse` (T.sigWindowChange signals >>= \(rows,cols)-> pure (T.EvResize rows cols))
   A.withAsync (runInput $ writeTChan eventChan) $ \inputThread->
     A.withAsync (runOutput $ readTChan outputChan) $ \outputThread->
-      A.withAsync (runAction (readTChan eventChan, swapTVar interruptFlag False >>= check, writeTChan outputChan)) $ \actionThread->
+      A.withAsync (runAction (getEvent, writeTChan outputChan)) $ \actionThread->
         fix $ \proceed-> do
           let waitInput  = A.waitSTM inputThread >> pure Nothing
           let waitOutput = A.waitSTM outputThread >> pure Nothing
           let waitAction = Just <$> A.waitSTM actionThread
-          let waitInterrupt = waitSignal >> swapTVar interruptFlag True >>= \case
+          let waitInterrupt = T.sigInterrupt signals >> swapTVar interruptFlag True >>= \case
                 True  -> throwSTM E.UserInterrupt -- No one has handled an earlier interrupt - exit!
                 False -> pure Nothing
           -- The input and output threasd are designed to never return, but they might
@@ -95,7 +96,7 @@ runAnsiTerminalT (AnsiTerminalT ma) = T.withTerminal $ do
           OutPutStringLn      s -> isolate2 i (putStringLn s)
           OutPutText          t -> isolate2 i (putText t)
           OutPutTextLn        t -> isolate2 i (putTextLn t)
-          OutFlush              -> isolate2 i flush
+          OutFlush            m -> isolate2 i (flush m)
           OutSetDefault         -> isolate3 i setDefault (const defaultTerminalStateAttributes)
           OutSetUnderline     b -> isolate3 i (setUnderline b) (\a-> a { tsUnderline = b })
           OutSetNegative      b -> isolate3 i (setNegative b) (\a-> a { tsNegative = b })
@@ -151,7 +152,7 @@ runAnsiTerminalT (AnsiTerminalT ma) = T.withTerminal $ do
         putStringLn s                                   = putString s >> putLn
         putText                                         = Text.putStr . Text.filter (\c-> isPrint c || isSpace c)
         putTextLn t                                     = putText t >> putLn
-        flush                                           = IO.hFlush IO.stdout
+        flush confirm                                   = IO.hFlush IO.stdout >> atomically confirm
 
         setUnderline                               True = IO.putStr "\ESC[4m"
         setUnderline                              False = IO.putStr "\ESC[24m"
@@ -226,17 +227,16 @@ defaultTerminalStateAttributes =
   { tsNegative        = False
   , tsUnderline       = False
   , tsCursorVisible   = True
-  , tsForeground = T.ColorDefault
-  , tsBackground = T.ColorDefault
+  , tsForeground      = T.ColorDefault
+  , tsBackground      = T.ColorDefault
   }
 
 instance (MonadIO m) => T.MonadTerminal (AnsiTerminalT m) where
 
 instance MonadIO m => T.MonadEvent (AnsiTerminalT m) where
   withEventSTM f = AnsiTerminalT $ do
-    (getEv, checkInterrupt,_) <- lift ask
-    let getInterruptOrEvent = checkInterrupt >> pure (T.EvSignal T.Interrupt) `orElse` getEv
-    liftIO $ atomically $ f getEv
+    getEvent <- fst <$> lift ask
+    liftIO $ atomically $ f getEvent
 
 instance (MonadIO m) => T.MonadIsolate (AnsiTerminalT m) where
   isolate (AnsiTerminalT ma) =
@@ -251,7 +251,10 @@ instance (MonadIO m) => T.MonadPrinter (AnsiTerminalT m) where
   putStringLn           = write . OutPutStringLn
   putText               = write . OutPutText
   putTextLn             = write . OutPutTextLn
-  flush                 = write   OutFlush
+  flush                 = do
+    tv <- liftIO (newTVarIO False)
+    write $ OutFlush (writeTVar tv True)
+    liftIO (atomically $ readTVar tv >>= check)
 
 instance (MonadIO m) => T.MonadColorPrinter (AnsiTerminalT m) where
   setDefault            = write   OutSetDefault
@@ -277,7 +280,7 @@ data Output
    | OutPutStringLn    String
    | OutPutText        Text.Text
    | OutPutTextLn      Text.Text
-   | OutFlush
+   | OutFlush          (STM ())
    | OutSetDefault
    | OutSetUnderline   Bool
    | OutSetNegative    Bool
@@ -290,10 +293,9 @@ data Output
    | OutCursorBackward Int
    | OutCursorPosition Int Int
    | OutCursorVisible  Bool
-   deriving (Eq, Ord, Show)
 
 write :: MonadIO m => Output -> AnsiTerminalT m ()
 write output = AnsiTerminalT $ do
   isolationLevel <- ask
-  (_,_,writeSTM) <- lift ask
+  (_,writeSTM) <- lift ask
   liftIO $ atomically $ writeSTM (isolationLevel, output)
