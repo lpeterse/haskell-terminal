@@ -59,7 +59,7 @@ withHookedWindowChangeSignal action = do
     f sig = do
       swapTVar sig Nothing >>= \case
         Nothing -> retry
-        Just (r,c) -> pure (fromIntegral r, fromIntegral c)
+        Just (r,c) -> pure (r,c)
 
 withoutEcho :: IO a -> IO a
 withoutEcho = bracket
@@ -79,12 +79,12 @@ gatherInputEvents push = flip evalStateT BS.empty $ forever $
     mapEvent (T.EvKey (T.KChar 'J') [T.MCtrl]) = T.EvKey T.KEnter []
     mapEvent ev                                = ev
 
-getWindowSize :: IO (Word16, Word16)
+getWindowSize :: IO (Int, Int)
 getWindowSize = alloca $ \rowsPtr-> alloca $ \colsPtr-> do
   getWinSize rowsPtr colsPtr
   rows <- peek rowsPtr
   cols <- peek colsPtr
-  pure (rows, cols)
+  pure (fromIntegral rows, fromIntegral cols)
 
 foreign import ccall unsafe "hs_get_winsize"
   getWinSize :: Ptr Word16 -> Ptr Word16 -> IO ()

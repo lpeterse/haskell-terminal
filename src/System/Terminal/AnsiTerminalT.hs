@@ -40,49 +40,23 @@ import qualified System.Terminal.Platform     as T
 import qualified System.Terminal.Pretty       as T
 
 newtype AnsiTerminalT m a
-  = AnsiTerminalT (ReaderT IsolationLevel (ReaderT (STM T.Event, (Int, Output) -> STM ()) m) a)
+  = AnsiTerminalT (ReaderT IsolationLevel (ReaderT (T.TermEnv, (Int, Output) -> STM ()) m) a)
   deriving (Functor, Applicative, Monad, MonadIO)
 
 instance MonadTrans AnsiTerminalT where
   lift = AnsiTerminalT . lift . lift
 
 runAnsiTerminalT :: AnsiTerminalT IO a -> IO a
-runAnsiTerminalT (AnsiTerminalT ma) = T.withTerminal $ \signals-> do
-  eventChan     <- newTChanIO :: IO (TChan T.Event)
+runAnsiTerminalT = hRunAnsiTerminalT IO.stdin IO.stdout
+
+hRunAnsiTerminalT :: IO.Handle -> IO.Handle -> AnsiTerminalT IO a -> IO a
+hRunAnsiTerminalT hIn hOut (AnsiTerminalT ma) = T.withTerminal hIn hOut $ \env-> do
   outputChan    <- newTChanIO :: IO (TChan (Int,Output))
-  interruptFlag <- newTVarIO False
-  let getEvent = readTChan eventChan
-                  `orElse` (swapTVar interruptFlag False >>= check >> pure (T.EvKey (T.KChar 'C') [T.MCtrl]))
-                  `orElse` (T.sigWindowChange signals >>= \(rows,cols)-> pure (T.EvResize rows cols))
-  A.withAsync (runInput $ writeTChan eventChan) $ \inputThread->
-    A.withAsync (runOutput $ readTChan outputChan) $ \outputThread->
-      A.withAsync (runAction (getEvent, writeTChan outputChan)) $ \actionThread->
-        fix $ \proceed-> do
-          let waitInput  = A.waitSTM inputThread >> pure Nothing
-          let waitOutput = A.waitSTM outputThread >> pure Nothing
-          let waitAction = Just <$> A.waitSTM actionThread
-          let waitInterrupt = T.sigInterrupt signals >> swapTVar interruptFlag True >>= \case
-                True  -> throwSTM E.UserInterrupt -- No one has handled an earlier interrupt - exit!
-                False -> pure Nothing
-          -- The input and output threasd are designed to never return, but they might
-          -- throw exceptions which will be rethrown automatically.
-          -- The action thread might return which can be detected through the
-          -- `Just` constructor. It might also throw an exception.
-          -- `waitInterrupt` waits for an incoming incoming interrupt signal.
-          -- It always tries to forward it to the action thread, but
-          -- if it finds a previous interrupt to not been handled it assumes
-          -- the action thread is too busy or deadlocked and throws a
-          -- `E.UserInterrupt` exception terminating everything.
-          -- This assures that the application always responds to Ctrl-C.
-          atomically (waitInput `orElse` waitOutput `orElse` waitAction `orElse` waitInterrupt) >>= \case
-                Just a  -> pure a
-                Nothing -> proceed
+  A.withAsync (runOutput $ readTChan outputChan) $ \outputThread->
+    runAction (env, writeTChan outputChan)
   where
     --runAction :: (STM T.Event, STM (), (Int, Output) -> STM ()) -> IO a
     runAction = runReaderT (runReaderT ma 0)
-
-    runInput :: (T.Event -> STM ()) -> IO ()
-    runInput = T.gatherInputEvents
 
     runOutput :: STM (Int, Output) -> IO ()
     runOutput getOutput = run (defaultTerminalStateAttributes, [])
@@ -235,8 +209,13 @@ instance (MonadIO m) => T.MonadTerminal (AnsiTerminalT m) where
 
 instance MonadIO m => T.MonadEvent (AnsiTerminalT m) where
   withEventSTM f = AnsiTerminalT $ do
-    getEvent <- fst <$> lift ask
-    liftIO $ atomically $ f getEvent
+    env <- fst <$> lift ask
+    liftIO $ fix $ \again-> do
+      let resetInterrupt = T.envInterrupt env >> pure Nothing
+      let getUserEvent = Just <$> f (T.envInput env)
+      atomically (resetInterrupt `orElse` getUserEvent) >>= \case
+        Nothing -> again
+        Just ev -> pure ev
 
 instance (MonadIO m) => T.MonadIsolate (AnsiTerminalT m) where
   isolate (AnsiTerminalT ma) =
