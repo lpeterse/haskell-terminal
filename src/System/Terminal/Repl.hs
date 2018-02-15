@@ -2,8 +2,9 @@
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
 module System.Terminal.Repl
-  ( MonadInput (..)
+  ( MonadRepl (..)
   , ReplT ()
+  , runAnsiRepl
   , runReplT
   ) where
 
@@ -18,17 +19,19 @@ import           Data.Char
 import           Data.Function              (fix)
 import           Data.Typeable
 import           System.Environment
+import qualified System.Exit                as SE
 
 import qualified System.Terminal            as T
 import qualified System.Terminal.Color      as T
 import qualified System.Terminal.Events     as T
 import qualified System.Terminal.Pretty     as T
 
-class MonadInput m where
+class MonadRepl m where
   getInputLine :: T.TermDoc -> m (Maybe String)
-  quit         :: m ()
+  exit         :: m ()
+  exitWith     :: SE.ExitCode -> m ()
 
-newtype ReplT m a = ReplT (StateT Bool m a)
+newtype ReplT m a = ReplT (StateT (Maybe SE.ExitCode) m a)
   deriving (Functor, Applicative, Monad, MonadIO, MonadTrans)
 
 instance (T.MonadPrinter m) => T.MonadPrinter (ReplT m) where
@@ -69,15 +72,21 @@ instance (T.MonadEvent m) => T.MonadEvent (ReplT m) where
 
 instance (T.MonadTerminal m) => T.MonadTerminal (ReplT m) where
 
-runReplT :: T.MonadTerminal m => ReplT m () -> m ()
-runReplT (ReplT ma) = evalStateT loop False
+runAnsiRepl :: ReplT (T.AnsiTerminalT IO) () -> IO ()
+runAnsiRepl ma = do
+  code <- T.runAnsiTerminalT $ runReplT ma
+  SE.exitWith code
+
+runReplT :: T.MonadTerminal m => ReplT m () -> m SE.ExitCode
+runReplT (ReplT ma) = evalStateT loop Nothing
   where
     loop = ma >> get >>= \case
-      True  -> pure ()
-      False -> loop
+      Nothing -> loop
+      Just code -> pure code
 
-instance T.MonadTerminal m => MonadInput (ReplT m) where
-  quit = ReplT $ put True
+instance T.MonadTerminal m => MonadRepl (ReplT m) where
+  exit = ReplT $ put (Just SE.ExitSuccess)
+  exitWith = ReplT . put . Just
   getInputLine prompt = do
     lift $ T.putDoc prompt
     lift $ T.setDefault
