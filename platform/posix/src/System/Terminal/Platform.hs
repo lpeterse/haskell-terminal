@@ -1,90 +1,118 @@
 {-# LANGUAGE LambdaCase #-}
 module System.Terminal.Platform
-  ( Signals (..)
+  ( TermEnv (..)
   , withTerminal
-  , gatherInputEvents
   ) where
 
 import           Control.Concurrent
-import qualified Control.Concurrent.Async    as A
+import qualified Control.Concurrent.Async     as A
+import           Control.Concurrent.STM.TChan
 import           Control.Concurrent.STM.TVar
-import           Control.Exception
-import qualified Control.Exception           as E
-import           Control.Monad               (forever, when)
+import qualified Control.Exception            as E
+import           Control.Monad                (forever, when)
+import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
 import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Reader
 import           Control.Monad.Trans.State
-import qualified Data.ByteString             as BS
+import qualified Data.ByteString              as BS
 import           Data.Word
+import           Foreign.C.Types
 import           Foreign.Marshal.Alloc
 import           Foreign.Ptr
 import           Foreign.Storable
-import qualified System.IO                   as IO
-import qualified System.Posix.Signals        as Posix
-import qualified System.Posix.Signals.Exts   as Posix
+import qualified GHC.IO.FD                    as IO
+import qualified GHC.IO.Handle.FD             as IO
+import qualified System.IO                    as IO
+import qualified System.IO.Error              as IO
+import qualified System.Posix.Signals         as Posix
+import qualified System.Posix.Signals.Exts    as Posix
 
-import qualified System.Terminal.Ansi        as T
-import qualified System.Terminal.Events      as T
+import qualified System.Terminal.Ansi         as T
+import qualified System.Terminal.Events       as T
 
-data Signals
-  = Signals
-  { sigInterrupt    :: STM ()
-  , sigWindowChange :: STM (Int, Int)
+data TermEnv
+  = TermEnv
+  { envInput     :: STM T.Event
+  , envInterrupt :: STM ()
   }
 
-withTerminal :: (Signals -> IO a) -> IO a
-withTerminal action =
-  withRawMode $
-   withoutEcho $
-     withHookedInterruptSignal $ \sigIntr->
-      withHookedWindowChangeSignal $ \sigWinch->
-        action $ Signals sigIntr sigWinch
+withTerminal :: (MonadIO m, MonadMask m) => IO.Handle -> IO.Handle -> (TermEnv -> m a) -> m a
+withTerminal hIn hOut action = do
+  mainThreadId <- liftIO myThreadId
+  eventChan <- liftIO newTChanIO
+  hWithRawMode hIn $
+   hWithoutEcho hIn $
+    hWithHookedResizeSignal hIn eventChan $
+      hWithInputProcessing hIn eventChan $
+        withHookedInterruptSignal mainThreadId eventChan $
+          \sigInt-> action $ TermEnv {
+              envInput = readTChan eventChan
+            , envInterrupt = sigInt
+            }
 
-withHookedInterruptSignal :: (STM () -> IO a) -> IO a
-withHookedInterruptSignal action = do
-  sig <- newTVarIO False
+withHookedInterruptSignal :: (MonadIO m, MonadMask m) => ThreadId -> (TChan T.Event) -> (STM () -> m a) -> m a
+withHookedInterruptSignal mainThreadId eventChan action = do
+  sig <- liftIO (newTVarIO False)
   bracket
-    (flip (Posix.installHandler Posix.sigINT) Nothing  $ Posix.Catch $ atomically $ writeTVar sig True)
-    (flip (Posix.installHandler Posix.sigINT) Nothing) $ const $ action (readTVar sig >>= check >> writeTVar sig False)
+    (liftIO $ flip (Posix.installHandler Posix.sigINT) Nothing  $ Posix.Catch $ passInterrupt sig)
+    (liftIO . flip (Posix.installHandler Posix.sigINT) Nothing) $ const $ action $ resetInterrupt sig
+  where
+    passInterrupt sig = do
+      unhandledInterrupt <- atomically (swapTVar sig True)
+      when unhandledInterrupt $ do
+        E.throwTo mainThreadId E.UserInterrupt
+      atomically (writeTChan eventChan $ T.EvKey (T.KChar 'C') [T.MCtrl])
+    resetInterrupt sig = do
+      readTVar sig >>= check
+      writeTVar sig False
 
-withHookedWindowChangeSignal :: (STM (Int, Int) -> IO a) -> IO a
-withHookedWindowChangeSignal action = do
-  sig <- newTVarIO Nothing
+hWithHookedResizeSignal :: (MonadIO m, MonadMask m) => IO.Handle -> (TChan T.Event) -> m a -> m a
+hWithHookedResizeSignal h eventChan action =
   bracket
-    (flip (Posix.installHandler Posix.windowChange) Nothing  $ Posix.Catch $ getWindowSize >>= \ws-> atomically (writeTVar sig $ Just ws))
-    (flip (Posix.installHandler Posix.windowChange) Nothing) $ const $ action (f sig)
+    (liftIO $ flip (Posix.installHandler Posix.windowChange) Nothing  $ Posix.Catch pushEvent)
+    (liftIO . flip (Posix.installHandler Posix.windowChange) Nothing) $ const $ action
   where
-    f sig = do
-      swapTVar sig Nothing >>= \case
-        Nothing -> retry
-        Just (r,c) -> pure (r,c)
+    pushEvent = do
+      (r,c) <- hGetWindowSize h
+      atomically (writeTChan eventChan $ T.EvResize r c)
 
-withoutEcho :: IO a -> IO a
-withoutEcho = bracket
-  (IO.hGetEcho IO.stdin >>= \x-> IO.hSetEcho IO.stdin False >> pure x)
-  (IO.hSetEcho IO.stdin) . const
+hWithoutEcho :: (MonadIO m, MonadMask m) => IO.Handle -> m a -> m a
+hWithoutEcho h = bracket
+  (liftIO $ IO.hGetEcho h >>= \x-> IO.hSetEcho h False >> pure x)
+  (liftIO . IO.hSetEcho h) . const
 
-withRawMode :: IO a -> IO a
-withRawMode = bracket
-  (IO.hGetBuffering IO.stdin >>= \b-> IO.hSetBuffering IO.stdin IO.NoBuffering >> pure b)
-  (IO.hSetBuffering IO.stdin) . const
+hWithRawMode :: (MonadIO m, MonadMask m) => IO.Handle -> m a -> m a
+hWithRawMode h = bracket
+  (liftIO $ IO.hGetBuffering h >>= \b-> IO.hSetBuffering h IO.NoBuffering >> pure b)
+  (liftIO . IO.hSetBuffering h) . const
 
-gatherInputEvents :: (T.Event -> STM ()) -> IO ()
-gatherInputEvents push = flip evalStateT BS.empty $ forever $
-  liftIO . atomically . push =<< mapEvent <$> T.decodeAnsi
+-- | ...
+--
+--   FIXME: `Handle` parameter is ignored right now and `IO.stdin` used instead.
+hWithInputProcessing ::  (MonadIO m, MonadMask m) => IO.Handle -> (TChan T.Event) -> m a -> m a
+hWithInputProcessing h eventChan = bracket
+  ( liftIO $ A.async run )
+  ( liftIO . A.cancel ) . const
   where
+    run = flip evalStateT BS.empty $ forever $
+            liftIO . atomically . writeTChan eventChan =<< mapEvent <$> T.decodeAnsi
+
     mapEvent (T.EvKey (T.KChar '\DEL') [])     = T.EvKey (T.KBackspace 1) []
     mapEvent (T.EvKey (T.KChar 'J') [T.MCtrl]) = T.EvKey T.KEnter []
     mapEvent ev                                = ev
 
-getWindowSize :: IO (Int, Int)
-getWindowSize = alloca $ \rowsPtr-> alloca $ \colsPtr-> do
-  getWinSize rowsPtr colsPtr
-  rows <- peek rowsPtr
-  cols <- peek colsPtr
-  pure (fromIntegral rows, fromIntegral cols)
+hGetWindowSize :: IO.Handle -> IO (Int, Int)
+hGetWindowSize h = do
+  fd <- IO.handleToFd h
+  alloca $ \rowsPtr-> alloca $ \colsPtr->
+    unsafeGetWindowSize (IO.fdFD fd) rowsPtr colsPtr >>= \case
+      0 -> do
+        rows <- peek rowsPtr
+        cols <- peek colsPtr
+        pure (fromIntegral rows, fromIntegral cols)
+      _ -> pure (-1,-1)
 
 foreign import ccall unsafe "hs_get_winsize"
-  getWinSize :: Ptr Word16 -> Ptr Word16 -> IO ()
+  unsafeGetWindowSize :: CInt -> Ptr Word16 -> Ptr Word16 -> IO Int
