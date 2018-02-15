@@ -4,21 +4,23 @@ module System.Terminal.Platform
   , withTerminal
   ) where
 
-import           Control.Concurrent
-import           Control.Concurrent.Async
-import           Control.Concurrent.STM.TChan
-import           Control.Concurrent.STM.TVar
+import           Control.Concurrent           (ThreadId, myThreadId,
+                                               threadDelay)
+import           Control.Concurrent.Async     (async, cancel)
+import           Control.Concurrent.STM.TChan (TChan, newTChanIO, readTChan,
+                                               writeTChan)
+import           Control.Concurrent.STM.TVar  (TVar, newTVarIO, readTVar,
+                                               swapTVar, writeTVar)
 import qualified Control.Exception            as E
 import           Control.Monad                (forever, void, when)
-import           Control.Monad.Catch
-import           Control.Monad.IO.Class
-import           Control.Monad.STM
+import           Control.Monad.Catch          (MonadMask, bracket)
+import           Control.Monad.IO.Class       (MonadIO, liftIO)
+import           Control.Monad.STM            (STM, atomically, check, orElse)
 import           Control.Monad.Trans.State
 import qualified Data.ByteString              as BS
-import           Foreign.C.Types
-import           Foreign.Marshal.Alloc
-import           Foreign.Ptr
-import           Foreign.Storable
+import           Foreign.Marshal.Alloc        (alloca)
+import           Foreign.Ptr                  (Ptr)
+import           Foreign.Storable             (peek)
 import           System.IO
 
 import qualified System.Terminal.Ansi         as T
