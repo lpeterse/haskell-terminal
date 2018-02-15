@@ -85,3 +85,11 @@ int hs_set_console_output_mode(int mode) {
 
     return oldMode & ENABLE_VIRTUAL_TERMINAL_PROCESSING;
 }
+
+int hs_get_console_winsize(int *rows, int *cols) {
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+    *rows = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+    *cols = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+    return 0;
+}

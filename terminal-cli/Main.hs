@@ -24,6 +24,7 @@ main = T.runAnsiTerminalT $ runInputT $ fix $ \continue->
   getInputLine (T.color T.red "bas $ ") >>= \case
     Nothing     -> pure ()
     Just "quit" -> pure ()
+    Just "size" -> lift T.getScreenSize >>= \s-> lift (T.putStringLn $ show s) >> continue
     Just ""     -> continue
     Just "wait" -> liftIO (threadDelay 3000000) >> continue
     Just line   -> lift (T.putStringLn line) >> continue

@@ -44,7 +44,7 @@ data Event
   -- row. Some terminals report only that a button was released
   -- without specifying which one; in that case, Nothing is provided.
   -- Otherwise Just the button released is included in the event.
-  | EvResize Int Int
+  | EvResize (Int, Int)
   -- ^ If read from 'eventChannel' this is the size at the time of the
   -- signal. If read from 'nextEvent' this is the size at the time the
   -- event was processed by Vty. Typically these are the same, but if

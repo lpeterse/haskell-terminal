@@ -250,6 +250,9 @@ instance (MonadIO m) => T.MonadScreen (AnsiTerminalT m) where
   cursorBackward        = write . OutCursorBackward
   cursorPosition x      = write . OutCursorPosition x
   cursorVisible         = write . OutCursorVisible
+  getScreenSize         = AnsiTerminalT $ do
+    env <- fst <$> lift ask
+    liftIO (atomically $ T.envScreenSize env)
 
 data Output
    = OutIsolate

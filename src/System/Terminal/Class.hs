@@ -59,7 +59,6 @@ class MonadPrinter m => MonadColorPrinter m where
   setNegative :: Bool -> m ()
 
 class MonadPrinter m => MonadScreen m where
-  --getScreenSize :: m (Int, Int)
   clear :: m ()
   cursorUp :: Int -> m ()
   cursorDown :: Int -> m ()
@@ -67,3 +66,4 @@ class MonadPrinter m => MonadScreen m where
   cursorBackward :: Int -> m ()
   cursorPosition :: Int -> Int -> m ()
   cursorVisible :: Bool -> m ()
+  getScreenSize :: m (Int,Int)
