@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 18dc9fddbae891dd9f7f9730797c109294a7cecba9da8711b5f5e2dd5ccbd672
+-- hash: ca49b9dbb2dbb77cb63e938337a7c8c29daff8a04f4f7b9db40072d7e4a97f72
 
 name:           terminal
 version:        0.1.0.0
@@ -62,7 +62,7 @@ library
       System.Terminal.Events
       System.Terminal.Modes
       System.Terminal.Pretty
-      System.Terminal.Input
+      System.Terminal.Repl
   other-modules:
       System.Terminal.Ansi
       System.Terminal.AnsiTerminalT

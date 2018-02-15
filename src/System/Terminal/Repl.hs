@@ -1,10 +1,10 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
-module System.Terminal.Input
+module System.Terminal.Repl
   ( MonadInput (..)
-  , InputT ()
-  , runInputT
+  , ReplT ()
+  , runReplT
   ) where
 
 import           Control.Concurrent
@@ -16,6 +16,7 @@ import           Control.Monad.Trans.Reader
 import           Control.Monad.Trans.State
 import           Data.Char
 import           Data.Function              (fix)
+import           Data.Typeable
 import           System.Environment
 
 import qualified System.Terminal            as T
@@ -25,11 +26,12 @@ import qualified System.Terminal.Pretty     as T
 
 class MonadInput m where
   getInputLine :: T.TermDoc -> m (Maybe String)
+  quit         :: m ()
 
-newtype InputT m a = InputT (StateT () m a)
+newtype ReplT m a = ReplT (StateT Bool m a)
   deriving (Functor, Applicative, Monad, MonadIO, MonadTrans)
 
-instance (T.MonadPrinter m) => T.MonadPrinter (InputT m) where
+instance (T.MonadPrinter m) => T.MonadPrinter (ReplT m) where
   putLn = lift T.putLn
   putChar = lift . T.putChar
   putString = lift . T.putString
@@ -38,21 +40,21 @@ instance (T.MonadPrinter m) => T.MonadPrinter (InputT m) where
   putTextLn = lift . T.putTextLn
   flush = lift T.flush
 
-instance (T.MonadIsolate m) => T.MonadIsolate (InputT m) where
-  isolate (InputT sma) = InputT $ do
+instance (T.MonadIsolate m) => T.MonadIsolate (ReplT m) where
+  isolate (ReplT sma) = ReplT $ do
     st <- get
     (a,st') <- lift $ T.isolate $ runStateT sma st
     put st'
     pure a
 
-instance (T.MonadColorPrinter m) => T.MonadColorPrinter (InputT m) where
+instance (T.MonadColorPrinter m) => T.MonadColorPrinter (ReplT m) where
   setDefault = lift T.setDefault
   setForegroundColor = lift . T.setForegroundColor
   setBackgroundColor = lift . T.setBackgroundColor
   setUnderline = lift . T.setUnderline
   setNegative = lift . T.setNegative
 
-instance (T.MonadScreen m) => T.MonadScreen (InputT m) where
+instance (T.MonadScreen m) => T.MonadScreen (ReplT m) where
   clear = lift T.clear
   cursorUp = lift . T.cursorUp
   cursorDown = lift . T.cursorDown
@@ -62,15 +64,20 @@ instance (T.MonadScreen m) => T.MonadScreen (InputT m) where
   cursorVisible = lift . T.cursorVisible
   getScreenSize = lift T.getScreenSize
 
-instance (T.MonadEvent m) => T.MonadEvent (InputT m) where
+instance (T.MonadEvent m) => T.MonadEvent (ReplT m) where
   withEventSTM = lift . T.withEventSTM
 
-instance (T.MonadTerminal m) => T.MonadTerminal (InputT m) where
+instance (T.MonadTerminal m) => T.MonadTerminal (ReplT m) where
 
-runInputT :: T.MonadTerminal m => InputT m a -> m a
-runInputT (InputT ma) = evalStateT ma ()
+runReplT :: T.MonadTerminal m => ReplT m () -> m ()
+runReplT (ReplT ma) = evalStateT loop False
+  where
+    loop = ma >> get >>= \case
+      True  -> pure ()
+      False -> loop
 
-instance T.MonadTerminal m => MonadInput (InputT m) where
+instance T.MonadTerminal m => MonadInput (ReplT m) where
+  quit = ReplT $ put True
   getInputLine prompt = do
     lift $ T.putDoc prompt
     lift $ T.setDefault
