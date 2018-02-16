@@ -34,22 +34,25 @@ import qualified System.Terminal.Events       as T
 
 data TermEnv
   = TermEnv
-  { envInput     :: STM T.Event
-  , envInterrupt :: STM ()
+  { envInput      :: STM T.Event
+  , envInterrupt  :: STM ()
+  , envScreenSize :: STM (Int,Int)
   }
 
 withTerminal :: (MonadIO m, MonadMask m) => IO.Handle -> IO.Handle -> (TermEnv -> m a) -> m a
 withTerminal hIn hOut action = do
   mainThreadId <- liftIO myThreadId
   eventChan <- liftIO newTChanIO
+  screenSize <- liftIO (newTVarIO =<< hGetWindowSize hIn)
   hWithRawMode hIn $
    hWithoutEcho hIn $
     hWithHookedResizeSignal hIn eventChan $
       hWithInputProcessing hIn eventChan $
         withHookedInterruptSignal mainThreadId eventChan $
           \sigInt-> action $ TermEnv {
-              envInput = readTChan eventChan
-            , envInterrupt = sigInt
+              envInput      = readTChan eventChan
+            , envInterrupt  = sigInt
+            , envScreenSize = readTVar screenSize
             }
 
 withHookedInterruptSignal :: (MonadIO m, MonadMask m) => ThreadId -> (TChan T.Event) -> (STM () -> m a) -> m a
@@ -75,8 +78,8 @@ hWithHookedResizeSignal h eventChan action =
     (liftIO . flip (Posix.installHandler Posix.windowChange) Nothing) $ const $ action
   where
     pushEvent = do
-      (r,c) <- hGetWindowSize h
-      atomically (writeTChan eventChan $ T.EvResize r c)
+      ev <- T.EvResize <$> hGetWindowSize h
+      atomically (writeTChan eventChan $ ev)
 
 hWithoutEcho :: (MonadIO m, MonadMask m) => IO.Handle -> m a -> m a
 hWithoutEcho h = bracket
