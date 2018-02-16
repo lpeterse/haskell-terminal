@@ -6,7 +6,7 @@ module System.Terminal.Ansi.Platform
 
 import           Control.Concurrent            (ThreadId, myThreadId,
                                                 threadDelay)
-import           Control.Concurrent.Async      (async, cancel)
+import           Control.Concurrent.Async      (async, cancel, withAsync)
 import           Control.Concurrent.STM.TChan  (TChan, newTChanIO, readTChan,
                                                 writeTChan)
 import           Control.Concurrent.STM.TVar   (TVar, newTVarIO, readTVar,
@@ -64,7 +64,12 @@ withTerminal hIn hOut action = withTerminalInput $ withTerminalOutput $ do
     -- unblocks the input processing thread which then dies immediately.
     withInputProcessing mainThreadId interruptFlag eventChan = bracket
       (liftIO $ async $ processInput mainThreadId interruptFlag eventChan)
-      (\a-> liftIO $ hPutStr hOut "\ESC[0c" >> hFlush hOut >> cancel a) . const
+      (\a-> liftIO $ withAsync trigger $ const $ cancel a) . const
+      where
+        trigger = do
+          threadDelay 100000 -- Yes, it's a race..
+          hPutStr hOut "\ESC[0c"
+          hFlush hOut
     withResizeMonitoring screenSize eventChan = bracket
       (liftIO $ async monitor)
       (liftIO . cancel) . const
