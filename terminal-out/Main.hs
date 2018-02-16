@@ -15,7 +15,7 @@ import qualified Control.Monad.Terminal.Color  as T
 import qualified Control.Monad.Terminal.Events as T
 import qualified Control.Monad.Terminal.Pretty as T
 
-import qualified System.Terminal.AnsiTerminalT as T
+import qualified System.Terminal.Ansi          as T
 
 main :: IO ()
 main = T.runAnsiTerminalT foo
@@ -36,3 +36,5 @@ doc = mconcat
   , PP.line
   -- , T.onColor T.blue "FOOBAR"
   ]
+
+

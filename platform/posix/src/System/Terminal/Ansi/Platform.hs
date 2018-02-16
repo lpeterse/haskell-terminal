@@ -1,5 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
-module System.Terminal.Platform
+module System.Terminal.Ansi.Platform
   ( TermEnv (..)
   , withTerminal
   ) where
@@ -30,7 +30,7 @@ import qualified System.Posix.Signals          as Posix
 import qualified System.Posix.Signals.Exts     as Posix
 
 import qualified Control.Monad.Terminal.Events as T
-import qualified System.Terminal.Ansi          as T
+import qualified System.Terminal.Ansi.Internal as T
 
 data TermEnv
   = TermEnv

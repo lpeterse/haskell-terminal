@@ -6,8 +6,6 @@ module Control.Monad.Repl
   ( MonadRepl (..)
   , ReplT ()
   , execReplT
-  , execAnsiReplT
-  , evalAnsiReplT
   , read
   ) where
 
@@ -28,8 +26,6 @@ import qualified Control.Monad.Terminal        as T
 import qualified Control.Monad.Terminal.Color  as T
 import qualified Control.Monad.Terminal.Events as T
 import qualified Control.Monad.Terminal.Pretty as T
-
-import qualified System.Terminal.AnsiTerminalT as T
 
 import           Prelude                       hiding (read)
 
@@ -113,21 +109,12 @@ instance (T.MonadEvent m) => T.MonadEvent (ReplT s m) where
 
 instance (T.MonadTerminal m) => T.MonadTerminal (ReplT s m) where
 
-type AnsiReplT s m = ReplT s (T.AnsiTerminalT m)
-type AnsiReplIO s = AnsiReplT s IO
-
 execReplT :: (T.MonadTerminal m, T.MonadPrinter m) => ReplT s m () -> s -> m s
 execReplT (ReplT ma) s = replUserState <$> execStateT loop (replTStateDefault s)
   where
     loop = ma >> (replQuit <$> get) >>= \case
       False -> loop
       True  -> pure ()
-
-execAnsiReplT :: AnsiReplT s IO () -> s -> IO s
-execAnsiReplT ma = T.runAnsiTerminalT . execReplT ma
-
-evalAnsiReplT :: AnsiReplT s IO () -> s -> IO ()
-evalAnsiReplT ma = void . execAnsiReplT ma
 
 instance T.MonadTerminal m => MonadRepl (ReplT s m) where
   type ReplState (ReplT s m) = s

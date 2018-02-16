@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: d4eb6bfc15c95932ab10eda46596ee6321e355880e473675104b261ffc7e36a2
+-- hash: 4dd0dfd5211c828d1f3834e6a3e709cdd924bf129d9d871d0563746b30a3176b
 
 name:           terminal
 version:        0.1.0.0
@@ -42,7 +42,6 @@ library
   if os(windows)
     hs-source-dirs:
         platform/windows/src
-    cpp-options: -DWINDOWS
     include-dirs:
         platform/windows/include
     c-sources:
@@ -59,14 +58,15 @@ library
   exposed-modules:
       Control.Monad.Repl
       Control.Monad.Terminal
+      Control.Monad.Terminal.Color
       Control.Monad.Terminal.Events
       Control.Monad.Terminal.Modes
-      Control.Monad.Terminal.Color
       Control.Monad.Terminal.Pretty
-      System.Terminal.AnsiTerminalT
-  other-modules:
       System.Terminal.Ansi
-      System.Terminal.Platform
+  other-modules:
+      System.Terminal.Ansi.AnsiTerminalT
+      System.Terminal.Ansi.Internal
+      System.Terminal.Ansi.Platform
   default-language: Haskell2010
 
 executable terminal-cli

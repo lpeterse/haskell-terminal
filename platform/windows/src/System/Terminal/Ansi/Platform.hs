@@ -1,5 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
-module System.Terminal.Platform
+module System.Terminal.Ansi.Platform
   ( TermEnv (..)
   , withTerminal
   ) where
@@ -24,7 +24,7 @@ import           Foreign.Storable              (peek)
 import           System.IO
 
 import qualified Control.Monad.Terminal.Events as T
-import qualified System.Terminal.Ansi          as T
+import qualified System.Terminal.Ansi.Internal as T
 
 data TermEnv
   = TermEnv

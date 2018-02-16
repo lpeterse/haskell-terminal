@@ -1,9 +1,12 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
-module System.Terminal.AnsiTerminalT
+module System.Terminal.Ansi.AnsiTerminalT
   ( AnsiTerminalT ()
+  , AnsiReplT (..)
   , runAnsiTerminalT
+  , execAnsiReplT
+  , evalAnsiReplT
   )
 where
 
@@ -12,7 +15,7 @@ import qualified Control.Concurrent.Async      as A
 import           Control.Concurrent.STM.TChan
 import           Control.Concurrent.STM.TVar
 import qualified Control.Exception             as E
-import           Control.Monad                 (forever, when)
+import           Control.Monad                 (forever, void, when)
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
@@ -32,20 +35,27 @@ import           Data.Word
 import           System.Environment
 import qualified System.IO                     as IO
 
+import qualified Control.Monad.Repl            as T
 import qualified Control.Monad.Terminal        as T
 import qualified Control.Monad.Terminal.Color  as T
 import qualified Control.Monad.Terminal.Events as T
 import qualified Control.Monad.Terminal.Modes  as T
 import qualified Control.Monad.Terminal.Pretty as T
 
-import qualified System.Terminal.Platform      as T
+import qualified System.Terminal.Ansi.Internal as T
+import qualified System.Terminal.Ansi.Platform as T
 
 newtype AnsiTerminalT m a
   = AnsiTerminalT (ReaderT IsolationLevel (ReaderT (T.TermEnv, (Int, Output) -> STM ()) m) a)
   deriving (Functor, Applicative, Monad, MonadIO)
 
-instance MonadTrans AnsiTerminalT where
-  lift = AnsiTerminalT . lift . lift
+type AnsiReplT s m = T.ReplT s (AnsiTerminalT m)
+
+execAnsiReplT :: AnsiReplT s IO () -> s -> IO s
+execAnsiReplT ma = runAnsiTerminalT . T.execReplT ma
+
+evalAnsiReplT :: AnsiReplT s IO () -> s -> IO ()
+evalAnsiReplT ma = void . execAnsiReplT ma
 
 runAnsiTerminalT :: AnsiTerminalT IO a -> IO a
 runAnsiTerminalT = hRunAnsiTerminalT IO.stdin IO.stdout
@@ -205,6 +215,9 @@ defaultTerminalStateAttributes =
   , tsForeground      = T.ColorDefault
   , tsBackground      = T.ColorDefault
   }
+
+instance MonadTrans AnsiTerminalT where
+  lift = AnsiTerminalT . lift . lift
 
 instance (MonadIO m) => T.MonadTerminal (AnsiTerminalT m) where
 

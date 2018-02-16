@@ -29,19 +29,19 @@ library:
   exposed-modules:
     - Control.Monad.Repl
     - Control.Monad.Terminal
+    - Control.Monad.Terminal.Color
     - Control.Monad.Terminal.Events
     - Control.Monad.Terminal.Modes
-    - Control.Monad.Terminal.Color
     - Control.Monad.Terminal.Pretty
-    - System.Terminal.AnsiTerminalT
-  other-modules:
     - System.Terminal.Ansi
-    - System.Terminal.Platform
+  other-modules:
+    - System.Terminal.Ansi.AnsiTerminalT
+    - System.Terminal.Ansi.Internal
+    - System.Terminal.Ansi.Platform
   source-dirs: src
   when:
     - condition: os(windows)
       then:
-        cpp-options: -DWINDOWS
         source-dirs:
           - platform/windows/src
         include-dirs:
