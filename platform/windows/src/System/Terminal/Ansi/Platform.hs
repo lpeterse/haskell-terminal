@@ -52,9 +52,19 @@ withTerminal hIn hOut action = withTerminalInput $ withTerminalOutput $ do
     withTerminalOutput = bracket
       ( liftIO getConsoleOutputModeDesired >>= liftIO . setConsoleOutputMode )
       ( liftIO . setConsoleOutputMode ) . const
+    -- The "\ESC[0" trick certainly requires some explanation:
+    -- IO on Windows is blocking which means that a thread blocked
+    -- on reading from a file descriptor cannot be killed/canceled
+    -- and any other thread trying to cancel it will be blocked, too.
+    -- The observed behavior here was that the cleanup procedure waited
+    -- indefinitely for the input processing thread to die after having
+    -- send it an exception.
+    -- The solution is to send this specific escape sequence which asks
+    -- the terminal to report its device attributes. This incoming event
+    -- unblocks the input processing thread which then dies immediately.
     withInputProcessing mainThreadId interruptFlag eventChan = bracket
       (liftIO $ async $ processInput mainThreadId interruptFlag eventChan)
-      (liftIO . cancel) . const
+      (\a-> liftIO $ hPutStr hOut "\ESC[0c" >> hFlush hOut >> cancel a) . const
     withResizeMonitoring screenSize eventChan = bracket
       (liftIO $ async monitor)
       (liftIO . cancel) . const
