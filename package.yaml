@@ -59,9 +59,9 @@ library:
           - platform/posix/cbits/hs_terminal.c
 
 executables:
-  terminal-ev:
+  repl-demo:
     main:                Main.hs
-    source-dirs:         terminal-ev
+    source-dirs:         app/repl-demo
     ghc-options:
     - -Werror
     - -threaded
@@ -69,9 +69,9 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - terminal
-  terminal-cli:
+  terminal-ev:
     main:                Main.hs
-    source-dirs:         terminal-cli
+    source-dirs:         app/terminal-ev
     ghc-options:
     - -Werror
     - -threaded
@@ -81,7 +81,7 @@ executables:
     - terminal
   terminal-out:
     main:                Main.hs
-    source-dirs:         terminal-out
+    source-dirs:         app/terminal-out
     ghc-options:
     - -Werror
     - -threaded

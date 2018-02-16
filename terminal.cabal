@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 4dd0dfd5211c828d1f3834e6a3e709cdd924bf129d9d871d0563746b30a3176b
+-- hash: e3780164fdb3f773f73e40f993993ac66828e3b44e7ed53cbd8355b055b84848
 
 name:           terminal
 version:        0.1.0.0
@@ -69,10 +69,10 @@ library
       System.Terminal.Ansi.Platform
   default-language: Haskell2010
 
-executable terminal-cli
+executable repl-demo
   main-is: Main.hs
   hs-source-dirs:
-      terminal-cli
+      app/repl-demo
   ghc-options: -Werror -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       async
@@ -91,7 +91,7 @@ executable terminal-cli
 executable terminal-ev
   main-is: Main.hs
   hs-source-dirs:
-      terminal-ev
+      app/terminal-ev
   ghc-options: -Werror -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       async
@@ -110,7 +110,7 @@ executable terminal-ev
 executable terminal-out
   main-is: Main.hs
   hs-source-dirs:
-      terminal-out
+      app/terminal-out
   ghc-options: -Werror -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       async
