@@ -27,16 +27,15 @@ library:
   ghc-options: -Werror 
   #-fwarn-incomplete-patterns
   exposed-modules:
-    - System.Terminal
-    - System.Terminal.Color
-    - System.Terminal.Events
-    - System.Terminal.Modes
-    - System.Terminal.Pretty
-    - System.Terminal.Repl
+    - Control.Monad.Repl
+    - Control.Monad.Terminal
+    - Control.Monad.Terminal.Events
+    - Control.Monad.Terminal.Modes
+    - Control.Monad.Terminal.Color
+    - Control.Monad.Terminal.Pretty
+    - System.Terminal.AnsiTerminalT
   other-modules:
     - System.Terminal.Ansi
-    - System.Terminal.AnsiTerminalT
-    - System.Terminal.Class
     - System.Terminal.Platform
   source-dirs: src
   when:

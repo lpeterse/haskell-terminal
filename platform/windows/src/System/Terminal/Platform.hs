@@ -4,27 +4,27 @@ module System.Terminal.Platform
   , withTerminal
   ) where
 
-import           Control.Concurrent           (ThreadId, myThreadId,
-                                               threadDelay)
-import           Control.Concurrent.Async     (async, cancel)
-import           Control.Concurrent.STM.TChan (TChan, newTChanIO, readTChan,
-                                               writeTChan)
-import           Control.Concurrent.STM.TVar  (TVar, newTVarIO, readTVar,
-                                               swapTVar, writeTVar)
-import qualified Control.Exception            as E
-import           Control.Monad                (forever, void, when)
-import           Control.Monad.Catch          (MonadMask, bracket)
-import           Control.Monad.IO.Class       (MonadIO, liftIO)
-import           Control.Monad.STM            (STM, atomically, check, orElse)
+import           Control.Concurrent            (ThreadId, myThreadId,
+                                                threadDelay)
+import           Control.Concurrent.Async      (async, cancel)
+import           Control.Concurrent.STM.TChan  (TChan, newTChanIO, readTChan,
+                                                writeTChan)
+import           Control.Concurrent.STM.TVar   (TVar, newTVarIO, readTVar,
+                                                swapTVar, writeTVar)
+import qualified Control.Exception             as E
+import           Control.Monad                 (forever, void, when)
+import           Control.Monad.Catch           (MonadMask, bracket)
+import           Control.Monad.IO.Class        (MonadIO, liftIO)
+import           Control.Monad.STM             (STM, atomically, check, orElse)
 import           Control.Monad.Trans.State
-import qualified Data.ByteString              as BS
-import           Foreign.Marshal.Alloc        (alloca)
-import           Foreign.Ptr                  (Ptr)
-import           Foreign.Storable             (peek)
+import qualified Data.ByteString               as BS
+import           Foreign.Marshal.Alloc         (alloca)
+import           Foreign.Ptr                   (Ptr)
+import           Foreign.Storable              (peek)
 import           System.IO
 
-import qualified System.Terminal.Ansi         as T
-import qualified System.Terminal.Events       as T
+import qualified Control.Monad.Terminal.Events as T
+import qualified System.Terminal.Ansi          as T
 
 data TermEnv
   = TermEnv

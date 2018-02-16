@@ -5,11 +5,11 @@
 module System.Terminal.Ansi where
 
 import           Control.Concurrent
-import qualified Control.Concurrent.Async     as A
+import qualified Control.Concurrent.Async      as A
 import           Control.Concurrent.STM.TChan
 import           Control.Concurrent.STM.TVar
-import qualified Control.Exception            as E
-import           Control.Monad                (forever, when)
+import qualified Control.Exception             as E
+import           Control.Monad                 (forever, when)
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
@@ -17,18 +17,18 @@ import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Reader
 import           Control.Monad.Trans.State
 import           Data.Bits
-import qualified Data.ByteString              as BS
+import qualified Data.ByteString               as BS
 import           Data.Char
-import           Data.Function                (fix)
+import           Data.Function                 (fix)
 import           Data.Maybe
-import qualified Data.Text                    as Text
-import qualified Data.Text.IO                 as Text
+import qualified Data.Text                     as Text
+import qualified Data.Text.IO                  as Text
 import           Data.Word
 import           System.Environment
-import qualified System.IO                    as IO
+import qualified System.IO                     as IO
 
-import qualified System.Terminal.Events       as T
-import qualified System.Terminal.Modes        as T
+import qualified Control.Monad.Terminal.Events as T
+import qualified Control.Monad.Terminal.Modes  as T
 
 class Monad m => MonadInput m where
   askModes        :: m T.TermModes

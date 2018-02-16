@@ -1,4 +1,4 @@
-module System.Terminal.Events where
+module Control.Monad.Terminal.Events where
 
 import           Data.ByteString
 

@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
-module System.Terminal.Pretty
+module Control.Monad.Terminal.Pretty
   ( -- * Pretty Printing
     TermDoc
   , TermStyle (..)
@@ -25,11 +25,11 @@ module System.Terminal.Pretty
 
 import           Data.Semigroup
 import           Data.String
-import qualified Data.Text                 as Text
-import qualified Data.Text.Prettyprint.Doc as PP
+import qualified Data.Text                    as Text
+import qualified Data.Text.Prettyprint.Doc    as PP
 
-import qualified System.Terminal.Class     as T
-import           System.Terminal.Color
+import qualified Control.Monad.Terminal       as T
+import           Control.Monad.Terminal.Color
 
 type TermDoc = PP.Doc TermStyle
 

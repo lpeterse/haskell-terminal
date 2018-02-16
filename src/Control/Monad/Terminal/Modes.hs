@@ -1,4 +1,4 @@
-module System.Terminal.Modes where
+module Control.Monad.Terminal.Modes where
 
 data TermModes
   = TermModes

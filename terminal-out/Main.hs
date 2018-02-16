@@ -8,10 +8,14 @@ import           Control.Monad.IO.Class
 import           Data.Monoid
 import           System.Environment
 
-import qualified Data.Text.Prettyprint.Doc as PP
-import qualified System.Terminal           as T
-import qualified System.Terminal.Color     as T
-import qualified System.Terminal.Pretty    as T
+import qualified Data.Text.Prettyprint.Doc     as PP
+
+import qualified Control.Monad.Terminal        as T
+import qualified Control.Monad.Terminal.Color  as T
+import qualified Control.Monad.Terminal.Events as T
+import qualified Control.Monad.Terminal.Pretty as T
+
+import qualified System.Terminal.AnsiTerminalT as T
 
 main :: IO ()
 main = T.runAnsiTerminalT foo

@@ -1,17 +1,17 @@
 {-# LANGUAGE LambdaCase #-}
-module System.Terminal.Class where
+module Control.Monad.Terminal where
 
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
 import           Data.Maybe
-import qualified Data.Text              as Text
+import qualified Data.Text                     as Text
 import           Data.Word
-import           Prelude                hiding (putChar)
+import           Prelude                       hiding (putChar)
 
-import qualified System.Terminal.Color  as T
-import qualified System.Terminal.Events as T
-import qualified System.Terminal.Modes  as T
+import qualified Control.Monad.Terminal.Color  as T
+import qualified Control.Monad.Terminal.Events as T
+import qualified Control.Monad.Terminal.Modes  as T
 
 class (MonadEvent m, MonadIsolate m, MonadColorPrinter m, MonadScreen m) => MonadTerminal m where
 

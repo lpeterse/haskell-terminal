@@ -4,8 +4,10 @@ import           Control.Monad
 import           Control.Monad.IO.Class
 import           System.Exit
 
-import qualified System.Terminal        as T
-import qualified System.Terminal.Events as T
+import qualified Control.Monad.Terminal        as T
+import qualified Control.Monad.Terminal.Events as T
+
+import qualified System.Terminal.AnsiTerminalT as T
 
 main :: IO ()
 main = T.runAnsiTerminalT $ forever $ do

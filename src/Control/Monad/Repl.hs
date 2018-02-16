@@ -2,12 +2,13 @@
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE TypeFamilies               #-}
-module System.Terminal.Repl
+module Control.Monad.Repl
   ( MonadRepl (..)
   , ReplT ()
-  , runReplT
-  , runAnsiReplT
-  , runAnsiReplIO
+  , execReplT
+  , execAnsiReplT
+  , evalAnsiReplT
+  , read
   ) where
 
 import           Control.Concurrent
@@ -18,24 +19,26 @@ import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Reader
 import           Control.Monad.Trans.State
 import           Data.Char
-import           Data.Function              (fix)
-import qualified Data.Text                  as Text
-import qualified Data.Text.Prettyprint.Doc  as PP
+import           Data.Function                 (fix)
+import qualified Data.Text                     as Text
+import qualified Data.Text.Prettyprint.Doc     as PP
 import           Data.Typeable
-import           System.Environment
-import qualified System.Exit                as SE
 
-import qualified System.Terminal            as T
-import qualified System.Terminal.Color      as T
-import qualified System.Terminal.Events     as T
-import qualified System.Terminal.Pretty     as T
+import qualified Control.Monad.Terminal        as T
+import qualified Control.Monad.Terminal.Color  as T
+import qualified Control.Monad.Terminal.Events as T
+import qualified Control.Monad.Terminal.Pretty as T
+
+import qualified System.Terminal.AnsiTerminalT as T
+
+import           Prelude                       hiding (read)
 
 class Pretty a where
   pretty :: a -> PP.Doc ann
 
-class T.MonadTerminal m => MonadRepl m where
+class T.MonadPrinter m => MonadRepl m where
   type ReplState m
-  setPrompt    :: Pretty a => a -> m ()
+  setPrompt    :: m () -> m ()
   readString   :: m String
   readText     :: m Text.Text
   readText      = Text.pack <$> readString
@@ -43,14 +46,34 @@ class T.MonadTerminal m => MonadRepl m where
   store        :: ReplState m -> m ()
   print        :: Show a => a -> m ()
   pprint       :: Pretty a => a -> m ()
-  exit         :: m ()
-  exitWith     :: SE.ExitCode -> m ()
+  quit         :: m ()
 
-newtype ReplT s m a = ReplT (StateT s (StateT (Maybe SE.ExitCode) m) a)
+read :: (MonadRepl m, Read a) => m a
+read = do
+  s <- readString
+  case reads s of
+    []        -> fail "no parse"
+    ((x,_):_) -> pure x
+
+newtype ReplT s m a = ReplT (StateT (ReplTState s m) m a)
   deriving (Functor, Applicative, Monad, MonadIO)
 
+data ReplTState s m
+  = ReplTState
+  { replQuit      :: Bool
+  , replPrompt    :: ReplT s m ()
+  , replUserState :: s
+  }
+
+replTStateDefault :: T.MonadPrinter m => s -> ReplTState s m
+replTStateDefault s = ReplTState {
+    replQuit   = False
+  , replPrompt = T.putString "> "
+  , replUserState = s
+  }
+
 instance MonadTrans (ReplT s) where
-  lift = ReplT . lift . lift
+  lift = ReplT . lift
 
 instance (T.MonadPrinter m) => T.MonadPrinter (ReplT s m) where
   putLn = lift T.putLn
@@ -64,10 +87,8 @@ instance (T.MonadPrinter m) => T.MonadPrinter (ReplT s m) where
 instance (T.MonadIsolate m) => T.MonadIsolate (ReplT s m) where
   isolate (ReplT sma) = ReplT $ do
     s1 <- get
-    s2 <- lift get
-    ((a,s1'),s2') <- lift $ lift $ T.isolate $ runStateT (runStateT sma s1) s2
-    put s1'
-    lift (put s2')
+    (a,s2) <- lift $ T.isolate $ runStateT sma s1
+    put s2
     pure a
 
 instance (T.MonadColorPrinter m) => T.MonadColorPrinter (ReplT s m) where
@@ -95,30 +116,30 @@ instance (T.MonadTerminal m) => T.MonadTerminal (ReplT s m) where
 type AnsiReplT s m = ReplT s (T.AnsiTerminalT m)
 type AnsiReplIO s = AnsiReplT s IO
 
-runReplT :: (T.MonadTerminal m) => s -> ReplT s m () -> m (SE.ExitCode, s)
-runReplT s (ReplT ma) = evalStateT (runStateT loop s) Nothing
+execReplT :: (T.MonadTerminal m, T.MonadPrinter m) => ReplT s m () -> s -> m s
+execReplT (ReplT ma) s = replUserState <$> execStateT loop (replTStateDefault s)
   where
-    loop = ma >> lift get >>= \case
-      Nothing -> loop
-      Just code -> pure code
+    loop = ma >> (replQuit <$> get) >>= \case
+      False -> loop
+      True  -> pure ()
 
-runAnsiReplT :: s -> AnsiReplT s IO () -> IO (SE.ExitCode, s)
-runAnsiReplT s ma = T.runAnsiTerminalT $ runReplT s ma
+execAnsiReplT :: AnsiReplT s IO () -> s -> IO s
+execAnsiReplT ma = T.runAnsiTerminalT . execReplT ma
 
-runAnsiReplIO :: s -> AnsiReplIO s () -> IO ()
-runAnsiReplIO s ma = runAnsiReplT s ma >>= SE.exitWith . fst
+evalAnsiReplT :: AnsiReplT s IO () -> s -> IO ()
+evalAnsiReplT ma = void . execAnsiReplT ma
 
 instance T.MonadTerminal m => MonadRepl (ReplT s m) where
   type ReplState (ReplT s m) = s
-  setPrompt a = pure ()
-  load = ReplT $ get
-  store = ReplT . put
+  setPrompt a = ReplT $ modify (\st-> st { replPrompt = a })
+  load = ReplT $ replUserState <$> get
+  store ust = ReplT $ modify (\st-> st { replUserState = ust })
   print a = T.putStringLn (show a)
   pprint a = T.putDoc (pretty a)
-  exit = ReplT $ lift $ put (Just SE.ExitSuccess)
-  exitWith = ReplT . lift . put . Just
+  quit = ReplT $ modify (\st-> st { replQuit = True })
   readString = do
-    lift $ T.putString "> "
+    prompt <- ReplT $ replPrompt <$> get
+    prompt
     lift $ T.setDefault
     lift $ T.flush
     withStacks [] []

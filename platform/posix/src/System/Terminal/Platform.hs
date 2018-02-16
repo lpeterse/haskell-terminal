@@ -5,32 +5,32 @@ module System.Terminal.Platform
   ) where
 
 import           Control.Concurrent
-import qualified Control.Concurrent.Async     as A
+import qualified Control.Concurrent.Async      as A
 import           Control.Concurrent.STM.TChan
 import           Control.Concurrent.STM.TVar
-import qualified Control.Exception            as E
-import           Control.Monad                (forever, when)
+import qualified Control.Exception             as E
+import           Control.Monad                 (forever, when)
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
 import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Reader
 import           Control.Monad.Trans.State
-import qualified Data.ByteString              as BS
+import qualified Data.ByteString               as BS
 import           Data.Word
 import           Foreign.C.Types
 import           Foreign.Marshal.Alloc
 import           Foreign.Ptr
 import           Foreign.Storable
-import qualified GHC.IO.FD                    as IO
-import qualified GHC.IO.Handle.FD             as IO
-import qualified System.IO                    as IO
-import qualified System.IO.Error              as IO
-import qualified System.Posix.Signals         as Posix
-import qualified System.Posix.Signals.Exts    as Posix
+import qualified GHC.IO.FD                     as IO
+import qualified GHC.IO.Handle.FD              as IO
+import qualified System.IO                     as IO
+import qualified System.IO.Error               as IO
+import qualified System.Posix.Signals          as Posix
+import qualified System.Posix.Signals.Exts     as Posix
 
-import qualified System.Terminal.Ansi         as T
-import qualified System.Terminal.Events       as T
+import qualified Control.Monad.Terminal.Events as T
+import qualified System.Terminal.Ansi          as T
 
 data TermEnv
   = TermEnv

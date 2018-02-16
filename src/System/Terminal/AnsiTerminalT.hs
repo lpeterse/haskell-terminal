@@ -8,11 +8,11 @@ module System.Terminal.AnsiTerminalT
 where
 
 import           Control.Concurrent
-import qualified Control.Concurrent.Async     as A
+import qualified Control.Concurrent.Async      as A
 import           Control.Concurrent.STM.TChan
 import           Control.Concurrent.STM.TVar
-import qualified Control.Exception            as E
-import           Control.Monad                (forever, when)
+import qualified Control.Exception             as E
+import           Control.Monad                 (forever, when)
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
@@ -20,24 +20,25 @@ import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Reader
 import           Control.Monad.Trans.State
 import           Data.Bits
-import qualified Data.ByteString              as BS
+import qualified Data.ByteString               as BS
 import           Data.Char
-import           Data.Function                (fix)
-import           Data.List.NonEmpty           (NonEmpty ((:|)))
-import qualified Data.List.NonEmpty           as N
+import           Data.Function                 (fix)
+import           Data.List.NonEmpty            (NonEmpty ((:|)))
+import qualified Data.List.NonEmpty            as N
 import           Data.Maybe
-import qualified Data.Text                    as Text
-import qualified Data.Text.IO                 as Text
+import qualified Data.Text                     as Text
+import qualified Data.Text.IO                  as Text
 import           Data.Word
 import           System.Environment
-import qualified System.IO                    as IO
+import qualified System.IO                     as IO
 
-import qualified System.Terminal.Class        as T
-import qualified System.Terminal.Color        as T
-import qualified System.Terminal.Events       as T
-import qualified System.Terminal.Modes        as T
-import qualified System.Terminal.Platform     as T
-import qualified System.Terminal.Pretty       as T
+import qualified Control.Monad.Terminal        as T
+import qualified Control.Monad.Terminal.Color  as T
+import qualified Control.Monad.Terminal.Events as T
+import qualified Control.Monad.Terminal.Modes  as T
+import qualified Control.Monad.Terminal.Pretty as T
+
+import qualified System.Terminal.Platform      as T
 
 newtype AnsiTerminalT m a
   = AnsiTerminalT (ReaderT IsolationLevel (ReaderT (T.TermEnv, (Int, Output) -> STM ()) m) a)
