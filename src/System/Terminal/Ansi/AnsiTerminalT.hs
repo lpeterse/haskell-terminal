@@ -84,6 +84,7 @@ hRunAnsiTerminalT hIn hOut (AnsiTerminalT ma) = T.withTerminal hIn hOut $ \env->
           OutFlush            m -> isolate2 i (flush m)
           OutSetDefault         -> isolate3 i setDefault (const defaultTerminalStateAttributes)
           OutSetUnderline     b -> isolate3 i (setUnderline b) (\a-> a { tsUnderline = b })
+          OutSetBold          b -> isolate3 i (setBold b) (\a-> a { tsBold = b })
           OutSetNegative      b -> isolate3 i (setNegative b) (\a-> a { tsNegative = b })
           OutSetForeground    c -> isolate3 i (setForeground c)  (\a-> a { tsForeground = c })
           OutSetBackground    c -> isolate3 i (setBackground c) (\a-> a { tsBackground = c })
@@ -100,13 +101,14 @@ hRunAnsiTerminalT hIn hOut (AnsiTerminalT ma) = T.withTerminal hIn hOut $ \env->
             isolate3 i m f = isolate False i st >>= \(cur, st)-> m >> run (f cur, st)
 
         putDiff :: TerminalStateAttributes -> TerminalStateAttributes -> IO ()
-        putDiff a b = x1 >> x2 >> x3 >> x4 >> x5
+        putDiff a b = x1 >> x2 >> x3 >> x4 >> x5 >> x6
           where
             x1 = when (tsNegative      a /= tsNegative      b) $ setNegative   $ tsNegative      a
             x2 = when (tsUnderline     a /= tsUnderline     b) $ setUnderline  $ tsUnderline     a
             x3 = when (tsForeground    a /= tsForeground    b) $ setForeground $ tsForeground    a
             x4 = when (tsBackground    a /= tsBackground    b) $ setBackground $ tsBackground    a
             x5 = when (tsCursorVisible a /= tsCursorVisible b) $ cursorVisible $ tsCursorVisible a
+            x6 = when (tsBold          a /= tsBold          b) $ setBold       $ tsBold          a
 
         isolate :: Bool -> Int -> (TerminalStateAttributes, [(Int, TerminalStateAttributes)]) -> IO (TerminalStateAttributes, [(Int, TerminalStateAttributes)])
         isolate hard 0 st@(current, [])
@@ -141,6 +143,8 @@ hRunAnsiTerminalT hIn hOut (AnsiTerminalT ma) = T.withTerminal hIn hOut $ \env->
 
         setUnderline                               True = IO.putStr "\ESC[4m"
         setUnderline                              False = IO.putStr "\ESC[24m"
+        setBold                                    True = IO.putStr "\ESC[1m"
+        setBold                                   False = IO.putStr "\ESC[22m"
         setNegative                                True = IO.putStr "\ESC[7m"
         setNegative                               False = IO.putStr "\ESC[27m"
         setDefault                                      = IO.putStr "\ESC[m"
@@ -201,6 +205,7 @@ data TerminalStateAttributes
   = TerminalStateAttributes
   { tsNegative      :: !Bool
   , tsUnderline     :: !Bool
+  , tsBold          :: !Bool
   , tsCursorVisible :: !Bool
   , tsForeground    :: !T.Color
   , tsBackground    :: !T.Color
@@ -211,6 +216,7 @@ defaultTerminalStateAttributes =
   TerminalStateAttributes
   { tsNegative        = False
   , tsUnderline       = False
+  , tsBold            = False
   , tsCursorVisible   = True
   , tsForeground      = T.ColorDefault
   , tsBackground      = T.ColorDefault
@@ -254,6 +260,7 @@ instance (MonadIO m) => T.MonadColorPrinter (AnsiTerminalT m) where
   setForegroundColor    = write . OutSetForeground
   setBackgroundColor    = write . OutSetBackground
   setUnderline          = write . OutSetUnderline
+  setBold               = write . OutSetBold
   setNegative           = write . OutSetNegative
 
 instance (MonadIO m) => T.MonadScreen (AnsiTerminalT m) where
@@ -279,6 +286,7 @@ data Output
    | OutFlush          (STM ())
    | OutSetDefault
    | OutSetUnderline   Bool
+   | OutSetBold        Bool
    | OutSetNegative    Bool
    | OutSetForeground  T.Color
    | OutSetBackground  T.Color

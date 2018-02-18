@@ -6,7 +6,13 @@ module Control.Monad.Terminal.Pretty
   , TermStyle (..)
   , putDoc
   , putDocLn
-
+    -- * Formatting
+    -- ** inverted
+  , inverted
+    -- ** underlined
+  , underlined
+    -- ** bold
+  , bold
     -- * Colors
     -- ** color
   , color
@@ -38,6 +44,7 @@ data TermStyle
   | TermBackground Color
   | TermInverted
   | TermUnderlined
+  | TermBold
   deriving (Eq, Ord, Show)
 
 putDocLn :: (T.MonadColorPrinter m, T.MonadIsolate m) => TermDoc -> m ()
@@ -62,15 +69,26 @@ putDoc doc = T.isolate $ do
         TermBackground c -> T.setBackgroundColor c >> render (ann:anns) ss
         TermInverted     -> T.setNegative True     >> render (ann:anns) ss
         TermUnderlined   -> T.setUnderline True    >> render (ann:anns) ss
+        TermBold         -> T.setBold True         >> render (ann:anns) ss
       PP.SAnnPop ss      -> case anns of
         []                       -> render [] ss
         (TermForeground c:anns') -> T.setForegroundColor ColorDefault >> render anns' ss
         (TermBackground c:anns') -> T.setBackgroundColor ColorDefault >> render anns' ss
-        (TermInverted    :anns') -> T.setNegative False    >> render anns' ss
-        (TermUnderlined  :anns') -> T.setUnderline False   >> render anns' ss
+        (TermInverted    :anns') -> T.setNegative False  >> render anns' ss
+        (TermUnderlined  :anns') -> T.setUnderline False >> render anns' ss
+        (TermBold        :anns') -> T.setBold False      >> render anns' ss
 
 color   :: Color -> TermDoc -> TermDoc
 color c = PP.annotate (TermForeground c)
+
+inverted :: TermDoc -> TermDoc
+inverted = PP.annotate TermInverted
+
+underlined :: TermDoc -> TermDoc
+underlined = PP.annotate TermUnderlined
+
+bold :: TermDoc -> TermDoc
+bold = PP.annotate TermBold
 
 onColor :: Color -> TermDoc -> TermDoc
 onColor c  = PP.annotate (TermBackground c)

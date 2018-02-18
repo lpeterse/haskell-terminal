@@ -57,6 +57,7 @@ class MonadPrinter m => MonadColorPrinter m where
   setBackgroundColor :: T.Color -> m ()
   setUnderline :: Bool -> m ()
   setNegative :: Bool -> m ()
+  setBold :: Bool -> m ()
 
 class MonadPrinter m => MonadScreen m where
   clear :: m ()
