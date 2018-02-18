@@ -6,11 +6,12 @@ module Control.Monad.Repl
   ( MonadRepl (..)
   , ReplT ()
   , execReplT
-  , read
   ) where
 
 import           Control.Concurrent
+import qualified Control.Exception             as E
 import           Control.Monad
+import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
 import           Control.Monad.Trans.Class
@@ -35,21 +36,14 @@ class Pretty a where
 class T.MonadPrinter m => MonadRepl m where
   type ReplState m
   setPrompt    :: m () -> m ()
-  readString   :: m String
-  readText     :: m Text.Text
-  readText      = Text.pack <$> readString
+  readString   :: m (Maybe String)
+  readText     :: m (Maybe Text.Text)
+  readText      = (Text.pack <$>) <$> readString
   load         :: m (ReplState m)
   store        :: ReplState m -> m ()
   print        :: Show a => a -> m ()
   pprint       :: Pretty a => a -> m ()
   quit         :: m ()
-
-read :: (MonadRepl m, Read a) => m a
-read = do
-  s <- readString
-  case reads s of
-    []        -> fail "no parse"
-    ((x,_):_) -> pure x
 
 newtype ReplT s m a = ReplT (StateT (ReplTState s m) m a)
   deriving (Functor, Applicative, Monad, MonadIO)
@@ -63,7 +57,7 @@ data ReplTState s m
 
 replTStateDefault :: T.MonadPrinter m => s -> ReplTState s m
 replTStateDefault s = ReplTState {
-    replQuit   = False
+    replQuit = False
   , replPrompt = T.putString "> "
   , replUserState = s
   }
@@ -110,12 +104,17 @@ instance (T.MonadEvent m) => T.MonadEvent (ReplT s m) where
 
 instance (T.MonadTerminal m) => T.MonadTerminal (ReplT s m) where
 
-execReplT :: (T.MonadTerminal m, T.MonadPrinter m) => ReplT s m () -> s -> m s
+execReplT :: (T.MonadTerminal m, T.MonadPrinter m, MonadMask m) => ReplT s m () -> s -> m s
 execReplT (ReplT ma) s = replUserState <$> execStateT loop (replTStateDefault s)
   where
-    loop = ma >> (replQuit <$> get) >>= \case
+    loop = protected >> (replQuit <$> get) >>= \case
       False -> loop
       True  -> pure ()
+    protected = catch ma $ \e-> do
+      if e == E.UserInterrupt then
+        lift (T.isolate $ T.setBold True >> T.setForegroundColor T.red >> T.putStringLn "Interrupted.")
+      else
+        throwM e
 
 instance T.MonadTerminal m => MonadRepl (ReplT s m) where
   type ReplState (ReplT s m) = s
@@ -140,11 +139,11 @@ instance T.MonadTerminal m => MonadRepl (ReplT s m) where
         T.EvKey (T.KChar 'D') [T.MCtrl] -> do
           lift $ T.putLn
           lift $ T.flush
-          error "FIXME"
+          pure Nothing
         T.EvKey T.KEnter [] -> do
           lift $ T.putLn
           lift $ T.flush
-          pure $ reverse xss ++ yss
+          pure $ Just $ reverse xss ++ yss
         T.EvKey (T.KBackspace 1) [] -> case xss of
           []     -> withStacks xss yss
           (x:xs) -> do

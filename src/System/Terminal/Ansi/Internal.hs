@@ -30,6 +30,13 @@ import qualified System.IO                     as IO
 import qualified Control.Monad.Terminal.Events as T
 import qualified Control.Monad.Terminal.Modes  as T
 
+data TermEnv
+  = TermEnv
+  { envInput      :: STM T.Event
+  , envInterrupt  :: STM ()
+  , envScreenSize :: STM (Int,Int)
+  }
+
 class Monad m => MonadInput m where
   askModes        :: m T.TermModes
   getNext         :: m Word8

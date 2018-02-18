@@ -1,7 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 module System.Terminal.Ansi.Platform
-  ( TermEnv (..)
-  , withTerminal
+  ( withTerminal
   ) where
 
 import           Control.Concurrent
@@ -32,14 +31,7 @@ import qualified System.Posix.Signals.Exts     as Posix
 import qualified Control.Monad.Terminal.Events as T
 import qualified System.Terminal.Ansi.Internal as T
 
-data TermEnv
-  = TermEnv
-  { envInput      :: STM T.Event
-  , envInterrupt  :: STM ()
-  , envScreenSize :: STM (Int,Int)
-  }
-
-withTerminal :: (MonadIO m, MonadMask m) => IO.Handle -> IO.Handle -> (TermEnv -> m a) -> m a
+withTerminal :: (MonadIO m, MonadMask m) => IO.Handle -> IO.Handle -> (T.TermEnv -> m a) -> m a
 withTerminal hIn hOut action = do
   mainThreadId <- liftIO myThreadId
   eventChan <- liftIO newTChanIO
@@ -49,10 +41,10 @@ withTerminal hIn hOut action = do
     hWithHookedResizeSignal hIn eventChan $
       hWithInputProcessing hIn eventChan $
         withHookedInterruptSignal mainThreadId eventChan $
-          \sigInt-> action $ TermEnv {
-              envInput      = readTChan eventChan
-            , envInterrupt  = sigInt
-            , envScreenSize = readTVar screenSize
+          \sigInt-> action $ T.TermEnv {
+              T.envInput      = readTChan eventChan
+            , T.envInterrupt  = sigInt
+            , T.envScreenSize = readTVar screenSize
             }
 
 withHookedInterruptSignal :: (MonadIO m, MonadMask m) => ThreadId -> (TChan T.Event) -> (STM () -> m a) -> m a

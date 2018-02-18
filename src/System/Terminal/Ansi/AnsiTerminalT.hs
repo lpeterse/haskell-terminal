@@ -13,6 +13,7 @@ where
 import           Control.Concurrent
 import qualified Control.Concurrent.Async      as A
 import           Control.Concurrent.STM.TChan
+import           Control.Concurrent.STM.TMVar
 import           Control.Concurrent.STM.TVar
 import qualified Control.Exception             as E
 import           Control.Monad                 (forever, void, when)
@@ -47,7 +48,7 @@ import qualified System.Terminal.Ansi.Platform as T
 
 newtype AnsiTerminalT m a
   = AnsiTerminalT (ReaderT IsolationLevel (ReaderT (T.TermEnv, (Int, Output) -> STM ()) m) a)
-  deriving (Functor, Applicative, Monad, MonadIO)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadThrow, MonadCatch, MonadMask)
 
 type AnsiReplT s m = T.ReplT s (AnsiTerminalT m)
 
@@ -62,9 +63,9 @@ runAnsiTerminalT = hRunAnsiTerminalT IO.stdin IO.stdout
 
 hRunAnsiTerminalT :: IO.Handle -> IO.Handle -> AnsiTerminalT IO a -> IO a
 hRunAnsiTerminalT hIn hOut (AnsiTerminalT ma) = T.withTerminal hIn hOut $ \env-> do
-  outputChan    <- newTChanIO :: IO (TChan (Int,Output))
-  A.withAsync (runOutput $ readTChan outputChan) $ \outputThread->
-    runAction (env, writeTChan outputChan)
+  outputChan    <- newEmptyTMVarIO :: IO (TMVar (Int,Output))
+  A.withAsync (runOutput $ takeTMVar outputChan) $ \outputThread->
+    runAction (env, putTMVar outputChan)
   where
     --runAction :: (STM T.Event, STM (), (Int, Output) -> STM ()) -> IO a
     runAction = runReaderT (runReaderT ma 0)
@@ -225,7 +226,7 @@ defaultTerminalStateAttributes =
 instance MonadTrans AnsiTerminalT where
   lift = AnsiTerminalT . lift . lift
 
-instance (MonadIO m) => T.MonadTerminal (AnsiTerminalT m) where
+instance (MonadIO m, MonadThrow m) => T.MonadTerminal (AnsiTerminalT m) where
 
 instance MonadIO m => T.MonadEvent (AnsiTerminalT m) where
   withEventSTM f = AnsiTerminalT $ do
@@ -237,17 +238,19 @@ instance MonadIO m => T.MonadEvent (AnsiTerminalT m) where
         Nothing -> again
         Just ev -> pure ev
 
-instance (MonadIO m) => T.MonadIsolate (AnsiTerminalT m) where
+instance (MonadIO m, MonadThrow m) => T.MonadIsolate (AnsiTerminalT m) where
   isolate (AnsiTerminalT ma) =
     AnsiTerminalT $ local (+ 1) (mu >> ma)
     where
       AnsiTerminalT mu = write OutIsolate
 
-instance (MonadIO m) => T.MonadPrinter (AnsiTerminalT m) where
+instance (MonadIO m, MonadThrow m) => T.MonadPrinter (AnsiTerminalT m) where
   putLn                 = write   OutPutLn
   putChar               = write . OutPutChar
-  putString             = write . OutPutString
-  putStringLn           = write . OutPutStringLn
+  putString = \case
+    [] -> pure ()
+    (x:xs) -> T.putChar x >> T.putString xs
+  putStringLn s         = T.putString s >> T.putLn
   putText               = write . OutPutText
   putTextLn             = write . OutPutTextLn
   flush                 = do
@@ -255,7 +258,7 @@ instance (MonadIO m) => T.MonadPrinter (AnsiTerminalT m) where
     write $ OutFlush (writeTVar tv True)
     liftIO (atomically $ readTVar tv >>= check)
 
-instance (MonadIO m) => T.MonadColorPrinter (AnsiTerminalT m) where
+instance (MonadIO m, MonadThrow m) => T.MonadColorPrinter (AnsiTerminalT m) where
   setDefault            = write   OutSetDefault
   setForegroundColor    = write . OutSetForeground
   setBackgroundColor    = write . OutSetBackground
@@ -263,7 +266,7 @@ instance (MonadIO m) => T.MonadColorPrinter (AnsiTerminalT m) where
   setBold               = write . OutSetBold
   setNegative           = write . OutSetNegative
 
-instance (MonadIO m) => T.MonadScreen (AnsiTerminalT m) where
+instance (MonadIO m, MonadThrow m) => T.MonadScreen (AnsiTerminalT m) where
   clear                 = write   OutClear
   cursorUp              = write . OutCursorUp
   cursorDown            = write . OutCursorDown
@@ -298,8 +301,10 @@ data Output
    | OutCursorPosition Int Int
    | OutCursorVisible  Bool
 
-write :: MonadIO m => Output -> AnsiTerminalT m ()
+write :: (MonadIO m, MonadThrow m) => Output -> AnsiTerminalT m ()
 write output = AnsiTerminalT $ do
   isolationLevel <- ask
-  (_,writeSTM) <- lift ask
-  liftIO $ atomically $ writeSTM (isolationLevel, output)
+  (env,writeSTM) <- lift ask
+  b <- liftIO $ atomically $
+    (T.envInterrupt env >> pure True) `orElse` (writeSTM (isolationLevel, output) >> pure False)
+  when b (throwM E.UserInterrupt)

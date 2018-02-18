@@ -28,10 +28,12 @@ main = T.evalAnsiReplT (ini >> repl) 0
 
 repl :: (R.MonadRepl m, R.ReplState m ~ Int) => m ()
 repl = R.readString >>= \case
-  "quit"  -> R.quit
-  ""      -> pure ()
-  "load"  -> R.load >>= R.print
-  "store" -> R.read >>= R.store
-  "inc"   -> R.load >>= R.store . succ
-  "dec"   -> R.load >>= R.store . pred
-  line    -> R.print line
+  Nothing -> R.quit
+  Just s -> case s of
+    ""     -> pure ()
+    "quit" -> R.quit
+    "load" -> R.load >>= R.print
+    "inc"  -> R.load >>= R.store . succ
+    "dec"  -> R.load >>= R.store . pred
+    "loop" -> R.print [1..]
+    line   -> R.print line

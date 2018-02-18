@@ -1,7 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 module System.Terminal.Ansi.Platform
-  ( TermEnv (..)
-  , withTerminal
+  ( withTerminal
   ) where
 
 import           Control.Concurrent            (ThreadId, myThreadId,
@@ -26,24 +25,17 @@ import           System.IO
 import qualified Control.Monad.Terminal.Events as T
 import qualified System.Terminal.Ansi.Internal as T
 
-data TermEnv
-  = TermEnv
-  { envInput      :: STM T.Event
-  , envInterrupt  :: STM ()
-  , envScreenSize :: STM (Int,Int)
-  }
-
-withTerminal :: (MonadIO m, MonadMask m) => Handle -> Handle -> (TermEnv -> m a) -> m a
+withTerminal :: (MonadIO m, MonadMask m) => Handle -> Handle -> (T.TermEnv -> m a) -> m a
 withTerminal hIn hOut action = withTerminalInput $ withTerminalOutput $ do
   mainThreadId <- liftIO myThreadId
   interruptFlag <- liftIO (newTVarIO False)
   eventChan <- liftIO newTChanIO
   screenSize <- liftIO (newTVarIO =<< getScreenSize)
   withResizeMonitoring screenSize eventChan $
-    withInputProcessing mainThreadId interruptFlag eventChan $ action $ TermEnv {
-        envInput        = readTChan eventChan
-      , envInterrupt    = swapTVar interruptFlag False >>= check
-      , envScreenSize   = readTVar screenSize
+    withInputProcessing mainThreadId interruptFlag eventChan $ action $ T.TermEnv {
+        T.envInput        = readTChan eventChan
+      , T.envInterrupt    = swapTVar interruptFlag False >>= check
+      , T.envScreenSize   = readTVar screenSize
       }
   where
     withTerminalInput = bracket
