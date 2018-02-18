@@ -93,6 +93,7 @@ instance (T.MonadColorPrinter m) => T.MonadColorPrinter (ReplT s m) where
   setBackgroundColor = lift . T.setBackgroundColor
   setUnderline = lift . T.setUnderline
   setNegative = lift . T.setNegative
+  setBold = lift . T.setBold
 
 instance (T.MonadScreen m) => T.MonadScreen (ReplT s m) where
   clear = lift T.clear

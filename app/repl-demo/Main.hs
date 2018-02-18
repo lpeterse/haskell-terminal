@@ -24,7 +24,7 @@ import           Prelude                       hiding (print)
 main :: IO ()
 main = T.evalAnsiReplT (ini >> repl) 0
   where
-    ini = R.setPrompt $ T.putDoc $ T.color T.cyan "REPL " <> T.color T.red "> "
+    ini = R.setPrompt $ T.putDoc $ T.bold (T.color T.blue "foo") <> "@bar % "
 
 repl :: (R.MonadRepl m, R.ReplState m ~ Int) => m ()
 repl = R.readString >>= \case
