@@ -98,6 +98,7 @@ instance (T.MonadScreen m) => T.MonadScreen (ReplT s m) where
   cursorPosition x y = lift $ T.cursorPosition x y
   cursorVisible = lift . T.cursorVisible
   getScreenSize = lift T.getScreenSize
+  getCursorPosition = lift T.getCursorPosition
 
 instance (T.MonadEvent m) => T.MonadEvent (ReplT s m) where
   withEventSTM = lift . T.withEventSTM

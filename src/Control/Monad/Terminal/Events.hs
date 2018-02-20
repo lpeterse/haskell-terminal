@@ -61,5 +61,5 @@ data Event
   -- ^ The terminal running the application lost input focus.
   | EvGainedFocus
   -- ^ The terminal running the application gained input focus.
-  | EvSignal Signal
+  | EvCursorPosition (Int,Int)
   deriving (Eq,Show,Read,Ord)

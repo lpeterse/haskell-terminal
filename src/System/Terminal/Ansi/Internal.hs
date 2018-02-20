@@ -38,15 +38,11 @@ data TermEnv
   }
 
 class Monad m => MonadInput m where
-  askModes        :: m T.TermModes
   getNext         :: m Word8
   getNextNonBlock :: m (Maybe Word8)
   wait            :: m ()
 
 instance MonadInput (StateT BS.ByteString IO) where
-  askModes = do
-    term <- liftIO $ lookupEnv "TERM"
-    pure $ fromMaybe T.termModesDefault (T.termModes <$> term)
   getNext = do
     st <- get
     case BS.uncons st of
@@ -186,10 +182,10 @@ decodeAnsi = decode1 =<< getNext
       77 {- M -} -> undefined
       78 {- N -} -> undefined
       79 {- O -} -> undefined
-      80 {- P -} -> pure $ T.EvKey (T.KFun 1) [T.MCtrl]
-      81 {- Q -} -> pure $ T.EvKey (T.KFun 2) [T.MCtrl]
-      82 {- R -} -> pure $ T.EvKey (T.KFun 3) [T.MCtrl]
-      83 {- S -} -> pure $ T.EvKey (T.KFun 4) [T.MCtrl]
+      80 {- P -} -> undefined
+      81 {- Q -} -> undefined
+      82 {- R -} -> withNM 0 0 ps $ \n m-> pure $ T.EvCursorPosition (n,m)
+      83 {- S -} -> undefined
       84 {- T -} -> undefined
       85 {- U -} -> undefined
       86 {- V -} -> undefined
@@ -304,7 +300,7 @@ withN _    ps f               = g ps 0
   where
     g [] i                    = f i
     g (x:xs) i
-      | x >= 48 && x <= 57    = g xs $! i * 256 - 48 + fromIntegral x
+      | x >= 48 && x <= 57    = g xs $! i * 10 - 48 + fromIntegral x
       | otherwise             = error $ "CSI: INVALID NUMBER " ++ show x
 
 withNM :: Monad m => Int -> Int -> [Word8] -> (Int -> Int -> m a) -> m a
@@ -316,7 +312,7 @@ withNM defN defM     ps  f = g ps 0
     g [] i                 = fail "CSI: INVALID NUMBER"
     g (x:xs) i
       | x == 59            = withN defM xs (f i)
-      | x >= 48 && x <= 57 = g xs $! i * 256 - 48 + fromIntegral x
+      | x >= 48 && x <= 57 = g xs $! i * 10 - 48 + fromIntegral x
       | otherwise          = fail "CSI: INVALID NUMBER"
 
 withNumbers :: (Monad m, Integral n, Num n) => [Word8] -> ([n] -> m a) -> m a
@@ -325,7 +321,7 @@ withNumbers xs f = numbers' xs 0 >>= f
     numbers' [] i
       = pure [i]
     numbers' (x:xs) i
-      | x >= 48 && x <= 57 = numbers' xs (i * 256 - 48 + fromIntegral x)
+      | x >= 48 && x <= 57 = numbers' xs (i * 10 - 48 + fromIntegral x)
       | x == 59            = (i:) <$> numbers' xs 0
       | otherwise          = fail ""
 

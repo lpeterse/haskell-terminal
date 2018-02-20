@@ -68,3 +68,4 @@ class MonadPrinter m => MonadScreen m where
   cursorPosition :: Int -> Int -> m ()
   cursorVisible :: Bool -> m ()
   getScreenSize :: m (Int,Int)
+  getCursorPosition :: m (Int,Int)

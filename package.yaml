@@ -34,9 +34,9 @@ library:
     - Control.Monad.Terminal.Modes
     - Control.Monad.Terminal.Pretty
     - System.Terminal.Ansi
+    - System.Terminal.Ansi.Internal
   other-modules:
     - System.Terminal.Ansi.AnsiTerminalT
-    - System.Terminal.Ansi.Internal
     - System.Terminal.Ansi.Platform
   source-dirs: src
   when:
@@ -100,3 +100,6 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - terminal
+    - tasty
+    - tasty-hunit
+    - tasty-quickcheck

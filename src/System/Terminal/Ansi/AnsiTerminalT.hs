@@ -96,6 +96,7 @@ hRunAnsiTerminalT hIn hOut (AnsiTerminalT ma) = T.withTerminal hIn hOut $ \env->
           OutCursorBackward   i -> isolate2 i (cursorBackward i)
           OutCursorPosition x y -> isolate2 i (cursorPosition x y)
           OutCursorVisible    b -> isolate3 i (cursorVisible b) (\a-> a { tsCursorVisible = b})
+          OutAskCursorPosition  -> isolate2 i askCursorPosition
           where
             isolate1 i     = isolate True  i st >>= run
             isolate2 i m   = isolate False i st >>= \st-> m >> run st
@@ -194,6 +195,7 @@ hRunAnsiTerminalT hIn hOut (AnsiTerminalT ma) = T.withTerminal hIn hOut $ \env->
         cursorPosition x y                              = IO.putStr $ "\ESC[" ++ show (safeN x) ++  ";" ++ show (safeN y) ++ "H"
         cursorVisible                             False = IO.putStr "\ESC[?25l"
         cursorVisible                              True = IO.putStr "\ESC[?25h"
+        askCursorPosition                               = IO.putStr "\ESC[6n"
 
         safeN :: Int -> Int
         safeN n
@@ -277,9 +279,17 @@ instance (MonadIO m, MonadThrow m) => T.MonadScreen (AnsiTerminalT m) where
   getScreenSize         = AnsiTerminalT $ do
     env <- fst <$> lift ask
     liftIO (atomically $ T.envScreenSize env)
+  getCursorPosition     = do
+    env <- AnsiTerminalT $ fst <$> lift ask
+    write OutAskCursorPosition
+    fix $ \loop-> T.getEvent >>= \case
+      T.EvCursorPosition xy -> pure xy
+      T.EvKey (T.KChar 'C') [T.MCtrl] -> throwM E.UserInterrupt
+      _                     -> loop
 
 data Output
    = OutIsolate
+   | OutAskCursorPosition
    | OutPutLn
    | OutPutChar        Char
    | OutPutString      String

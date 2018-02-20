@@ -17,6 +17,7 @@ import           Control.Monad.IO.Class        (MonadIO, liftIO)
 import           Control.Monad.STM             (STM, atomically, check, orElse)
 import           Control.Monad.Trans.State
 import qualified Data.ByteString               as BS
+import           Foreign.C.Types
 import           Foreign.Marshal.Alloc         (alloca)
 import           Foreign.Ptr                   (Ptr)
 import           Foreign.Storable              (peek)
@@ -99,10 +100,10 @@ getScreenSize =
   alloca $ \rowsPtr-> alloca $ \colsPtr->
     unsafeGetConsoleWindowSize rowsPtr colsPtr >>= \case
       0 -> do
-        rows <- peek rowsPtr
-        cols <- peek colsPtr
+        rows <- fromIntegral <$> peek rowsPtr
+        cols <- fromIntegral <$> peek colsPtr
         pure (rows, cols)
-      _ -> pure (0,0)
+      i -> pure (0,0)
 
 foreign import ccall unsafe "hs_get_console_input_mode_desired"
   getConsoleInputModeDesired :: IO Int
@@ -117,4 +118,4 @@ foreign import ccall unsafe "hs_set_console_output_mode"
   setConsoleOutputMode :: Int -> IO Int
 
 foreign import ccall unsafe "hs_get_console_winsize"
-  unsafeGetConsoleWindowSize :: Ptr Int -> Ptr Int -> IO Int
+  unsafeGetConsoleWindowSize :: Ptr CInt -> Ptr CInt -> IO CInt

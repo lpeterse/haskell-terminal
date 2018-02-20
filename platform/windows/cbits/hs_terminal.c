@@ -88,7 +88,9 @@ int hs_set_console_output_mode(int mode) {
 
 int hs_get_console_winsize(int *rows, int *cols) {
     CONSOLE_SCREEN_BUFFER_INFO csbi;
-    GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+    if (!GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi)) {
+        return -1;
+    }
     *rows = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
     *cols = csbi.srWindow.Right - csbi.srWindow.Left + 1;
     return 0;
