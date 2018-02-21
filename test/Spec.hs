@@ -34,10 +34,10 @@ testAnsiDecoder = testGroup "decode stream of ANSI escape sequences"
   , testDecoding "ESC character (introducing escape sequence)" ["\ESC", "", "a"] [T.EvKey (T.KChar '[') [T.MCtrl], char 'a']
   , testDecoding "DEL character" ["\DEL"] [T.EvKey (T.KChar '\DEL') []]
   , testGroup "Unicode characters"
-    [ testDecoding "\208\128" ["\208\128"] [T.EvKey (T.KChar '\1024') []]
-    , testDecoding "\x2603" ["\226\152\131"] [T.EvKey (T.KChar '\x2603') []]
-    , testDecoding "\x2603 (with delay 1)" ["\226","","\152\131"] [T.EvKey (T.KChar '\x2603') []]
-    , testDecoding "\x2603 (with delay 2)" ["\226\152", "", "\131"] [T.EvKey (T.KChar '\x2603') []]
+    [ testDecoding "two byte character" ["\208\128"] [T.EvKey (T.KChar '\1024') []]
+    , testDecoding "three byte character" ["\226\152\131"] [T.EvKey (T.KChar '\x2603') []]
+    , testDecoding "three byte character (with delay 1)" ["\226","","\152\131"] [T.EvKey (T.KChar '\x2603') []]
+    , testDecoding "three byte character (with delay 2)" ["\226\152", "", "\131"] [T.EvKey (T.KChar '\x2603') []]
     , testGroup "Illegal sequences"
       [ testDecoding "sequence [0b10000000]" [BS.pack [0b10000000]] [T.EvKey (T.KChar '�') []]
       , testDecoding "sequence [0b10000101]" [BS.pack [0b10000000]] [T.EvKey (T.KChar '�') []]

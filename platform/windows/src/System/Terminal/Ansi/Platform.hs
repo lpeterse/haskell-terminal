@@ -8,6 +8,7 @@ import           Control.Concurrent            (ThreadId, myThreadId,
 import           Control.Concurrent.Async      (async, cancel, withAsync)
 import           Control.Concurrent.STM.TChan  (TChan, newTChanIO, readTChan,
                                                 writeTChan)
+import           Control.Concurrent.STM.TMVar
 import           Control.Concurrent.STM.TVar   (TVar, newTVarIO, readTVar,
                                                 swapTVar, writeTVar)
 import qualified Control.Exception             as E
@@ -32,11 +33,13 @@ withTerminal hIn hOut action = withTerminalInput $ withTerminalOutput $ do
   interruptFlag <- liftIO (newTVarIO False)
   eventChan <- liftIO newTChanIO
   screenSize <- liftIO (newTVarIO =<< getScreenSize)
+  cursorPosition <- liftIO newEmptyTMVarIO
   withResizeMonitoring screenSize eventChan $
-    withInputProcessing mainThreadId interruptFlag eventChan $ action $ T.TermEnv {
-        T.envInput        = readTChan eventChan
-      , T.envInterrupt    = swapTVar interruptFlag False >>= check
-      , T.envScreenSize   = readTVar screenSize
+    withInputProcessing mainThreadId interruptFlag cursorPosition eventChan $ action $ T.TermEnv {
+        T.envInput          = readTChan eventChan
+      , T.envInterrupt      = swapTVar interruptFlag False >>= check
+      , T.envScreenSize     = readTVar screenSize
+      , T.envCursorPosition = takeTMVar cursorPosition
       }
   where
     withTerminalInput = bracket
@@ -55,8 +58,8 @@ withTerminal hIn hOut action = withTerminalInput $ withTerminalOutput $ do
     -- The solution is to send this specific escape sequence which asks
     -- the terminal to report its device attributes. This incoming event
     -- unblocks the input processing thread which then dies immediately.
-    withInputProcessing mainThreadId interruptFlag eventChan = bracket
-      (liftIO $ async $ processInput mainThreadId interruptFlag eventChan)
+    withInputProcessing mainThreadId interruptFlag cursorPosition eventChan = bracket
+      (liftIO $ async $ processInput mainThreadId interruptFlag cursorPosition eventChan)
       (\a-> liftIO $ withAsync trigger $ const $ cancel a) . const
       where
         trigger = do
@@ -75,8 +78,8 @@ withTerminal hIn hOut action = withTerminalInput $ withTerminalOutput $ do
             writeTVar screenSize new
             writeTChan eventChan $ T.EvResize new
 
-processInput :: ThreadId -> TVar Bool -> TChan T.Event -> IO ()
-processInput mainThreadId interruptFlag chan = flip evalStateT BS.empty $ forever $ do
+processInput :: ThreadId -> TVar Bool -> TMVar (Int, Int) -> TChan T.Event -> IO ()
+processInput mainThreadId interruptFlag cursorPosition chan = flip evalStateT BS.empty $ forever $ do
   event <- T.decodeAnsi
   -- In virtual terminal mode, Windows actually sends Ctrl+C and there is no
   -- way a non-responsive application can be killed from keyboard.
@@ -87,9 +90,15 @@ processInput mainThreadId interruptFlag chan = flip evalStateT BS.empty $ foreve
   -- an asynchronous `E.UserInterrupt` exception is thrown to the main thread
   -- and either terminates the application or at least the current computation.
   when (event == T.EvKey (T.KChar 'C') [T.MCtrl]) $ liftIO $ do
-      unhandledInterrupt <- atomically (swapTVar interruptFlag True)
-      when unhandledInterrupt (E.throwTo mainThreadId E.UserInterrupt)
-  liftIO $ atomically (writeTChan chan $ mapEvent event)
+    unhandledInterrupt <- atomically (swapTVar interruptFlag True)
+    when unhandledInterrupt (E.throwTo mainThreadId E.UserInterrupt)
+  liftIO $ case event of
+    -- A cursor position report shall be put into the designated TMVar.
+    -- An old value (if any) is overwritten.
+    T.EvCursorPosition pos ->
+      atomically $ putTMVar cursorPosition pos `orElse` void (swapTMVar cursorPosition pos)
+    _ ->
+      atomically $ writeTChan chan $ mapEvent event
   where
     mapEvent (T.EvKey (T.KChar 'M') [T.MCtrl]) = T.EvKey T.KEnter []
     mapEvent (T.EvKey (T.KChar '\DEL') [])     = T.EvKey (T.KBackspace 1) []

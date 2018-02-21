@@ -32,9 +32,10 @@ import qualified Control.Monad.Terminal.Modes  as T
 
 data TermEnv
   = TermEnv
-  { envInput      :: STM T.Event
-  , envInterrupt  :: STM ()
-  , envScreenSize :: STM (Int,Int)
+  { envInput          :: STM T.Event
+  , envInterrupt      :: STM ()
+  , envScreenSize     :: STM (Int,Int)
+  , envCursorPosition :: STM (Int,Int)
   }
 
 class Monad m => MonadInput m where

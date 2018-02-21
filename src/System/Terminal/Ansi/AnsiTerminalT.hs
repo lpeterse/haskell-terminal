@@ -282,10 +282,8 @@ instance (MonadIO m, MonadThrow m) => T.MonadScreen (AnsiTerminalT m) where
   getCursorPosition     = do
     env <- AnsiTerminalT $ fst <$> lift ask
     write OutAskCursorPosition
-    fix $ \loop-> T.getEvent >>= \case
-      T.EvCursorPosition xy -> pure xy
-      T.EvKey (T.KChar 'C') [T.MCtrl] -> throwM E.UserInterrupt
-      _                     -> loop
+    T.flush
+    liftIO $ atomically $ T.envCursorPosition env
 
 data Output
    = OutIsolate
