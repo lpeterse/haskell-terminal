@@ -99,6 +99,7 @@ instance (T.MonadScreen m) => T.MonadScreen (ReplT s m) where
   cursorVisible = lift . T.cursorVisible
   getScreenSize = lift T.getScreenSize
   getCursorPosition = lift T.getCursorPosition
+  setLineWrap = lift . T.setLineWrap
 
 instance (T.MonadEvent m) => T.MonadEvent (ReplT s m) where
   withEventSTM = lift . T.withEventSTM
@@ -129,6 +130,7 @@ instance T.MonadTerminal m => MonadRepl (ReplT s m) where
     prompt <- ReplT $ replPrompt <$> get
     prompt
     lift $ T.setDefault
+    lift $ T.setLineWrap False
     lift $ T.flush
     withStacks [] []
     where

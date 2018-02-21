@@ -25,6 +25,7 @@ import           Foreign.Storable              (peek)
 import           System.IO
 
 import qualified Control.Monad.Terminal.Events as T
+import qualified System.Terminal.Ansi.FFI      as T
 import qualified System.Terminal.Ansi.Internal as T
 
 withTerminal :: (MonadIO m, MonadMask m) => Handle -> Handle -> (T.TermEnv -> m a) -> m a
@@ -79,6 +80,14 @@ withTerminal hIn hOut action = withTerminalInput $ withTerminalOutput $ do
             writeTChan eventChan $ T.EvResize new
 
 processInput :: ThreadId -> TVar Bool -> TMVar (Int, Int) -> TChan T.Event -> IO ()
+processInput mainThreadId interruptFlag cursorPosition chan = forever $ do
+  liftIO T.getConsoleInputRecord >>= \case
+    Nothing -> pure ()
+    Just x  -> liftIO $ do
+      print x
+      atomically $ writeTChan chan (T.EvResize (1,2))
+
+{-
 processInput mainThreadId interruptFlag cursorPosition chan = flip evalStateT BS.empty $ forever $ do
   event <- T.decodeAnsi
   -- In virtual terminal mode, Windows actually sends Ctrl+C and there is no
@@ -95,14 +104,16 @@ processInput mainThreadId interruptFlag cursorPosition chan = flip evalStateT BS
   liftIO $ case event of
     -- A cursor position report shall be put into the designated TMVar.
     -- An old value (if any) is overwritten.
-    T.EvCursorPosition pos ->
-      atomically $ putTMVar cursorPosition pos `orElse` void (swapTMVar cursorPosition pos)
-    _ ->
-      atomically $ writeTChan chan $ mapEvent event
+    T.EvCursorPosition pos -> atomically $ do
+      putTMVar cursorPosition pos `orElse` void (swapTMVar cursorPosition pos)
+      writeTChan chan $ mapEvent event
+    _ -> atomically $ do
+      writeTChan chan $ mapEvent event
   where
     mapEvent (T.EvKey (T.KChar 'M') [T.MCtrl]) = T.EvKey T.KEnter []
     mapEvent (T.EvKey (T.KChar '\DEL') [])     = T.EvKey (T.KBackspace 1) []
     mapEvent ev                                = ev
+-}
 
 getScreenSize :: IO (Int,Int)
 getScreenSize =

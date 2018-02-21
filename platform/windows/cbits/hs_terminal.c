@@ -95,3 +95,17 @@ int hs_get_console_winsize(int *rows, int *cols) {
     *cols = csbi.srWindow.Right - csbi.srWindow.Left + 1;
     return 0;
 }
+
+int hs_read_console_input(INPUT_RECORD *record) {
+    HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
+    INPUT_RECORD irInBuf[1];
+    DWORD recordsRead = 0; 
+
+    if (!ReadConsoleInputW(h, record, 1, &recordsRead)) {
+        return -1;
+    }
+    if (!recordsRead) {
+        return -1;
+    }
+    return 0;
+}

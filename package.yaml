@@ -38,6 +38,7 @@ library:
   other-modules:
     - System.Terminal.Ansi.AnsiTerminalT
     - System.Terminal.Ansi.Platform
+    - System.Terminal.Ansi.FFI
   source-dirs: src
   when:
     - condition: os(windows)

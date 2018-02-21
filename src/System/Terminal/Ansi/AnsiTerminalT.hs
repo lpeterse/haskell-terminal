@@ -71,7 +71,7 @@ hRunAnsiTerminalT hIn hOut (AnsiTerminalT ma) = T.withTerminal hIn hOut $ \env->
     runAction = runReaderT (runReaderT ma 0)
 
     runOutput :: STM (Int, Output) -> IO ()
-    runOutput getOutput = run (defaultTerminalStateAttributes, [])
+    runOutput getOutput = run (defaultTerminalStateAttributes, []) `E.finally` print "OUTPUT DIED"
       where
         run :: (TerminalStateAttributes, [(Int, TerminalStateAttributes)]) -> IO ()
         run st = atomically getOutput >>= \(i,o)-> case o of
@@ -97,6 +97,7 @@ hRunAnsiTerminalT hIn hOut (AnsiTerminalT ma) = T.withTerminal hIn hOut $ \env->
           OutCursorPosition x y -> isolate2 i (cursorPosition x y)
           OutCursorVisible    b -> isolate3 i (cursorVisible b) (\a-> a { tsCursorVisible = b})
           OutAskCursorPosition  -> isolate2 i askCursorPosition
+          OutSetLineWrap      b -> isolate2 i (setLineWrap b)
           where
             isolate1 i     = isolate True  i st >>= run
             isolate2 i m   = isolate False i st >>= \st-> m >> run st
@@ -196,6 +197,8 @@ hRunAnsiTerminalT hIn hOut (AnsiTerminalT ma) = T.withTerminal hIn hOut $ \env->
         cursorVisible                             False = IO.putStr "\ESC[?25l"
         cursorVisible                              True = IO.putStr "\ESC[?25h"
         askCursorPosition                               = IO.putStr "\ESC[6n"
+        setLineWrap                               False = IO.putStr "\ESC[7l"
+        setLineWrap                                True = IO.putStr "\ESC[7h"
 
         safeN :: Int -> Int
         safeN n
@@ -284,6 +287,7 @@ instance (MonadIO m, MonadThrow m) => T.MonadScreen (AnsiTerminalT m) where
     write OutAskCursorPosition
     T.flush
     liftIO $ atomically $ T.envCursorPosition env
+  setLineWrap           = write . OutSetLineWrap
 
 data Output
    = OutIsolate
@@ -308,6 +312,7 @@ data Output
    | OutCursorBackward Int
    | OutCursorPosition Int Int
    | OutCursorVisible  Bool
+   | OutSetLineWrap    Bool
 
 write :: (MonadIO m, MonadThrow m) => Output -> AnsiTerminalT m ()
 write output = AnsiTerminalT $ do
