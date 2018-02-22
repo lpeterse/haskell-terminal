@@ -20,13 +20,15 @@ import           Control.Monad.Trans.State
 import qualified Data.ByteString               as BS
 import           Foreign.C.Types
 import           Foreign.Marshal.Alloc         (alloca)
-import           Foreign.Ptr                   (Ptr)
-import           Foreign.Storable              (peek)
+import           Foreign.Ptr                   (Ptr, plusPtr, castPtr)
+import           Foreign.Storable
 import           System.IO
+import           Data.Bits
 
 import qualified Control.Monad.Terminal.Events as T
-import qualified System.Terminal.Ansi.FFI      as T
 import qualified System.Terminal.Ansi.Internal as T
+
+#include "hs_terminal.h"
 
 withTerminal :: (MonadIO m, MonadMask m) => Handle -> Handle -> (T.TermEnv -> m a) -> m a
 withTerminal hIn hOut action = withTerminalInput $ withTerminalOutput $ do
@@ -81,7 +83,7 @@ withTerminal hIn hOut action = withTerminalInput $ withTerminalOutput $ do
 
 processInput :: ThreadId -> TVar Bool -> TMVar (Int, Int) -> TChan T.Event -> IO ()
 processInput mainThreadId interruptFlag cursorPosition chan = forever $ do
-  liftIO T.getConsoleInputRecord >>= \case
+  liftIO getConsoleInputEvent >>= \case
     Nothing -> pure ()
     Just x  -> liftIO $ do
       print x
@@ -139,3 +141,78 @@ foreign import ccall unsafe "hs_set_console_output_mode"
 
 foreign import ccall unsafe "hs_get_console_winsize"
   unsafeGetConsoleWindowSize :: Ptr CInt -> Ptr CInt -> IO CInt
+
+newtype ControlKeyState = ControlKeyState CULong deriving (Eq,Ord,Show)
+
+data ConsoleInputEvent
+  = KeyEvent
+    { ceKeyDown            :: Bool
+    , ceKeyRepeatCount     :: Int
+    , ceKeyChar            :: Char
+    , ceKeyControlKeyState :: ControlKeyState
+    }
+  | MouseEvent
+  | FocusEvent
+  | WindowBufferSizeEvent
+  | UnknownEventRecord CUShort
+  deriving (Eq, Ord, Show)
+
+-- See https://msdn.microsoft.com/en-us/library/windows/desktop/aa383751(v=vs.85).aspx
+instance Storable ConsoleInputEvent where
+  sizeOf    _ = (#size struct _INPUT_RECORD)
+  alignment _ = (#alignment struct _INPUT_RECORD)
+  peek ptr    = peekEventType >>= \case
+    (#const KEY_EVENT) -> KeyEvent
+      <$> (peek ptrKeyDown >>= \case { 0-> pure False; _-> pure True; })
+      <*> (fromIntegral <$> peek ptrKeyRepeatCount)
+      <*> (toEnum . fromIntegral <$> peek ptrKeyUnicodeChar)
+      <*> (ControlKeyState <$> peek ptrKeyControlKeyState)
+    (#const MOUSE_EVENT) -> pure MouseEvent
+    (#const FOCUS_EVENT) -> pure FocusEvent
+    (#const WINDOW_BUFFER_SIZE_EVENT) -> pure WindowBufferSizeEvent
+    evt -> pure (UnknownEventRecord evt)
+    where
+      peekEventType         = (#peek struct _INPUT_RECORD, EventType) ptr :: IO CUShort
+      ptrEvent              = castPtr $ (#ptr struct _INPUT_RECORD, Event) ptr :: Ptr a
+      ptrKeyDown            = (#ptr struct _KEY_EVENT_RECORD, bKeyDown) ptrEvent :: Ptr CInt
+      ptrKeyRepeatCount     = (#ptr struct _KEY_EVENT_RECORD, wRepeatCount) ptrEvent :: Ptr CUShort
+      ptrKeyUnicodeChar     = (#ptr struct _KEY_EVENT_RECORD, uChar) ptrEvent :: Ptr CWchar
+      ptrKeyControlKeyState = (#ptr struct _KEY_EVENT_RECORD, dwControlKeyState) ptrEvent :: Ptr CULong
+  poke = undefined
+
+foreign import ccall unsafe "hs_read_console_input"
+  unsafeReadConsoleInput :: Ptr ConsoleInputEvent -> IO CInt
+
+getConsoleInputEvent :: IO (Maybe ConsoleInputEvent)
+getConsoleInputEvent =
+  alloca $ \ptr->
+    unsafeReadConsoleInput ptr >>= \case
+      0 -> Just <$> peek ptr
+      _ -> pure Nothing
+
+isCapsLockOn :: ControlKeyState -> Bool
+isCapsLockOn (ControlKeyState x) = x .&. (#const CAPSLOCK_ON) /= 0
+
+isEnhancedKey :: ControlKeyState -> Bool
+isEnhancedKey (ControlKeyState x) = x .&. (#const ENHANCED_KEY) /= 0
+
+isLeftAltPressed :: ControlKeyState -> Bool
+isLeftAltPressed (ControlKeyState x) = x .&. (#const LEFT_ALT_PRESSED) /= 0
+
+isLeftCtrlPressed :: ControlKeyState -> Bool
+isLeftCtrlPressed (ControlKeyState x) = x .&. (#const LEFT_CTRL_PRESSED) /= 0
+
+isNumLockOn :: ControlKeyState -> Bool
+isNumLockOn (ControlKeyState x) = x .&. (#const NUMLOCK_ON) /= 0
+
+isRightAltPressed :: ControlKeyState -> Bool
+isRightAltPressed (ControlKeyState x) = x .&. (#const RIGHT_ALT_PRESSED) /= 0
+
+isRightCtrlPressed :: ControlKeyState -> Bool
+isRightCtrlPressed (ControlKeyState x) = x .&. (#const RIGHT_CTRL_PRESSED) /= 0
+
+isScrollLockOn :: ControlKeyState -> Bool
+isScrollLockOn (ControlKeyState x) = x .&. (#const SCROLLLOCK_ON) /= 0
+
+isShiftPressed :: ControlKeyState -> Bool
+isShiftPressed (ControlKeyState x) = x .&. (#const SHIFT_PRESSED) /= 0

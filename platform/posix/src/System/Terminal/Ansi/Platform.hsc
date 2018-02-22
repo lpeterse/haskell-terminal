@@ -3,6 +3,7 @@ module System.Terminal.Ansi.Platform
   ( withTerminal
   ) where
 
+import Data.Maybe
 import           Control.Concurrent
 import qualified Control.Concurrent.Async      as A
 import           Control.Concurrent.STM.TChan
@@ -31,8 +32,11 @@ import qualified System.Posix.Signals.Exts     as Posix
 import qualified Control.Monad.Terminal.Events as T
 import qualified System.Terminal.Ansi.Internal as T
 
+#include "hs_terminal.h"
+
 withTerminal :: (MonadIO m, MonadMask m) => IO.Handle -> IO.Handle -> (T.TermEnv -> m a) -> m a
 withTerminal hIn hOut action = do
+  liftIO $ getTermios >>= print
   mainThreadId <- liftIO myThreadId
   eventChan <- liftIO newTChanIO
   screenSize <- liftIO (newTVarIO =<< hGetWindowSize hIn)
@@ -45,6 +49,7 @@ withTerminal hIn hOut action = do
               T.envInput      = readTChan eventChan
             , T.envInterrupt  = sigInt
             , T.envScreenSize = readTVar screenSize
+            , T.envCursorPosition = retry
             }
 
 withHookedInterruptSignal :: (MonadIO m, MonadMask m) => ThreadId -> (TChan T.Event) -> (STM () -> m a) -> m a
@@ -91,12 +96,24 @@ hWithInputProcessing h eventChan = bracket
   ( liftIO $ A.async run )
   ( liftIO . A.cancel ) . const
   where
-    run = flip evalStateT BS.empty $ forever $
-            liftIO . atomically . writeTChan eventChan =<< mapEvent <$> T.decodeAnsi
+    run = do 
+      termios <- getTermios
+      flip evalStateT BS.empty $ forever $
+            liftIO . atomically . writeTChan eventChan =<< mapEvent termios <$> T.decodeAnsi
 
-    mapEvent (T.EvKey (T.KChar '\DEL') [])     = T.EvKey (T.KBackspace 1) []
-    mapEvent (T.EvKey (T.KChar 'J') [T.MCtrl]) = T.EvKey T.KEnter []
-    mapEvent ev                                = ev
+    mapEvent termios ev@(T.EvKey (T.KChar c) [])
+      | c == '\NUL'                = T.EvKey T.KNull []
+      | c == termiosVINTR  termios = T.EvKey (T.KChar 'C')  [T.MCtrl]
+      | c == termiosVEOF   termios = T.EvKey (T.KChar 'D')  [T.MCtrl]
+      | c == termiosVKILL  termios = T.EvKey (T.KChar 'U')  [T.MCtrl]
+      | c == termiosVQUIT  termios = T.EvKey (T.KChar '\\') [T.MCtrl]
+      | c == termiosVERASE termios = T.EvKey T.KErase []
+      | c == '\DEL'                = T.EvKey T.KDelete []
+      | c == '\b'                  = T.EvKey T.KDelete []
+      | c == '\n'                  = T.EvKey T.KEnter []
+      | c  < ' '                   = T.EvKey (T.KChar $ toEnum $ 64 + fromEnum c) [T.MCtrl]
+      | otherwise                  = ev
+    mapEvent termios ev            = ev
 
 hGetWindowSize :: IO.Handle -> IO (Int, Int)
 hGetWindowSize h = do
@@ -111,3 +128,48 @@ hGetWindowSize h = do
 
 foreign import ccall unsafe "hs_get_winsize"
   unsafeGetWindowSize :: CInt -> Ptr Word16 -> Ptr Word16 -> IO Int
+
+foreign import ccall unsafe "tcgetattr"
+  unsafeGetTermios :: CInt -> Ptr Termios -> IO CInt
+
+getTermios :: IO Termios
+getTermios = 
+  alloca $ \ptr->
+    unsafeGetTermios 0 ptr >>= \case
+      0 -> peek ptr
+      _ -> pure defaultTermios
+
+data Termios
+  = Termios
+  { termiosVEOF   :: !Char
+  , termiosVERASE :: !Char
+  , termiosVINTR  :: !Char
+  , termiosVKILL  :: !Char
+  , termiosVQUIT  :: !Char
+  } deriving (Eq, Ord, Show)
+
+defaultTermios :: Termios
+defaultTermios = Termios
+  { termiosVEOF   = '\EOT'
+  , termiosVERASE = '\DEL'
+  , termiosVINTR  = '\ETX'
+  , termiosVKILL  = '\NAK'
+  , termiosVQUIT  = '\FS'
+  }
+
+instance Storable Termios where
+  sizeOf    _ = (#size struct termios)
+  alignment _ = (#alignment struct termios)
+  peek ptr    = Termios
+    <$> (toEnum . fromIntegral <$> peekVEOF)
+    <*> (toEnum . fromIntegral <$> peekVERASE)
+    <*> (toEnum . fromIntegral <$> peekVINTR)
+    <*> (toEnum . fromIntegral <$> peekVKILL)
+    <*> (toEnum . fromIntegral <$> peekVQUIT)
+    where
+      peekVEOF       = (#peek struct termios, c_cc[VEOF])   ptr :: IO CUChar
+      peekVERASE     = (#peek struct termios, c_cc[VERASE]) ptr :: IO CUChar
+      peekVINTR      = (#peek struct termios, c_cc[VINTR])  ptr :: IO CUChar
+      peekVKILL      = (#peek struct termios, c_cc[VKILL])  ptr :: IO CUChar
+      peekVQUIT      = (#peek struct termios, c_cc[VQUIT])  ptr :: IO CUChar
+  poke = undefined

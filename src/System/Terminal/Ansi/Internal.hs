@@ -69,20 +69,11 @@ decodeAnsi = decode1 =<< getNext
     decode1 :: MonadInput m => Word8 -> m T.Event
     decode1 x
       -- The first 31 values are control codes.
-      -- They are mapped as lower case letter + MCtrl modifier.
-      | x ==  0   = pure $ T.EvKey T.KNull  []
-      | x <= 26   = pure $ T.EvKey (T.KChar $ toEnum $ 64 + fromIntegral x) [T.MCtrl]
-      -- The escape control code might or might not introduce an escape sequencT.
-      -- `decodeEscape` handles this by analysing the timing.
+      -- The escape character _might_ introduce an escape sequence and has to be treated
+      -- specifically. All other characters lower or equal 127 stay untouched.
+      -- Characters greater 127 are multi-byte unicode characters.
       | x == 27   = decodeEscape
-      -- The next 4 are '\\', ']', '^' and '-'.
-      -- They have a different offset as they are above the upper case letters.
-      | x == 28   = pure $ T.EvKey (T.KChar '\\') [T.MCtrl]
-      | x == 29   = pure $ T.EvKey (T.KChar ']')  [T.MCtrl]
-      | x == 30   = pure $ T.EvKey (T.KChar '^')  [T.MCtrl]
-      | x == 31   = pure $ T.EvKey (T.KChar '_')  [T.MCtrl]
-      -- All following values are printable except 127 which is interpreted as backspace (terminal dependant!)
-      | x == 127  = pure $ T.EvKey (T.KChar '\DEL') []
+      | x <= 127  = pure $ T.EvKey (T.KChar $ toEnum $ fromIntegral x) []
       | otherwise = flip T.EvKey [] . T.KChar <$> decodeUtf8Sequence x
 
     decodeEscape :: MonadInput m => m T.Event
@@ -90,7 +81,7 @@ decodeAnsi = decode1 =<< getNext
       Nothing -> do
         wait -- a single escape can only be distinguished by timing
         getNextNonBlock >>= \case
-          Nothing -> pure $ T.EvKey (T.KChar '[') [T.MCtrl]
+          Nothing -> pure $ T.EvKey (T.KChar '\ESC') []
           Just x  -> decodeEscapeSequence x
       Just x  -> decodeEscapeSequence x
 
@@ -165,9 +156,9 @@ decodeAnsi = decode1 =<< getNext
 
     decodeCSI :: (MonadInput m) => Word8 -> m T.Event
     decodeCSI y = withParams1 y $ \ps-> \case
-      27         -> pure $ T.EvKey (T.KChar '[') [T.MAlt]          -- urxvt
+      27         -> pure $ T.EvKey (T.KChar '[') [T.MAlt]             -- urxvt
       36         -> pure $ T.EvKey T.KDelete [T.MAlt, T.MShift]       -- urxvt, gnome-terminal
-      64 {- @ -} -> withN 1 ps $ \n-> pure $ T.EvKey (T.KSpace  n) [] -- in urxvt shift+ctrl+pageup/down causes n==5/6
+      64 {- @ -} -> undefined -- withN 1 ps $ \n-> pure $ T.EvKey (T.KSpace  n) [] -- in urxvt shift+ctrl+pageup/down causes n==5/6
       65 {- A -} -> decodeArrowKey ps T.KUp
       66 {- B -} -> decodeArrowKey ps T.KDown
       67 {- C -} -> decodeArrowKey ps T.KRight
@@ -193,7 +184,7 @@ decodeAnsi = decode1 =<< getNext
       87 {- W -} -> undefined
       88 {- X -} -> undefined
       89 {- Y -} -> undefined
-      90 {- Z -} -> withN 1 ps $ \n-> pure $ T.EvKey (T.KBackTab n) []
+      90 {- Z -} -> withN 1 ps $ \n-> pure $ T.EvKey (T.KBacktab n) []
       94  -> case ps of
         [    50] {-    -} -> pure $ T.EvKey T.KInsert   [T.MCtrl]
         [    51] {-  3 -} -> pure $ T.EvKey T.KDelete   [T.MCtrl]

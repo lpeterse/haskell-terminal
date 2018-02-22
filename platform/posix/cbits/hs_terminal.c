@@ -1,5 +1,6 @@
 #include <sys/ioctl.h>
 #include <stdio.h>
+#include <termios.h>
 
 int hs_get_winsize(int fd, unsigned short *rows, unsigned short *cols) {
 

@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 538f6b7c9e644ab97719f5527efa08f9adc5f86d570069e8092ee8fb1308f258
+-- hash: 32d72d4ba00ec0a81890a54e6a5f0b9a3d139cc150dd47123342c16c481f5fde
 
 name:           terminal
 version:        0.1.0.0
@@ -67,7 +67,6 @@ library
   other-modules:
       System.Terminal.Ansi.AnsiTerminalT
       System.Terminal.Ansi.Platform
-      System.Terminal.Ansi.FFI
   default-language: Haskell2010
 
 executable repl-demo

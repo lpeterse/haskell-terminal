@@ -147,7 +147,7 @@ instance T.MonadTerminal m => MonadRepl (ReplT s m) where
           lift $ T.putLn
           lift $ T.flush
           pure $ Just $ reverse xss ++ yss
-        T.EvKey (T.KBackspace 1) [] -> case xss of
+        T.EvKey T.KErase [] -> case xss of
           []     -> withStacks xss yss
           (x:xs) -> do
             lift $ T.cursorBackward 1

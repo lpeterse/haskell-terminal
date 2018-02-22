@@ -3,15 +3,14 @@ module Control.Monad.Terminal.Events where
 import           Data.ByteString
 
 data Key
-  = KChar Char
-  | KDelete
+  = KNull
+  | KChar Char
   | KEnter
-  | KSpace Int
-  | KBackspace Int
+  | KErase
+  | KDelete
   | KEsc
-  | KNull
   | KTab Int
-  | KBackTab Int
+  | KBacktab Int
   | KLeft Int | KRight Int | KUp Int | KDown Int
   | KUpLeft | KUpRight | KDownLeft | KDownRight | KCenter
   | KFun Int | KPrtScr | KPause | KInsert
