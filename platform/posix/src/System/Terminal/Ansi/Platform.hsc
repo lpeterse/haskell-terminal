@@ -34,6 +34,26 @@ import qualified System.Terminal.Ansi.Internal as T
 
 #include "hs_terminal.h"
 
+instance MonadInput (StateT BS.ByteString IO) where
+  getNext = do
+    st <- get
+    case BS.uncons st of
+      Just (b,bs) -> put bs >> pure b
+      Nothing -> do
+        ccs <- liftIO $ BS.hGetSome IO.stdin 1024
+        put (BS.tail ccs)
+        pure (BS.head ccs)
+  getNextNonBlock = do
+    st <- get
+    case BS.uncons st of
+      Just (b,bs) -> put bs >> pure (Just b)
+      Nothing -> do
+        ccs <- liftIO $ BS.hGetNonBlocking IO.stdin 1024
+        case BS.uncons ccs of
+          Just (c,cs) -> put cs >> pure (Just c)
+          Nothing     -> pure Nothing
+  wait = liftIO $ threadDelay 100000
+
 withTerminal :: (MonadIO m, MonadMask m) => IO.Handle -> IO.Handle -> (T.TermEnv -> m a) -> m a
 withTerminal hIn hOut action = do
   liftIO $ getTermios >>= print

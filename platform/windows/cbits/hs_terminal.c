@@ -52,8 +52,9 @@ int hs_set_console_input_mode(int mode) {
     newMode = mode & ENABLE_LINE_INPUT             ? newMode | ENABLE_LINE_INPUT             : newMode & ~ENABLE_LINE_INPUT;
     newMode = mode & ENABLE_ECHO_INPUT             ? newMode | ENABLE_ECHO_INPUT             : newMode & ~ENABLE_ECHO_INPUT;
     newMode = mode & ENABLE_VIRTUAL_TERMINAL_INPUT ? newMode | ENABLE_VIRTUAL_TERMINAL_INPUT : newMode & ~ENABLE_VIRTUAL_TERMINAL_INPUT;
+    newMode = mode & ~ENABLE_QUICK_EDIT_MODE;
 
-    if (!SetConsoleMode(h, newMode)) {
+    if (!SetConsoleMode(h, newMode | ENABLE_MOUSE_INPUT | ENABLE_WINDOW_INPUT | ENABLE_EXTENDED_FLAGS )) {
         return -1;
     }
 

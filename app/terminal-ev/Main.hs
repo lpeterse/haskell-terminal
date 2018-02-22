@@ -14,4 +14,6 @@ main = T.runAnsiTerminalT $ forever $ do
   ev <- T.getEvent
   T.putStringLn (show ev)
   T.flush
-  when (ev == T.EvKey (T.KChar 'C') [T.MCtrl]) (liftIO exitSuccess)
+  when (ev == T.EvKey (T.KChar 'C') [T.MCtrl]) (liftIO exitFailure)
+  when (ev == T.EvKey (T.KChar 'D') [T.MCtrl]) (liftIO exitSuccess)
+

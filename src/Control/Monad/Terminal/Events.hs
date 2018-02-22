@@ -15,21 +15,17 @@ data Key
   | KUpLeft | KUpRight | KDownLeft | KDownRight | KCenter
   | KFun Int | KPrtScr | KPause | KInsert
   | KHome | KPageUp | KEnd | KPageDown | KBegin | KMenu
-  deriving (Eq,Show,Read,Ord)
+  deriving (Eq,Ord,Show)
 
 data Signal
   = Interrupt
-  deriving (Eq, Ord, Read, Show)
+  deriving (Eq,Ord,Show)
 
 -- | Modifier keys. Key codes are interpreted such that users are more
 -- likely to have Meta than Alt; for instance on the PC Linux console,
 -- 'MMeta' will generally correspond to the physical Alt key.
 data Modifier = MShift | MCtrl | MMeta | MAlt
-  deriving (Eq,Show,Read,Ord)
-
--- | Mouse buttons.
-data Button = BLeft | BMiddle | BRight | BScrollUp | BScrollDown
-  deriving (Eq,Show,Read,Ord)
+  deriving (Eq,Ord,Show)
 
 -- | Events.
 data Event
@@ -38,7 +34,7 @@ data Event
   | EvMouseDown Int Int Button [Modifier]
   -- ^ A mouse button was pressed at the specified column and row. Any
   -- modifiers available in the event are also provided.
-  | EvMouseUp Int Int (Maybe Button)
+  | MouseEvent MouseEvent
   -- ^ A mouse button was released at the specified column and
   -- row. Some terminals report only that a button was released
   -- without specifying which one; in that case, Nothing is provided.
@@ -56,9 +52,33 @@ data Event
   -- input (which is probably bad, so beware!) Note that the data is
   -- provided in raw form and you'll have to decode (e.g. as UTF-8) if
   -- that's what your application expects.
-  | EvLostFocus
-  -- ^ The terminal running the application lost input focus.
-  | EvGainedFocus
+  | FocusEvent
   -- ^ The terminal running the application gained input focus.
   | EvCursorPosition (Int,Int)
-  deriving (Eq,Show,Read,Ord)
+  | EvUnknownSequence String
+  deriving (Eq,Ord,Show)
+
+data MouseEvent
+  = MouseMoved          (Int,Int)
+  | MouseButtonPressed  (Int,Int) Button
+  | MouseButtonReleased (Int,Int)
+  | MouseWheeled        (Int,Int) Direction
+  deriving (Eq,Ord,Show)
+
+data Button
+  = LeftButton
+  | RightButton
+  | OtherButton
+  deriving (Eq,Ord,Show)
+
+data Click
+  = SingleClick
+  | DoubleClick
+  deriving (Eq,Ord,Show)
+
+data Direction
+  = Up
+  | Down
+  | Left
+  | Right
+  deriving (Eq,Ord,Show)

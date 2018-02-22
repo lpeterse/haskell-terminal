@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase, GeneralizedNewtypeDeriving #-}
 module System.Terminal.Ansi.Platform
   ( withTerminal
   ) where
@@ -12,6 +12,7 @@ import           Control.Concurrent.STM.TMVar
 import           Control.Concurrent.STM.TVar   (TVar, newTVarIO, readTVar,
                                                 swapTVar, writeTVar)
 import qualified Control.Exception             as E
+import Control.Monad.Trans.Reader
 import           Control.Monad                 (forever, void, when)
 import           Control.Monad.Catch           (MonadMask, bracket)
 import           Control.Monad.IO.Class        (MonadIO, liftIO)
@@ -23,6 +24,7 @@ import           Foreign.Marshal.Alloc         (alloca)
 import           Foreign.Ptr                   (Ptr, plusPtr, castPtr)
 import           Foreign.Storable
 import           System.IO
+import qualified System.IO.Error as IO
 import           Data.Bits
 
 import qualified Control.Monad.Terminal.Events as T
@@ -82,40 +84,56 @@ withTerminal hIn hOut action = withTerminalInput $ withTerminalOutput $ do
             writeTChan eventChan $ T.EvResize new
 
 processInput :: ThreadId -> TVar Bool -> TMVar (Int, Int) -> TChan T.Event -> IO ()
-processInput mainThreadId interruptFlag cursorPosition chan = forever $ do
-  liftIO getConsoleInputEvent >>= \case
-    Nothing -> pure ()
-    Just x  -> liftIO $ do
-      print x
-      atomically $ writeTChan chan (T.EvResize (1,2))
-
-{-
-processInput mainThreadId interruptFlag cursorPosition chan = flip evalStateT BS.empty $ forever $ do
-  event <- T.decodeAnsi
-  -- In virtual terminal mode, Windows actually sends Ctrl+C and there is no
-  -- way a non-responsive application can be killed from keyboard.
-  -- The solution is to catch this specific event and swap an STM interrupt flag.
-  -- If the old value is found to be True then it must at least be the second
-  -- time the user has pressed Ctrl+C _and_ the application was to busy to
-  -- to reset the interrupt flag in the meantime. In this specific case
-  -- an asynchronous `E.UserInterrupt` exception is thrown to the main thread
-  -- and either terminates the application or at least the current computation.
-  when (event == T.EvKey (T.KChar 'C') [T.MCtrl]) $ liftIO $ do
-    unhandledInterrupt <- atomically (swapTVar interruptFlag True)
-    when unhandledInterrupt (E.throwTo mainThreadId E.UserInterrupt)
-  liftIO $ case event of
-    -- A cursor position report shall be put into the designated TMVar.
-    -- An old value (if any) is overwritten.
-    T.EvCursorPosition pos -> atomically $ do
-      putTMVar cursorPosition pos `orElse` void (swapTMVar cursorPosition pos)
-      writeTChan chan $ mapEvent event
-    _ -> atomically $ do
-      writeTChan chan $ mapEvent event
+processInput mainThreadId interruptFlag cursorPosition chan = do
+  chars <- newEmptyTMVarIO
+  withAsync (runAnsiDecoder chars) $ \_-> forever $ do
+    getConsoleInputEvent >>= \case
+      KeyEvent { ceKeyChar = c, ceKeyDown = d }
+        | d && c /= '\NUL' -> atomically $ putTMVar chars c
+        | otherwise        -> pure ()
+      MouseEvent mev -> atomically $ writeTChan chan $ T.MouseEvent mev
+      FocusEvent {} -> atomically $ writeTChan chan T.FocusEvent
+      WindowBufferSizeEvent {} -> pure ()
+      UnknownEvent x -> atomically $ writeTChan chan (T.EvUnknownSequence $ "unknown console input event" ++ show x)
   where
-    mapEvent (T.EvKey (T.KChar 'M') [T.MCtrl]) = T.EvKey T.KEnter []
-    mapEvent (T.EvKey (T.KChar '\DEL') [])     = T.EvKey (T.KBackspace 1) []
-    mapEvent ev                                = ev
--}
+    runAnsiDecoder :: TMVar Char -> IO ()
+    runAnsiDecoder = runReaderT ma 
+      where
+        CharStreamM ma = forever $ do
+          event <- mapEvent <$> T.decodeAnsi
+          CharStreamM $ liftIO $ atomically $ writeTChan chan event
+          -- In virtual terminal mode, Windows actually sends Ctrl+C and there is no
+          -- way a non-responsive application can be killed from keyboard.
+          -- The solution is to catch this specific event and swap an STM interrupt flag.
+          -- If the old value is found to be True then it must at least be the second
+          -- time the user has pressed Ctrl+C _and_ the application was to busy to
+          -- to reset the interrupt flag in the meantime. In this specific case
+          -- an asynchronous `E.UserInterrupt` exception is thrown to the main thread
+          -- and either terminates the application or at least the current computation.
+          when (event == T.EvKey (T.KChar 'C') [T.MCtrl]) $ CharStreamM $ liftIO $ do
+            unhandledInterrupt <- atomically (swapTVar interruptFlag True)
+            when unhandledInterrupt (E.throwTo mainThreadId E.UserInterrupt)
+
+    mapEvent :: T.Event -> T.Event
+    mapEvent ev@(T.EvKey (T.KChar c) [])
+      | c == '\r'                  = T.EvKey T.KEnter []
+      | c == '\DEL'                = T.EvKey T.KErase []
+      | c  < ' '                   = T.EvKey (T.KChar $ toEnum $ 64 + fromEnum c) [T.MCtrl]
+      | otherwise                  = ev
+    mapEvent ev                    = ev
+
+newtype CharStreamM a = CharStreamM (ReaderT (TMVar Char) IO a)
+  deriving (Functor, Applicative, Monad)
+
+instance T.MonadInput CharStreamM where
+  getNext = CharStreamM $ do
+    tmvar <- ask
+    liftIO $ atomically $ takeTMVar tmvar
+  getNextNonBlock = CharStreamM $ do
+    tmvar <- ask
+    liftIO $ atomically $ tryTakeTMVar tmvar
+  wait = CharStreamM $
+    liftIO (threadDelay 50000)
 
 getScreenSize :: IO (Int,Int)
 getScreenSize =
@@ -151,10 +169,10 @@ data ConsoleInputEvent
     , ceKeyChar            :: Char
     , ceKeyControlKeyState :: ControlKeyState
     }
-  | MouseEvent
+  | MouseEvent T.MouseEvent
   | FocusEvent
   | WindowBufferSizeEvent
-  | UnknownEventRecord CUShort
+  | UnknownEvent CUShort
   deriving (Eq, Ord, Show)
 
 -- See https://msdn.microsoft.com/en-us/library/windows/desktop/aa383751(v=vs.85).aspx
@@ -167,10 +185,23 @@ instance Storable ConsoleInputEvent where
       <*> (fromIntegral <$> peek ptrKeyRepeatCount)
       <*> (toEnum . fromIntegral <$> peek ptrKeyUnicodeChar)
       <*> (ControlKeyState <$> peek ptrKeyControlKeyState)
-    (#const MOUSE_EVENT) -> pure MouseEvent
+    (#const MOUSE_EVENT) -> MouseEvent <$> do
+      pos <- peek ptrMousePositionX >>= \x-> peek ptrMousePositionY >>= \y-> pure (fromIntegral x, fromIntegral y)
+      btn <- peek ptrMouseButtonState
+      peek ptrMouseEventFlags >>= \case
+        (#const MOUSE_MOVED)    -> pure $ T.MouseMoved pos
+        (#const MOUSE_WHEELED)  -> pure $ T.MouseWheeled pos $ if btn > 0 then T.Up    else T.Down
+        (#const MOUSE_HWHEELED) -> pure $ T.MouseWheeled pos $ if btn > 0 then T.Right else T.Left 
+        _ -> case btn of
+          (#const FROM_LEFT_1ST_BUTTON_PRESSED) -> pure $ T.MouseButtonPressed  pos T.LeftButton
+          (#const FROM_LEFT_2ND_BUTTON_PRESSED) -> pure $ T.MouseButtonPressed  pos T.OtherButton
+          (#const FROM_LEFT_3RD_BUTTON_PRESSED) -> pure $ T.MouseButtonPressed  pos T.OtherButton
+          (#const FROM_LEFT_4TH_BUTTON_PRESSED) -> pure $ T.MouseButtonPressed  pos T.OtherButton
+          (#const RIGHTMOST_BUTTON_PRESSED)     -> pure $ T.MouseButtonPressed  pos T.RightButton
+          _                                     -> pure $ T.MouseButtonReleased pos
     (#const FOCUS_EVENT) -> pure FocusEvent
     (#const WINDOW_BUFFER_SIZE_EVENT) -> pure WindowBufferSizeEvent
-    evt -> pure (UnknownEventRecord evt)
+    evt -> pure (UnknownEvent evt)
     where
       peekEventType         = (#peek struct _INPUT_RECORD, EventType) ptr :: IO CUShort
       ptrEvent              = castPtr $ (#ptr struct _INPUT_RECORD, Event) ptr :: Ptr a
@@ -178,17 +209,22 @@ instance Storable ConsoleInputEvent where
       ptrKeyRepeatCount     = (#ptr struct _KEY_EVENT_RECORD, wRepeatCount) ptrEvent :: Ptr CUShort
       ptrKeyUnicodeChar     = (#ptr struct _KEY_EVENT_RECORD, uChar) ptrEvent :: Ptr CWchar
       ptrKeyControlKeyState = (#ptr struct _KEY_EVENT_RECORD, dwControlKeyState) ptrEvent :: Ptr CULong
+      ptrMousePosition      = (#ptr struct _MOUSE_EVENT_RECORD, dwMousePosition) ptrEvent :: Ptr a
+      ptrMousePositionX     = (#ptr struct _COORD, X) ptrMousePosition :: Ptr CShort
+      ptrMousePositionY     = (#ptr struct _COORD, Y) ptrMousePosition :: Ptr CShort
+      ptrMouseEventFlags    = (#ptr struct _MOUSE_EVENT_RECORD, dwEventFlags) ptrEvent :: Ptr CULong
+      ptrMouseButtonState   = (#ptr struct _MOUSE_EVENT_RECORD, dwButtonState) ptrEvent :: Ptr CULong
   poke = undefined
 
 foreign import ccall unsafe "hs_read_console_input"
   unsafeReadConsoleInput :: Ptr ConsoleInputEvent -> IO CInt
 
-getConsoleInputEvent :: IO (Maybe ConsoleInputEvent)
+getConsoleInputEvent :: IO ConsoleInputEvent
 getConsoleInputEvent =
   alloca $ \ptr->
     unsafeReadConsoleInput ptr >>= \case
-      0 -> Just <$> peek ptr
-      _ -> pure Nothing
+      0 -> peek ptr
+      _ -> E.throwIO (IO.userError "getConsoleInputEvent: error reading console events")
 
 isCapsLockOn :: ControlKeyState -> Bool
 isCapsLockOn (ControlKeyState x) = x .&. (#const CAPSLOCK_ON) /= 0
