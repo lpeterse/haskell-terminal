@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 2f021e46e24c0f7267b6ab53579f0ce6f9b1c8d01788a630460cfae40d891920
+-- hash: 9cd7c0c7e9ee58361168650a7554d7bb01bda633455f7e56d02bf541ef366e8c
 
 name:           terminal
 version:        0.1.0.0
@@ -64,7 +64,6 @@ library
       System.Terminal.Ansi.Internal
   other-modules:
       System.Terminal.Ansi.AnsiTerminalT
-      System.Terminal.Ansi.RemoteTerminalT
       System.Terminal.Ansi.Platform
   default-language: Haskell2010
 

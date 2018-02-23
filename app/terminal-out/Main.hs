@@ -18,7 +18,7 @@ import qualified Control.Monad.Terminal.Pretty as T
 import qualified System.Terminal.Ansi          as T
 
 main :: IO ()
-main = T.runAnsiTerminalT foo
+main = T.withStandardTerminal $ T.runAnsiTerminalT foo
 
 foo :: (T.MonadTerminal m, MonadIO m) => m ()
 foo = T.putDocLn doc >> T.flush

@@ -24,7 +24,7 @@ dependencies:
 - prettyprinter
 
 library:
-  ghc-options: -Werror 
+  ghc-options: -Werror
   #-fwarn-incomplete-patterns
   exposed-modules:
     - Control.Monad.Repl
@@ -37,7 +37,6 @@ library:
     - System.Terminal.Ansi.Internal
   other-modules:
     - System.Terminal.Ansi.AnsiTerminalT
-    - System.Terminal.Ansi.RemoteTerminalT
     - System.Terminal.Ansi.Platform
   source-dirs: src
   when:

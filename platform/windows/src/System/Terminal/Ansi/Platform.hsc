@@ -1,51 +1,59 @@
-{-# LANGUAGE LambdaCase, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase, OverloadedStrings, GeneralizedNewtypeDeriving #-}
 module System.Terminal.Ansi.Platform
-  ( withTerminal
+  ( withStandardTerminal
   ) where
 
-import           Control.Concurrent            (ThreadId, myThreadId,
-                                                threadDelay)
+import           Control.Concurrent            (ThreadId, myThreadId, threadDelay)
 import           Control.Concurrent.Async      (async, cancel, withAsync)
-import           Control.Concurrent.STM.TChan  (TChan, newTChanIO, readTChan,
-                                                writeTChan)
+import           Control.Concurrent.STM.TChan  (TChan, newTChanIO, readTChan, writeTChan)
 import           Control.Concurrent.STM.TMVar
-import           Control.Concurrent.STM.TVar   (TVar, newTVarIO, readTVar,
-                                                swapTVar, writeTVar)
-import qualified Control.Exception             as E
-import Control.Monad.Trans.Reader
+import           Control.Concurrent.STM.TVar   (TVar, newTVarIO, readTVar, swapTVar, writeTVar)
 import           Control.Monad                 (forever, void, when)
 import           Control.Monad.Catch           (MonadMask, bracket)
 import           Control.Monad.IO.Class        (MonadIO, liftIO)
 import           Control.Monad.STM             (STM, atomically, check, orElse)
+import           Control.Monad.Trans.Reader
 import           Control.Monad.Trans.State
-import qualified Data.ByteString               as BS
+import           Data.Bits
 import           Foreign.C.Types
 import           Foreign.Marshal.Alloc         (alloca)
 import           Foreign.Ptr                   (Ptr, plusPtr, castPtr)
 import           Foreign.Storable
-import           System.IO
-import qualified System.IO.Error as IO
-import           Data.Bits
+import qualified Control.Exception             as E
+import qualified Data.ByteString               as BS
+import qualified Data.Text.IO                  as Text
+import qualified System.IO                     as IO
+import qualified System.IO.Error               as IO
 
 import qualified Control.Monad.Terminal.Events as T
 import qualified System.Terminal.Ansi.Internal as T
 
 #include "hs_terminal.h"
 
-withTerminal :: (MonadIO m, MonadMask m) => (T.TermEnv -> m a) -> m a
-withTerminal action = withTerminalInput $ withTerminalOutput $ do
-  mainThreadId <- liftIO myThreadId
-  interruptFlag <- liftIO (newTVarIO False)
-  eventChan <- liftIO newTChanIO
-  screenSize <- liftIO (newTVarIO =<< getScreenSize)
+withStandardTerminal :: (MonadIO m, MonadMask m) => (T.TerminalEnv -> m a) -> m a
+withStandardTerminal action = withTerminalInput $ withTerminalOutput $ do
+  mainThreadId   <- liftIO myThreadId
+  interruptFlag  <- liftIO (newTVarIO False)
+  chars          <- liftIO newTChanIO
+  events         <- liftIO newTChanIO
+  output         <- liftIO newEmptyTMVarIO
+  outputFlush    <- liftIO newEmptyTMVarIO
+  screenSize     <- liftIO (newTVarIO =<< getScreenSize)
   cursorPosition <- liftIO newEmptyTMVarIO
-  withResizeMonitoring screenSize eventChan $
-    withInputProcessing mainThreadId interruptFlag cursorPosition eventChan $ action $ T.TermEnv {
-        T.envInput          = readTChan eventChan
-      , T.envInterrupt      = swapTVar interruptFlag False >>= check
-      , T.envScreenSize     = readTVar screenSize
-      , T.envCursorPosition = takeTMVar cursorPosition
-      }
+  withResizeMonitoring screenSize events $
+    withOutputProcessing mainThreadId output outputFlush $ 
+      withInputProcessing mainThreadId interruptFlag cursorPosition chars events $ action $
+        T.TerminalEnv {
+          T.envTermType       = "vt101"
+        , T.envInputChars     = readTChan  chars
+        , T.envInputEvents    = readTChan  events
+        , T.envOutput         = putTMVar   output
+        , T.envOutputFlush    = putTMVar   outputFlush ()
+        , T.envSpecialChars   = specialChars
+        --, T.envInterrupt      = swapTVar interruptFlag False >>= check
+        --, T.envScreenSize     = readTVar screenSize
+        --, T.envCursorPosition = takeTMVar cursorPosition
+        }
   where
     withTerminalInput = bracket
       ( liftIO getConsoleInputModeDesired >>= liftIO . setConsoleInputMode )
@@ -53,6 +61,14 @@ withTerminal action = withTerminalInput $ withTerminalOutput $ do
     withTerminalOutput = bracket
       ( liftIO getConsoleOutputModeDesired >>= liftIO . setConsoleOutputMode )
       ( liftIO . setConsoleOutputMode ) . const
+    withOutputProcessing mainThreadId output outputFlush = bracket
+      (liftIO $ async run)
+      (liftIO . cancel) . const
+      where
+        run = forever $ atomically ((Left <$> takeTMVar output) `orElse` (Right <$> takeTMVar outputFlush)) >>= \case
+            Left  t -> Text.putStr t
+            Right _ -> IO.hFlush IO.stdout
+
     -- The "\ESC[0" trick certainly requires some explanation:
     -- IO on Windows is blocking which means that a thread blocked
     -- on reading from a file descriptor cannot be killed/canceled
@@ -63,15 +79,15 @@ withTerminal action = withTerminalInput $ withTerminalOutput $ do
     -- The solution is to send this specific escape sequence which asks
     -- the terminal to report its device attributes. This incoming event
     -- unblocks the input processing thread which then dies immediately.
-    withInputProcessing mainThreadId interruptFlag cursorPosition eventChan = bracket
-      (liftIO $ async $ processInput mainThreadId interruptFlag cursorPosition eventChan)
+    withInputProcessing mainThreadId interruptFlag cursorPosition chars events = bracket
+      (liftIO $ async $ processInput mainThreadId interruptFlag cursorPosition chars events)
       (\a-> liftIO $ withAsync trigger $ const $ cancel a) . const
       where
         trigger = do
           threadDelay 100000 -- Yes, it's a race..
-          hPutStr stdout "\ESC[0c"
-          hFlush stdout
-    withResizeMonitoring screenSize eventChan = bracket
+          IO.hPutStr IO.stdout "\ESC[0c"
+          IO.hFlush  IO.stdout
+    withResizeMonitoring screenSize events = bracket
       (liftIO $ async monitor)
       (liftIO . cancel) . const
       where
@@ -81,21 +97,22 @@ withTerminal action = withTerminalInput $ withTerminalOutput $ do
           old <- atomically $ readTVar screenSize
           when (new /= old) $ atomically $ do
             writeTVar screenSize new
-            writeTChan eventChan $ T.EvResize new
+            writeTChan events $ T.EvResize new
 
-processInput :: ThreadId -> TVar Bool -> TMVar (Int, Int) -> TChan T.Event -> IO ()
-processInput mainThreadId interruptFlag cursorPosition chan = do
-  chars <- newEmptyTMVarIO
-  withAsync (runAnsiDecoder chars) $ \_-> forever $ do
-    getConsoleInputEvent >>= \case
-      KeyEvent { ceKeyChar = c, ceKeyDown = d }
-        | d && c /= '\NUL' -> atomically $ putTMVar chars c
-        | otherwise        -> pure ()
-      MouseEvent mev -> atomically $ writeTChan chan $ T.MouseEvent mev
-      FocusEvent {} -> atomically $ writeTChan chan T.FocusEvent
-      WindowBufferSizeEvent {} -> pure ()
-      UnknownEvent x -> atomically $ writeTChan chan (T.EvUnknownSequence $ "unknown console input event" ++ show x)
-  where
+processInput :: ThreadId -> TVar Bool -> TMVar (Int, Int) -> TChan Char -> TChan T.Event -> IO ()
+processInput mainThreadId interruptFlag cursorPosition chars events =
+  forever $ getConsoleInputEvent >>= \case
+    KeyEvent { ceKeyChar = c, ceKeyDown = d }
+      | c == '\NUL'          -> pure ()
+      | c == '\ESC' && not d -> atomically (writeTChan chars '\NUL')
+      |                    d -> atomically (writeTChan chars c)
+      | otherwise            -> pure ()
+    MouseEvent mev           -> atomically $ writeTChan events $ T.MouseEvent mev
+    FocusEvent {}            -> atomically $ writeTChan events T.FocusEvent
+    WindowBufferSizeEvent {} -> atomically $ writeTChan events $ T.EvResize (0,0)
+    UnknownEvent x           -> atomically $ writeTChan events (T.EvUnknownSequence $ "unknown console input event" ++ show x)
+
+{-
     runAnsiDecoder :: TMVar Char -> IO ()
     runAnsiDecoder = runReaderT ma 
       where
@@ -113,27 +130,13 @@ processInput mainThreadId interruptFlag cursorPosition chan = do
           when (event == T.EvKey (T.KChar 'C') [T.MCtrl]) $ CharStreamM $ liftIO $ do
             unhandledInterrupt <- atomically (swapTVar interruptFlag True)
             when unhandledInterrupt (E.throwTo mainThreadId E.UserInterrupt)
+-}
 
-    mapEvent :: T.Event -> T.Event
-    mapEvent ev@(T.EvKey (T.KChar c) [])
-      | c == '\r'                  = T.EvKey T.KEnter []
-      | c == '\DEL'                = T.EvKey T.KErase []
-      | c  < ' '                   = T.EvKey (T.KChar $ toEnum $ 64 + fromEnum c) [T.MCtrl]
-      | otherwise                  = ev
-    mapEvent ev                    = ev
-
-newtype CharStreamM a = CharStreamM (ReaderT (TMVar Char) IO a)
-  deriving (Functor, Applicative, Monad)
-
-instance T.MonadInput CharStreamM where
-  getNext = CharStreamM $ do
-    tmvar <- ask
-    liftIO $ atomically $ takeTMVar tmvar
-  getNextNonBlock = CharStreamM $ do
-    tmvar <- ask
-    liftIO $ atomically $ tryTakeTMVar tmvar
-  wait = CharStreamM $
-    liftIO (threadDelay 50000)
+specialChars :: Char -> Maybe T.Event
+specialChars = \case
+  '\r'    -> Just $ T.EvKey T.KEnter []
+  '\DEL'  -> Just $ T.EvKey T.KErase []
+  _       -> Nothing
 
 getScreenSize :: IO (Int,Int)
 getScreenSize =

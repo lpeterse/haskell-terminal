@@ -30,23 +30,23 @@ import qualified System.IO                     as IO
 import qualified Control.Monad.Terminal.Events as T
 import qualified Control.Monad.Terminal.Modes  as T
 
-data TermEnv
-  = TermEnv
-  { envInput          :: STM T.Event
-  , envInterrupt      :: STM ()
-  , envScreenSize     :: STM (Int,Int)
-  , envCursorPosition :: STM (Int,Int)
+data TerminalEnv
+  = TerminalEnv
+  { envTermType     :: BS.ByteString
+  , envInputChars   :: STM Char
+  , envInputEvents  :: STM T.Event
+  , envOutput       :: Text.Text -> STM ()
+  , envOutputFlush  :: STM ()
+  , envSpecialChars :: Char -> Maybe T.Event
   }
 
 class Monad m => MonadInput m where
   getNext         :: m Char
   getNextNonBlock :: m (Maybe Char)
-  wait            :: m ()
 
 instance MonadInput (ReaderT (STM Char) STM) where
   getNext = ask >>= lift
   getNextNonBlock = ask >>= \mc-> lift ((Just <$> mc) `orElse` pure Nothing)
-  wait = ask >>= \mc-> lift (fmap (=='\NUL') mc >>= check)
 
 decodeAnsi :: MonadInput m => m T.Event
 decodeAnsi = decode1 =<< getNext
@@ -61,18 +61,15 @@ decodeAnsi = decode1 =<< getNext
       | otherwise   = pure $ T.EvKey (T.KChar c) []
 
     decodeEscape :: MonadInput m => m T.Event
-    decodeEscape = getNextNonBlock >>= \case
-      Nothing -> do
-        wait -- a single escape can only be distinguished by timing
-        getNextNonBlock >>= \case
-          Nothing -> pure $ T.EvKey (T.KChar '\ESC') []
-          Just x  -> decodeEscapeSequence x
-      Just x  -> decodeEscapeSequence x
+    decodeEscape = getNext >>= \case
+      '\NUL' -> pure $ T.EvKey (T.KChar '\ESC') [] -- a single escape is always followed by a filling NUL character (instead of timing)
+      x      -> decodeEscapeSequence x
 
     decodeEscapeSequence :: (MonadInput m) => Char -> m T.Event
     decodeEscapeSequence x
       | x >= '\SOH' && x <= '\EM' = pure $ T.EvKey (T.KChar $ toEnum $ 64 + fromEnum x) [T.MCtrl, T.MAlt] -- urxvt
       | x == '\ESC' = getNext >>= \case
+          '\NUL' -> pure $ T.EvUnknownSequence "FNORD"
           '0' -> getNext >>= \case -- seems to just add MAlt to all sequences
             'a' -> pure $ T.EvKey (T.KUp    1) [T.MCtrl, T.MAlt] -- urxvt
             'b' -> pure $ T.EvKey (T.KDown  1) [T.MCtrl, T.MAlt] -- urxvt
@@ -123,9 +120,9 @@ decodeAnsi = decode1 =<< getNext
                         'c' -> pure $ T.EvKey (T.KRight 1) [T.MCtrl] -- urxvt
                         'd' -> pure $ T.EvKey (T.KLeft  1) [T.MCtrl] -- urxvt
                         xs  -> error (show xs)
-      | x == '['   = wait >> getNextNonBlock >>= \case
-                       Nothing -> pure $ T.EvKey (T.KChar '[') [T.MAlt] -- urxvt, gnome-terminal
-                       Just y  -> decodeCSI y
+      | x == '['   = getNext >>= \case
+                        '\NUL' -> pure $ T.EvKey (T.KChar '[') [T.MAlt] -- urxvt, gnome-terminal
+                        y      -> decodeCSI y
       | x == '\\'   = pure $ T.EvKey (T.KChar '\\') [T.MAlt] -- urxvt, gnome-terminal
       | x == ']'    = pure $ T.EvKey (T.KChar ']')  [T.MAlt] -- urxvt, gnome-terminal
       | x == '^'    = pure $ T.EvKey (T.KChar '6')  [T.MAlt, T.MShift] -- urxvt, gnome-terminal

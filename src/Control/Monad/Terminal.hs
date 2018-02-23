@@ -13,7 +13,7 @@ import qualified Control.Monad.Terminal.Color  as T
 import qualified Control.Monad.Terminal.Events as T
 import qualified Control.Monad.Terminal.Modes  as T
 
-class (MonadEvent m, MonadIsolate m, MonadColorPrinter m, MonadScreen m) => MonadTerminal m where
+class (MonadEvent m, MonadColorPrinter m, MonadScreen m) => MonadTerminal m where
 
 class MonadIO m => MonadEvent m where
   withEventSTM :: (STM T.Event -> STM a) -> m a
@@ -23,9 +23,6 @@ getEvent      = withEventSTM id
 
 tryGetEvent  :: MonadEvent m => m (Maybe T.Event)
 tryGetEvent   = withEventSTM $ \e-> (Just <$> e) `orElse` pure Nothing
-
-class Monad m => MonadIsolate m where
-  isolate            :: m a -> m a
 
 class Monad m => MonadPrinter m where
   putLn              :: m ()

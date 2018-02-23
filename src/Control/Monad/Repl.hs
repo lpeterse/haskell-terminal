@@ -74,13 +74,6 @@ instance (T.MonadPrinter m) => T.MonadPrinter (ReplT s m) where
   putTextLn = lift . T.putTextLn
   flush = lift T.flush
 
-instance (T.MonadIsolate m) => T.MonadIsolate (ReplT s m) where
-  isolate (ReplT sma) = ReplT $ do
-    s1 <- get
-    (a,s2) <- lift $ T.isolate $ runStateT sma s1
-    put s2
-    pure a
-
 instance (T.MonadColorPrinter m) => T.MonadColorPrinter (ReplT s m) where
   setDefault = lift T.setDefault
   setForeground = lift . T.setForeground
@@ -113,7 +106,7 @@ execReplT (ReplT ma) s = replUserState <$> execStateT loop (replTStateDefault s)
       True  -> pure ()
     protected = catch ma $ \e-> do
       if e == E.UserInterrupt then
-        lift (T.isolate $ T.setBold True >> T.setForeground T.red >> T.putStringLn "Interrupted.")
+        lift (T.setBold True >> T.setForeground T.red >> T.putStringLn "Interrupted." >> T.setDefault)
       else
         throwM e
 

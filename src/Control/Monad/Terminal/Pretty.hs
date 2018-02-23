@@ -47,11 +47,11 @@ data TermStyle
   | TermBold
   deriving (Eq, Ord, Show)
 
-putDocLn :: (T.MonadColorPrinter m, T.MonadIsolate m) => TermDoc -> m ()
+putDocLn :: (T.MonadColorPrinter m) => TermDoc -> m ()
 putDocLn doc = putDoc $ doc <> PP.hardline
 
-putDoc :: (T.MonadColorPrinter m, T.MonadIsolate m) => TermDoc -> m ()
-putDoc doc = T.isolate $ do
+putDoc :: (T.MonadColorPrinter m) => TermDoc -> m ()
+putDoc doc = do
   T.setDefault
   render [] sdoc >> T.flush
   where
