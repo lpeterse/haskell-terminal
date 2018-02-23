@@ -37,6 +37,7 @@ library:
     - System.Terminal.Ansi.Internal
   other-modules:
     - System.Terminal.Ansi.AnsiTerminalT
+    - System.Terminal.Ansi.RemoteTerminalT
     - System.Terminal.Ansi.Platform
   source-dirs: src
   when:

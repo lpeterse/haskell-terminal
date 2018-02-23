@@ -53,8 +53,8 @@ class MonadPrinter m => MonadColorPrinter m where
   --   * underline
   --   * italic
   setDefault  :: m ()
-  setForegroundColor :: T.Color -> m ()
-  setBackgroundColor :: T.Color -> m ()
+  setForeground :: T.Color -> m ()
+  setBackground :: T.Color -> m ()
   setUnderline :: Bool -> m ()
   setNegative :: Bool -> m ()
   setBold :: Bool -> m ()
@@ -69,4 +69,3 @@ class MonadPrinter m => MonadScreen m where
   cursorVisible :: Bool -> m ()
   getScreenSize :: m (Int,Int)
   getCursorPosition :: m (Int,Int)
-  setLineWrap :: Bool -> m ()

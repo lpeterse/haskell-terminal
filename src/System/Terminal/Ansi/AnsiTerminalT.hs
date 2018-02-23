@@ -94,7 +94,6 @@ runAnsiTerminalT (AnsiTerminalT ma) = T.withTerminal $ \env-> do
           OutCursorPosition x y -> isolate2 i (cursorPosition x y)
           OutCursorVisible    b -> isolate3 i (cursorVisible b) (\a-> a { tsCursorVisible = b})
           OutAskCursorPosition  -> isolate2 i askCursorPosition
-          OutSetLineWrap      b -> isolate2 i (setLineWrap b)
           where
             isolate1 i     = isolate True  i st >>= run
             isolate2 i m   = isolate False i st >>= \st-> m >> run st
@@ -194,8 +193,6 @@ runAnsiTerminalT (AnsiTerminalT ma) = T.withTerminal $ \env-> do
         cursorVisible                             False = IO.putStr "\ESC[?25l"
         cursorVisible                              True = IO.putStr "\ESC[?25h"
         askCursorPosition                               = IO.putStr "\ESC[6n"
-        setLineWrap                               False = IO.putStr "\ESC[7l"
-        setLineWrap                                True = IO.putStr "\ESC[7h"
 
         safeN :: Int -> Int
         safeN n
@@ -262,8 +259,8 @@ instance (MonadIO m, MonadThrow m) => T.MonadPrinter (AnsiTerminalT m) where
 
 instance (MonadIO m, MonadThrow m) => T.MonadColorPrinter (AnsiTerminalT m) where
   setDefault            = write   OutSetDefault
-  setForegroundColor    = write . OutSetForeground
-  setBackgroundColor    = write . OutSetBackground
+  setForeground         = write . OutSetForeground
+  setBackground         = write . OutSetBackground
   setUnderline          = write . OutSetUnderline
   setBold               = write . OutSetBold
   setNegative           = write . OutSetNegative
@@ -284,7 +281,6 @@ instance (MonadIO m, MonadThrow m) => T.MonadScreen (AnsiTerminalT m) where
     write OutAskCursorPosition
     T.flush
     liftIO $ atomically $ T.envCursorPosition env
-  setLineWrap           = write . OutSetLineWrap
 
 data Output
    = OutIsolate
@@ -309,7 +305,6 @@ data Output
    | OutCursorBackward Int
    | OutCursorPosition Int Int
    | OutCursorVisible  Bool
-   | OutSetLineWrap    Bool
 
 write :: (MonadIO m, MonadThrow m) => Output -> AnsiTerminalT m ()
 write output = AnsiTerminalT $ do

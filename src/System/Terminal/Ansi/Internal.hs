@@ -43,6 +43,11 @@ class Monad m => MonadInput m where
   getNextNonBlock :: m (Maybe Char)
   wait            :: m ()
 
+instance MonadInput (ReaderT (STM Char) STM) where
+  getNext = ask >>= lift
+  getNextNonBlock = ask >>= \mc-> lift ((Just <$> mc) `orElse` pure Nothing)
+  wait = ask >>= \mc-> lift (fmap (=='\NUL') mc >>= check)
+
 decodeAnsi :: MonadInput m => m T.Event
 decodeAnsi = decode1 =<< getNext
   where

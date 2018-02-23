@@ -83,8 +83,8 @@ instance (T.MonadIsolate m) => T.MonadIsolate (ReplT s m) where
 
 instance (T.MonadColorPrinter m) => T.MonadColorPrinter (ReplT s m) where
   setDefault = lift T.setDefault
-  setForegroundColor = lift . T.setForegroundColor
-  setBackgroundColor = lift . T.setBackgroundColor
+  setForeground = lift . T.setForeground
+  setBackground = lift . T.setBackground
   setUnderline = lift . T.setUnderline
   setNegative = lift . T.setNegative
   setBold = lift . T.setBold
@@ -99,7 +99,6 @@ instance (T.MonadScreen m) => T.MonadScreen (ReplT s m) where
   cursorVisible = lift . T.cursorVisible
   getScreenSize = lift T.getScreenSize
   getCursorPosition = lift T.getCursorPosition
-  setLineWrap = lift . T.setLineWrap
 
 instance (T.MonadEvent m) => T.MonadEvent (ReplT s m) where
   withEventSTM = lift . T.withEventSTM
@@ -114,7 +113,7 @@ execReplT (ReplT ma) s = replUserState <$> execStateT loop (replTStateDefault s)
       True  -> pure ()
     protected = catch ma $ \e-> do
       if e == E.UserInterrupt then
-        lift (T.isolate $ T.setBold True >> T.setForegroundColor T.red >> T.putStringLn "Interrupted.")
+        lift (T.isolate $ T.setBold True >> T.setForeground T.red >> T.putStringLn "Interrupted.")
       else
         throwM e
 
@@ -130,7 +129,6 @@ instance T.MonadTerminal m => MonadRepl (ReplT s m) where
     prompt <- ReplT $ replPrompt <$> get
     prompt
     lift $ T.setDefault
-    lift $ T.setLineWrap False
     lift $ T.flush
     withStacks [] []
     where

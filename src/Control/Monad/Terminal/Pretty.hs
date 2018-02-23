@@ -65,15 +65,15 @@ putDoc doc = T.isolate $ do
       PP.SText _ t ss    -> T.putText t >> render anns ss
       PP.SLine n ss      -> T.putLn >> T.putText (Text.replicate n " ") >> render anns ss
       PP.SAnnPush ann ss -> case ann of
-        TermForeground c -> T.setForegroundColor c >> render (ann:anns) ss
-        TermBackground c -> T.setBackgroundColor c >> render (ann:anns) ss
+        TermForeground c -> T.setForeground c >> render (ann:anns) ss
+        TermBackground c -> T.setBackground c >> render (ann:anns) ss
         TermInverted     -> T.setNegative True     >> render (ann:anns) ss
         TermUnderlined   -> T.setUnderline True    >> render (ann:anns) ss
         TermBold         -> T.setBold True         >> render (ann:anns) ss
       PP.SAnnPop ss      -> case anns of
         []                       -> render [] ss
-        (TermForeground c:anns') -> T.setForegroundColor ColorDefault >> render anns' ss
-        (TermBackground c:anns') -> T.setBackgroundColor ColorDefault >> render anns' ss
+        (TermForeground c:anns') -> T.setForeground ColorDefault >> render anns' ss
+        (TermBackground c:anns') -> T.setBackground ColorDefault >> render anns' ss
         (TermInverted    :anns') -> T.setNegative False  >> render anns' ss
         (TermUnderlined  :anns') -> T.setUnderline False >> render anns' ss
         (TermBold        :anns') -> T.setBold False      >> render anns' ss
