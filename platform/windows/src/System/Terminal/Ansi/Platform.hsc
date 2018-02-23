@@ -32,8 +32,8 @@ import qualified System.Terminal.Ansi.Internal as T
 
 #include "hs_terminal.h"
 
-withTerminal :: (MonadIO m, MonadMask m) => Handle -> Handle -> (T.TermEnv -> m a) -> m a
-withTerminal hIn hOut action = withTerminalInput $ withTerminalOutput $ do
+withTerminal :: (MonadIO m, MonadMask m) => (T.TermEnv -> m a) -> m a
+withTerminal action = withTerminalInput $ withTerminalOutput $ do
   mainThreadId <- liftIO myThreadId
   interruptFlag <- liftIO (newTVarIO False)
   eventChan <- liftIO newTChanIO
@@ -69,8 +69,8 @@ withTerminal hIn hOut action = withTerminalInput $ withTerminalOutput $ do
       where
         trigger = do
           threadDelay 100000 -- Yes, it's a race..
-          hPutStr hOut "\ESC[0c"
-          hFlush hOut
+          hPutStr stdout "\ESC[0c"
+          hFlush stdout
     withResizeMonitoring screenSize eventChan = bracket
       (liftIO $ async monitor)
       (liftIO . cancel) . const

@@ -59,10 +59,7 @@ evalAnsiReplT :: AnsiReplT s IO () -> s -> IO ()
 evalAnsiReplT ma = void . execAnsiReplT ma
 
 runAnsiTerminalT :: AnsiTerminalT IO a -> IO a
-runAnsiTerminalT = hRunAnsiTerminalT IO.stdin IO.stdout
-
-hRunAnsiTerminalT :: IO.Handle -> IO.Handle -> AnsiTerminalT IO a -> IO a
-hRunAnsiTerminalT hIn hOut (AnsiTerminalT ma) = T.withTerminal hIn hOut $ \env-> do
+runAnsiTerminalT (AnsiTerminalT ma) = T.withTerminal $ \env-> do
   outputChan    <- newEmptyTMVarIO :: IO (TMVar (Int,Output))
   A.withAsync (runOutput $ takeTMVar outputChan) $ \outputThread->
     runAction (env, putTMVar outputChan)
@@ -71,7 +68,7 @@ hRunAnsiTerminalT hIn hOut (AnsiTerminalT ma) = T.withTerminal hIn hOut $ \env->
     runAction = runReaderT (runReaderT ma 0)
 
     runOutput :: STM (Int, Output) -> IO ()
-    runOutput getOutput = run (defaultTerminalStateAttributes, []) `E.finally` print "OUTPUT DIED"
+    runOutput getOutput = run (defaultTerminalStateAttributes, [])
       where
         run :: (TerminalStateAttributes, [(Int, TerminalStateAttributes)]) -> IO ()
         run st = atomically getOutput >>= \(i,o)-> case o of

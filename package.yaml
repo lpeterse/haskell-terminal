@@ -51,8 +51,6 @@ library:
       else:
         source-dirs:
           - platform/posix/src
-        dependencies:
-          - unix
         include-dirs:
           - platform/posix/include
         c-sources:

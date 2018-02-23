@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 32d72d4ba00ec0a81890a54e6a5f0b9a3d139cc150dd47123342c16c481f5fde
+-- hash: 9cd7c0c7e9ee58361168650a7554d7bb01bda633455f7e56d02bf541ef366e8c
 
 name:           terminal
 version:        0.1.0.0
@@ -53,8 +53,6 @@ library
         platform/posix/include
     c-sources:
         platform/posix/cbits/hs_terminal.c
-    build-depends:
-        unix
   exposed-modules:
       Control.Monad.Repl
       Control.Monad.Terminal

@@ -3,37 +3,38 @@ module System.Terminal.Ansi.Platform
   ( withTerminal
   ) where
 
-import Data.Maybe
 import           Control.Concurrent
 import qualified Control.Concurrent.Async      as A
 import           Control.Concurrent.STM.TChan
 import           Control.Concurrent.STM.TVar
 import qualified Control.Exception             as E
-import           Control.Monad                 (forever, when)
+import           Control.Monad                 (forever, when, void)
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
 import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Reader
 import           Control.Monad.Trans.State
+import           Data.Bits
 import qualified Data.ByteString               as BS
 import           Data.Word
 import           Foreign.C.Types
 import           Foreign.Marshal.Alloc
 import           Foreign.Ptr
 import           Foreign.Storable
-import qualified GHC.IO.FD                     as IO
-import qualified GHC.IO.Handle.FD              as IO
 import qualified System.IO                     as IO
+import qualified System.Exit as IO
 import qualified System.IO.Error               as IO
-import qualified System.Posix.Signals          as Posix
-import qualified System.Posix.Signals.Exts     as Posix
+import qualified GHC.Conc as Conc
+import qualified Data.Dynamic as Dyn
 
 import qualified Control.Monad.Terminal.Events as T
 import qualified System.Terminal.Ansi.Internal as T
 
+#include "Rts.h"
 #include "hs_terminal.h"
 
+{-
 instance MonadInput (StateT BS.ByteString IO) where
   getNext = do
     st <- get
@@ -53,73 +54,51 @@ instance MonadInput (StateT BS.ByteString IO) where
           Just (c,cs) -> put cs >> pure (Just c)
           Nothing     -> pure Nothing
   wait = liftIO $ threadDelay 100000
+-}
 
-withTerminal :: (MonadIO m, MonadMask m) => IO.Handle -> IO.Handle -> (T.TermEnv -> m a) -> m a
-withTerminal hIn hOut action = do
-  liftIO $ getTermios >>= print
+withTerminal :: (MonadIO m, MonadMask m) => (T.TermEnv -> m a) -> m a
+withTerminal action = do
   mainThreadId <- liftIO myThreadId
   eventChan <- liftIO newTChanIO
-  screenSize <- liftIO (newTVarIO =<< hGetWindowSize hIn)
-  hWithRawMode hIn $
-   hWithoutEcho hIn $
-    hWithHookedResizeSignal hIn eventChan $
-      hWithInputProcessing hIn eventChan $
-        withHookedInterruptSignal mainThreadId eventChan $
-          \sigInt-> action $ T.TermEnv {
-              T.envInput      = readTChan eventChan
-            , T.envInterrupt  = sigInt
-            , T.envScreenSize = readTVar screenSize
-            , T.envCursorPosition = retry
-            }
+  screenSize <- liftIO (newTVarIO =<< getWindowSize)
+  withTermiosSettings $ do
+    withResizeHandler (atomically . writeTChan eventChan . T.EvResize =<< getWindowSize) $
+      withInputProcessing eventChan $ action $ T.TermEnv {
+            T.envInput      = readTChan eventChan
+          , T.envInterrupt  = retry --
+          , T.envScreenSize = readTVar screenSize
+          , T.envCursorPosition = retry
+        }
 
-withHookedInterruptSignal :: (MonadIO m, MonadMask m) => ThreadId -> (TChan T.Event) -> (STM () -> m a) -> m a
-withHookedInterruptSignal mainThreadId eventChan action = do
-  sig <- liftIO (newTVarIO False)
-  bracket
-    (liftIO $ flip (Posix.installHandler Posix.sigINT) Nothing  $ Posix.Catch $ passInterrupt sig)
-    (liftIO . flip (Posix.installHandler Posix.sigINT) Nothing) $ const $ action $ resetInterrupt sig
+withTermiosSettings :: (MonadIO m, MonadMask m) => m a -> m a
+withTermiosSettings ma = bracket before after between
   where
-    passInterrupt sig = do
-      unhandledInterrupt <- atomically (swapTVar sig True)
-      when unhandledInterrupt $ do
-        E.throwTo mainThreadId E.UserInterrupt
-      atomically (writeTChan eventChan $ T.EvKey (T.KChar 'C') [T.MCtrl])
-    resetInterrupt sig = do
-      readTVar sig >>= check
-      writeTVar sig False
+    before  = liftIO (getTermios >>= \t-> setTermios t { termiosISIG = False, termiosICANON = False, termiosECHO = False } >> pure t)
+    after   = liftIO . setTermios
+    between = const ma
 
-hWithHookedResizeSignal :: (MonadIO m, MonadMask m) => IO.Handle -> (TChan T.Event) -> m a -> m a
-hWithHookedResizeSignal h eventChan action =
-  bracket
-    (liftIO $ flip (Posix.installHandler Posix.windowChange) Nothing  $ Posix.Catch pushEvent)
-    (liftIO . flip (Posix.installHandler Posix.windowChange) Nothing) $ const $ action
+withResizeHandler :: (MonadIO m, MonadMask m) => IO () -> m a -> m a
+withResizeHandler handler = bracket installHandler restoreHandler . const
   where
-    pushEvent = do
-      ev <- T.EvResize <$> hGetWindowSize h
-      atomically (writeTChan eventChan $ ev)
+    installHandler = liftIO $ do
+      Conc.ensureIOManagerIsRunning
+      oldHandler <- Conc.setHandler (#const SIGWINCH) (Just (const handler, Dyn.toDyn handler))
+      oldAction  <- stg_sig_install (#const SIGWINCH) (#const STG_SIG_HAN) nullPtr
+      pure (oldHandler,oldAction)
+    restoreHandler (oldHandler,oldAction) = liftIO $ do
+      void $ Conc.setHandler (#const SIGWINCH) oldHandler
+      void $ stg_sig_install (#const SIGWINCH) oldAction nullPtr
+      pure ()
 
-hWithoutEcho :: (MonadIO m, MonadMask m) => IO.Handle -> m a -> m a
-hWithoutEcho h = bracket
-  (liftIO $ IO.hGetEcho h >>= \x-> IO.hSetEcho h False >> pure x)
-  (liftIO . IO.hSetEcho h) . const
-
-hWithRawMode :: (MonadIO m, MonadMask m) => IO.Handle -> m a -> m a
-hWithRawMode h = bracket
-  (liftIO $ IO.hGetBuffering h >>= \b-> IO.hSetBuffering h IO.NoBuffering >> pure b)
-  (liftIO . IO.hSetBuffering h) . const
-
--- | ...
---
---   FIXME: `Handle` parameter is ignored right now and `IO.stdin` used instead.
-hWithInputProcessing ::  (MonadIO m, MonadMask m) => IO.Handle -> (TChan T.Event) -> m a -> m a
-hWithInputProcessing h eventChan = bracket
+withInputProcessing :: (MonadIO m, MonadMask m) => (TChan T.Event) -> m a -> m a
+withInputProcessing eventChan = bracket
   ( liftIO $ A.async run )
   ( liftIO . A.cancel ) . const
   where
     run = do 
       termios <- getTermios
       flip evalStateT BS.empty $ forever $
-            liftIO . atomically . writeTChan eventChan =<< mapEvent termios <$> T.decodeAnsi
+        liftIO . atomically . writeTChan eventChan =<< mapEvent termios <$> T.decodeAnsi
 
     mapEvent termios ev@(T.EvKey (T.KChar c) [])
       | c == '\NUL'                = T.EvKey T.KNull []
@@ -135,29 +114,36 @@ hWithInputProcessing h eventChan = bracket
       | otherwise                  = ev
     mapEvent termios ev            = ev
 
-hGetWindowSize :: IO.Handle -> IO (Int, Int)
-hGetWindowSize h = do
-  fd <- IO.handleToFd h
-  alloca $ \rowsPtr-> alloca $ \colsPtr->
-    unsafeGetWindowSize (IO.fdFD fd) rowsPtr colsPtr >>= \case
-      0 -> do
-        rows <- peek rowsPtr
-        cols <- peek colsPtr
-        pure (fromIntegral rows, fromIntegral cols)
-      _ -> pure (-1,-1)
-
-foreign import ccall unsafe "hs_get_winsize"
-  unsafeGetWindowSize :: CInt -> Ptr Word16 -> Ptr Word16 -> IO Int
-
-foreign import ccall unsafe "tcgetattr"
-  unsafeGetTermios :: CInt -> Ptr Termios -> IO CInt
+getWindowSize :: IO (Int, Int)
+getWindowSize =
+  alloca $ \ptr->
+    unsafeIOCtl 0 (#const TIOCGWINSZ) ptr >>= \case
+      0 -> peek ptr >>= \ws-> pure (fromIntegral $ wsRow ws, fromIntegral $ wsCol ws)
+      _ -> undefined
 
 getTermios :: IO Termios
 getTermios = 
   alloca $ \ptr->
     unsafeGetTermios 0 ptr >>= \case
       0 -> peek ptr
-      _ -> pure defaultTermios
+      _ -> undefined
+
+setTermios :: Termios -> IO ()
+setTermios t =
+  alloca $ \ptr->
+    unsafeGetTermios 0 ptr >>= \case
+      0 -> do 
+        poke ptr t
+        unsafeSetTermios 0 (#const TCSANOW) ptr >>= \case
+          0 -> pure ()
+          _ -> undefined
+      _ -> undefined
+
+data Winsize
+  = Winsize
+  { wsRow :: !CUShort
+  , wsCol :: !CUShort
+  } deriving (Eq, Ord, Show)
 
 data Termios
   = Termios
@@ -166,30 +152,68 @@ data Termios
   , termiosVINTR  :: !Char
   , termiosVKILL  :: !Char
   , termiosVQUIT  :: !Char
+  , termiosISIG   :: !Bool
+  , termiosICANON :: !Bool
+  , termiosECHO   :: !Bool
   } deriving (Eq, Ord, Show)
 
-defaultTermios :: Termios
-defaultTermios = Termios
-  { termiosVEOF   = '\EOT'
-  , termiosVERASE = '\DEL'
-  , termiosVINTR  = '\ETX'
-  , termiosVKILL  = '\NAK'
-  , termiosVQUIT  = '\FS'
-  }
+instance Storable Winsize where
+  sizeOf    _ = (#size struct winsize)
+  alignment _ = (#alignment struct winsize)
+  peek ptr    = Winsize
+    <$> (#peek struct winsize, ws_row) ptr
+    <*> (#peek struct winsize, ws_col) ptr
+  poke ptr ws = do
+    (#poke struct winsize, ws_row) ptr (wsRow ws)
+    (#poke struct winsize, ws_col) ptr (wsCol ws)
 
 instance Storable Termios where
   sizeOf    _ = (#size struct termios)
   alignment _ = (#alignment struct termios)
-  peek ptr    = Termios
-    <$> (toEnum . fromIntegral <$> peekVEOF)
-    <*> (toEnum . fromIntegral <$> peekVERASE)
-    <*> (toEnum . fromIntegral <$> peekVINTR)
-    <*> (toEnum . fromIntegral <$> peekVKILL)
-    <*> (toEnum . fromIntegral <$> peekVQUIT)
+  peek ptr    = do
+    lflag <- peekLFlag
+    Termios
+      <$> (toEnum . fromIntegral <$> peekVEOF)
+      <*> (toEnum . fromIntegral <$> peekVERASE)
+      <*> (toEnum . fromIntegral <$> peekVINTR)
+      <*> (toEnum . fromIntegral <$> peekVKILL)
+      <*> (toEnum . fromIntegral <$> peekVQUIT)
+      <*> pure (lflag .&. (#const ISIG)   /= 0)
+      <*> pure (lflag .&. (#const ICANON) /= 0)
+      <*> pure (lflag .&. (#const ECHO)   /= 0)
     where
       peekVEOF       = (#peek struct termios, c_cc[VEOF])   ptr :: IO CUChar
       peekVERASE     = (#peek struct termios, c_cc[VERASE]) ptr :: IO CUChar
       peekVINTR      = (#peek struct termios, c_cc[VINTR])  ptr :: IO CUChar
       peekVKILL      = (#peek struct termios, c_cc[VKILL])  ptr :: IO CUChar
       peekVQUIT      = (#peek struct termios, c_cc[VQUIT])  ptr :: IO CUChar
-  poke = undefined
+      peekLFlag      = (#peek struct termios, c_lflag)      ptr :: IO CUInt 
+  poke ptr termios = do
+    pokeVEOF   $ fromIntegral $ fromEnum $ termiosVEOF   termios
+    pokeVERASE $ fromIntegral $ fromEnum $ termiosVERASE termios
+    pokeVINTR  $ fromIntegral $ fromEnum $ termiosVINTR  termios
+    pokeVKILL  $ fromIntegral $ fromEnum $ termiosVKILL  termios
+    pokeVQUIT  $ fromIntegral $ fromEnum $ termiosVQUIT  termios
+    peekLFlag >>= \flag-> pokeLFlag (if termiosISIG   termios then flag .|. (#const ISIG)   else flag .&. complement (#const ISIG))
+    peekLFlag >>= \flag-> pokeLFlag (if termiosICANON termios then flag .|. (#const ICANON) else flag .&. complement (#const ICANON))
+    peekLFlag >>= \flag-> pokeLFlag (if termiosECHO   termios then flag .|. (#const ECHO)   else flag .&. complement (#const ECHO))
+    where
+      pokeVEOF       = (#poke struct termios, c_cc[VEOF])   ptr :: CUChar -> IO ()
+      pokeVERASE     = (#poke struct termios, c_cc[VERASE]) ptr :: CUChar -> IO ()
+      pokeVINTR      = (#poke struct termios, c_cc[VINTR])  ptr :: CUChar -> IO ()
+      pokeVKILL      = (#poke struct termios, c_cc[VKILL])  ptr :: CUChar -> IO ()
+      pokeVQUIT      = (#poke struct termios, c_cc[VQUIT])  ptr :: CUChar -> IO ()
+      pokeLFlag      = (#poke struct termios, c_lflag)      ptr :: CUInt -> IO ()
+      peekLFlag      = (#peek struct termios, c_lflag)      ptr :: IO CUInt
+
+foreign import ccall unsafe "tcgetattr"
+  unsafeGetTermios :: CInt -> Ptr Termios -> IO CInt
+
+foreign import ccall unsafe "tcsetattr"
+  unsafeSetTermios :: CInt -> CInt -> Ptr Termios -> IO CInt
+
+foreign import ccall unsafe "ioctl"
+  unsafeIOCtl :: CInt -> CInt -> Ptr a -> IO CInt
+
+foreign import ccall unsafe
+  stg_sig_install :: CInt -> CInt -> Ptr a -> IO CInt
