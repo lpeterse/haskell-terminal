@@ -111,15 +111,7 @@ int hs_read_console_input(INPUT_RECORD *record) {
     return 0;
 }
 
-int hs_wait_console_input(void) {
+DWORD hs_wait_console_input(DWORD timeoutMillis) {
     HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
-    switch (WaitForSingleObject(h, 100)) {
-        case WAIT_OBJECT_0:
-            return 0;
-        case WAIT_TIMEOUT:
-            return 1;
-        case WAIT_ABANDONED:
-        case WAIT_FAILED:
-            return -1;
-    }
+    return WaitForSingleObject(h, timeoutMillis);
 }

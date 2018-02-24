@@ -82,12 +82,21 @@ withStandardTerminal action = withTerminalInput $ withTerminalOutput $ do
 
 processInput :: ThreadId -> TVar Bool -> TVar Bool ->  TVar Bool -> TMVar (Int, Int) -> TChan Char -> TChan T.Event -> IO ()
 processInput mainThreadId terminate terminated interruptFlag cursorPosition chars events =
+  -- Synchronous exception will be rethrown to the main thread.
+  -- Asynchronous exceptions (apart from `E.AsyncException` thrown by the RTS) won't occur.
+  -- In all cases the thread finally writes `True` into the `terminated` variable.
   loop `E.catch` (\e-> E.throwTo mainThreadId (e:: E.SomeException)) `E.finally` atomically (writeTVar terminated True)
   where
-    (<<) a b = b >> a
+    timeoutMillis :: CULong
+    timeoutMillis = 100
+    loop :: IO ()
     loop = tryGetConsoleInputEvent >>= \case
+      -- `tryGetConsoleInputEvent` is a blocking system call. It cannot be interrupted, but
+      -- is guaranteed to return after at most 100ms. In this case it is checked whether
+      -- this thread shall either terminate or is allowed to continue.
+      -- This is cooperative multitasking to circumvent the limitations of IO on Windows.
       Nothing -> atomically (readTVar terminate) >>= \t-> unless t loop
-      Just ev -> loop << case ev of
+      Just ev -> (flip (>>)) loop $ case ev of
         KeyEvent { ceKeyChar = c, ceKeyDown = d }
           | c == '\NUL'          -> pure ()
           | c == '\ESC' && not d -> atomically (writeTChan chars '\NUL')
@@ -96,6 +105,17 @@ processInput mainThreadId terminate terminated interruptFlag cursorPosition char
         MouseEvent mev           -> atomically $ writeTChan events $ T.MouseEvent mev
         WindowEvent wev          -> atomically $ writeTChan events $ T.WindowEvent wev
         UnknownEvent x           -> atomically $ writeTChan events (T.EvUnknownSequence $ "unknown console input event" ++ show x)
+    -- Wait at most `timeoutMillis` for the handle to signal readyness.
+    -- Then either read one console event or return `Nothing`.
+    tryGetConsoleInputEvent :: IO (Maybe ConsoleInputEvent)
+    tryGetConsoleInputEvent =
+      unsafeWaitConsoleInput timeoutMillis >>= \case
+        (#const WAIT_TIMEOUT)  -> pure Nothing    -- Timeout occured.
+        (#const WAIT_OBJECT_0) -> alloca $ \ptr-> -- Handle signaled readyness.
+              unsafeReadConsoleInput ptr >>= \case
+                0 -> Just <$> peek ptr
+                _ -> E.throwIO (IO.userError "getConsoleInputEvent: error reading console events")
+        _ -> E.throwIO (IO.userError "getConsoleInputEvent: error waiting for console events")
 
 {-
     runAnsiDecoder :: TMVar Char -> IO ()
@@ -214,20 +234,11 @@ instance Storable ConsoleInputEvent where
   poke = undefined
 
 foreign import ccall "hs_wait_console_input"
-  unsafeWaitConsoleInput :: IO CInt
+  unsafeWaitConsoleInput :: CULong -> IO CULong
 
 foreign import ccall "hs_read_console_input"
   unsafeReadConsoleInput :: Ptr ConsoleInputEvent -> IO CInt
 
-tryGetConsoleInputEvent :: IO (Maybe ConsoleInputEvent)
-tryGetConsoleInputEvent =
-  unsafeWaitConsoleInput >>= \case
-    1 -> pure Nothing -- timeout
-    0 -> alloca $ \ptr->
-          unsafeReadConsoleInput ptr >>= \case
-            0 -> Just <$> peek ptr
-            _ -> E.throwIO (IO.userError "getConsoleInputEvent: error reading console events")
-    _ -> E.throwIO (IO.userError "getConsoleInputEvent: error waiting for console events")
 
 isCapsLockOn :: ControlKeyState -> Bool
 isCapsLockOn (ControlKeyState x) = x .&. (#const CAPSLOCK_ON) /= 0
