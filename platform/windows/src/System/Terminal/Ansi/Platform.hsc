@@ -32,46 +32,74 @@ import qualified System.Terminal.Ansi.Internal as T
 #include "hs_terminal.h"
 
 withStandardTerminal :: (MonadIO m, MonadMask m) => (T.TerminalEnv -> m a) -> m a
-withStandardTerminal action = withTerminalInput $ withTerminalOutput $ do
+withStandardTerminal action = do
   mainThread     <- liftIO myThreadId
   interrupt      <- liftIO (newTVarIO False)
   chars          <- liftIO newTChanIO
   events         <- liftIO newTChanIO
   output         <- liftIO newEmptyTMVarIO
   outputFlush    <- liftIO newEmptyTMVarIO
-  withOutputProcessing mainThread output outputFlush $
-    withInputProcessing mainThread interrupt chars events $ action $
-      T.TerminalEnv {
-        T.envTermType       = "xterm"
-      , T.envInputChars     = readTChan  chars
-      , T.envInputEvents    = readTChan  events
-      , T.envInterrupt      = swapTVar   interrupt False
-      , T.envOutput         = putTMVar   output
-      , T.envOutputFlush    = putTMVar   outputFlush ()
-      , T.envSpecialChars   = specialChars
-      }
+  withConsoleModes $
+    withOutputProcessing mainThread output outputFlush $
+      withInputProcessing mainThread interrupt chars events $ action $
+        T.TerminalEnv {
+          T.envTermType       = "xterm"
+        , T.envInputChars     = readTChan  chars
+        , T.envInputEvents    = readTChan  events
+        , T.envInterrupt      = swapTVar   interrupt False
+        , T.envOutput         = putTMVar   output
+        , T.envOutputFlush    = putTMVar   outputFlush ()
+        , T.envSpecialChars   = specialChars
+        }
+
+withConsoleModes :: (MonadIO m, MonadMask m) => m a -> m a
+withConsoleModes = bracket before after . const
   where
-    withTerminalInput = bracket
-      ( liftIO getConsoleInputModeDesired >>= liftIO . setConsoleInputMode )
-      ( liftIO . setConsoleInputMode ) . const
+    modeInput m0 = m7
+      where
+        m1 = m0 .|. (#const ENABLE_VIRTUAL_TERMINAL_INPUT)
+        m2 = m1 .|. (#const ENABLE_MOUSE_INPUT)
+        m3 = m2 .|. (#const ENABLE_WINDOW_INPUT)
+        m4 = m3 .|. (#const ENABLE_EXTENDED_FLAGS)
+        m5 = m4 .&. complement (#const ENABLE_LINE_INPUT)
+        m6 = m5 .&. complement (#const ENABLE_PROCESSED_INPUT)
+        m7 = m6 .&. complement (#const ENABLE_QUICK_EDIT_MODE)
+    modeOutput m0 = m1
+      where
+        m1 = m0 .|. (#const ENABLE_VIRTUAL_TERMINAL_PROCESSING)
+    before = liftIO $ do
+      i <- getConsoleInputMode
+      o <- getConsoleOutputMode
+      setConsoleInputMode  (modeInput  i)
+      setConsoleOutputMode (modeOutput o)
+      pure (i, o)
+    after (i, o) = liftIO $ do
+      setConsoleInputMode i
+      setConsoleOutputMode o
+    getConsoleInputMode = alloca $ \ptr-> do
+      unsafeGetConsoleInputMode ptr
+      peek ptr
+    setConsoleInputMode mode = do
+      unsafeSetConsoleInputMode mode
+    getConsoleOutputMode = alloca $ \ptr-> do
+      unsafeGetConsoleOutputMode ptr
+      peek ptr
+    setConsoleOutputMode mode = do
+      unsafeSetConsoleOutputMode mode
 
-    withTerminalOutput = bracket
-      ( liftIO getConsoleOutputModeDesired >>= liftIO . setConsoleOutputMode )
-      ( liftIO . setConsoleOutputMode ) . const
+withInputProcessing mainThreadId interrupt chars events ma = do
+  terminate  <- liftIO (newTVarIO False)
+  terminated <- liftIO (newTVarIO False)
+  bracket_
+    (liftIO $ forkIO $ processInput mainThreadId terminate terminated interrupt chars events)
+    (liftIO (atomically (writeTVar terminate True) >> atomically (readTVar terminated >>= check))) ma
 
-    withInputProcessing mainThreadId interrupt chars events ma = do
-      terminate  <- liftIO (newTVarIO False)
-      terminated <- liftIO (newTVarIO False)
-      bracket_
-        (liftIO $ forkIO $ processInput mainThreadId terminate terminated interrupt chars events)
-        (liftIO (atomically (writeTVar terminate True) >> atomically (readTVar terminated >>= check))) ma
-
-    withOutputProcessing mainThreadId output outputFlush ma = do
-      terminate  <- liftIO (newTVarIO False)
-      terminated <- liftIO (newTVarIO False)
-      bracket_
-        (liftIO $ forkIO $ processOutput mainThreadId terminate terminated output outputFlush)
-        (liftIO (atomically (writeTVar terminate True) >> atomically (readTVar terminated >>= check))) ma
+withOutputProcessing mainThreadId output outputFlush ma = do
+  terminate  <- liftIO (newTVarIO False)
+  terminated <- liftIO (newTVarIO False)
+  bracket_
+    (liftIO $ forkIO $ processOutput mainThreadId terminate terminated output outputFlush)
+    (liftIO (atomically (writeTVar terminate True) >> atomically (readTVar terminated >>= check))) ma
 
 processOutput :: ThreadId -> TVar Bool -> TVar Bool -> TMVar Text.Text -> TMVar () -> IO ()
 processOutput mainThread terminate terminated output outputFlush =
@@ -161,10 +189,9 @@ data ConsoleInputEvent
     }
   | MouseEvent  T.MouseEvent
   | WindowEvent T.WindowEvent
-  | UnknownEvent CUShort
+  | UnknownEvent WORD
   deriving (Eq, Ord, Show)
 
--- See https://msdn.microsoft.com/en-us/library/windows/desktop/aa383751(v=vs.85).aspx
 instance Storable ConsoleInputEvent where
   sizeOf    _ = (#size struct _INPUT_RECORD)
   alignment _ = (#alignment struct _INPUT_RECORD)
@@ -195,38 +222,46 @@ instance Storable ConsoleInputEvent where
       pure $ WindowEvent $ T.WindowSizeChanged (fromIntegral row, fromIntegral col)
     evt -> pure (UnknownEvent evt)
     where
-      peekEventType         = (#peek struct _INPUT_RECORD, EventType) ptr :: IO CUShort
+      peekEventType         = (#peek struct _INPUT_RECORD, EventType) ptr :: IO WORD
       ptrEvent              = castPtr $ (#ptr struct _INPUT_RECORD, Event) ptr :: Ptr a
-      ptrKeyDown            = (#ptr struct _KEY_EVENT_RECORD, bKeyDown) ptrEvent :: Ptr CInt
+      ptrKeyDown            = (#ptr struct _KEY_EVENT_RECORD, bKeyDown) ptrEvent :: Ptr BOOL
       ptrKeyUnicodeChar     = (#ptr struct _KEY_EVENT_RECORD, uChar) ptrEvent :: Ptr CWchar
       ptrMousePosition      = (#ptr struct _MOUSE_EVENT_RECORD, dwMousePosition) ptrEvent :: Ptr a
-      ptrMousePositionX     = (#ptr struct _COORD, X) ptrMousePosition :: Ptr CShort
-      ptrMousePositionY     = (#ptr struct _COORD, Y) ptrMousePosition :: Ptr CShort
-      ptrMouseEventFlags    = (#ptr struct _MOUSE_EVENT_RECORD, dwEventFlags) ptrEvent :: Ptr CULong
-      ptrMouseButtonState   = (#ptr struct _MOUSE_EVENT_RECORD, dwButtonState) ptrEvent :: Ptr CULong
+      ptrMousePositionX     = (#ptr struct _COORD, X) ptrMousePosition :: Ptr SHORT
+      ptrMousePositionY     = (#ptr struct _COORD, Y) ptrMousePosition :: Ptr SHORT
+      ptrMouseEventFlags    = (#ptr struct _MOUSE_EVENT_RECORD, dwEventFlags)  ptrEvent :: Ptr DWORD
+      ptrMouseButtonState   = (#ptr struct _MOUSE_EVENT_RECORD, dwButtonState) ptrEvent :: Ptr DWORD
       ptrWindowSize         = (#ptr struct _WINDOW_BUFFER_SIZE_RECORD, dwSize) ptrEvent :: Ptr a
-      ptrWindowSizeX        = (#ptr struct _COORD, X) ptrWindowSize :: Ptr CShort
-      ptrWindowSizeY        = (#ptr struct _COORD, Y) ptrWindowSize :: Ptr CShort
-      ptrFocus              = (#ptr struct _FOCUS_EVENT_RECORD, bSetFocus) ptrEvent :: Ptr CInt
+      ptrWindowSizeX        = (#ptr struct _COORD, X) ptrWindowSize :: Ptr SHORT
+      ptrWindowSizeY        = (#ptr struct _COORD, Y) ptrWindowSize :: Ptr SHORT
+      ptrFocus              = (#ptr struct _FOCUS_EVENT_RECORD, bSetFocus) ptrEvent :: Ptr BOOL
   poke = undefined
 
 foreign import ccall "hs_wait_console_input"
-  unsafeWaitConsoleInput :: CULong -> IO CULong
+  unsafeWaitConsoleInput     :: DWORD -> IO DWORD
 
 foreign import ccall "hs_read_console_input"
-  unsafeReadConsoleInput :: Ptr ConsoleInputEvent -> IO CInt
+  unsafeReadConsoleInput     :: Ptr ConsoleInputEvent -> IO BOOL
 
-foreign import ccall unsafe "hs_get_console_input_mode_desired"
-  getConsoleInputModeDesired :: IO Int
+foreign import ccall unsafe "hs_get_console_input_mode"
+  unsafeGetConsoleInputMode  :: Ptr DWORD -> IO BOOL
 
 foreign import ccall unsafe "hs_set_console_input_mode"
-  setConsoleInputMode :: Int -> IO Int
+  unsafeSetConsoleInputMode  :: DWORD -> IO BOOL
 
-foreign import ccall unsafe "hs_get_console_output_mode_desired"
-  getConsoleOutputModeDesired :: IO Int
+foreign import ccall unsafe "hs_get_console_output_mode"
+  unsafeGetConsoleOutputMode :: Ptr DWORD -> IO BOOL
 
 foreign import ccall unsafe "hs_set_console_output_mode"
-  setConsoleOutputMode :: Int -> IO Int
+  unsafeSetConsoleOutputMode :: DWORD -> IO BOOL
 
 foreign import ccall unsafe "hs_get_console_winsize"
-  unsafeGetConsoleWindowSize :: Ptr CInt -> Ptr CInt -> IO CInt
+  unsafeGetConsoleWindowSize :: Ptr SHORT -> Ptr SHORT -> IO BOOL
+
+-- See https://msdn.microsoft.com/en-us/library/windows/desktop/aa383751(v=vs.85).aspx
+-- for how Windows data types translate to stdint types.
+
+type BOOL  = CInt
+type SHORT = CShort
+type WORD  = CUShort
+type DWORD = CULong
