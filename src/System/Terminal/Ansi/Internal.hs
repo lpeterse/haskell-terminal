@@ -1,7 +1,6 @@
-{-# LANGUAGE BinaryLiterals             #-}
-{-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE BinaryLiterals    #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase        #-}
 module System.Terminal.Ansi.Internal where
 
 import           Control.Concurrent.STM.TChan
@@ -115,15 +114,15 @@ decodeAnsi = decode1 =<< getNext
       | x == '['   = getNext >>= \case
                         '\NUL' -> pure $ T.EvKey (T.KChar '[') [T.MAlt] -- urxvt, gnome-terminal
                         y      -> decodeCSI y
-      | x == '\\'   = pure $ T.EvKey (T.KChar '\\') [T.MAlt] -- urxvt, gnome-terminal
-      | x == ']'    = pure $ T.EvKey (T.KChar ']')  [T.MAlt] -- urxvt, gnome-terminal
-      | x == '^'    = pure $ T.EvKey (T.KChar '6')  [T.MAlt, T.MShift] -- urxvt, gnome-terminal
-      | x == '_'    = pure $ T.EvKey (T.KChar '_')  [T.MAlt, T.MShift] -- urxvt, gnome-terminal
-      | x == '`'    = pure $ T.EvKey (T.KChar '`')  [T.MAlt] -- urxvt, gnome-terminal
-      | x == '~'    = pure $ T.EvKey (T.KChar '`')  [T.MAlt, T.MShift] -- urxvt, gnome-terminal
-      | x == '\DEL' = pure $ T.EvKey T.KDelete []
-      | x >= 'a' && x <= 'z' = pure $ T.EvKey (T.KChar x) [T.MAlt]
-      | otherwise   = error $ show x
+      | x == '\\'    = pure $ T.EvKey (T.KChar '\\') [T.MAlt] -- urxvt, gnome-terminal
+      | x == ']'     = pure $ T.EvKey (T.KChar ']')  [T.MAlt] -- urxvt, gnome-terminal
+      | x == '^'     = pure $ T.EvKey (T.KChar '6')  [T.MAlt, T.MShift] -- urxvt, gnome-terminal
+      | x == '_'     = pure $ T.EvKey (T.KChar '_')  [T.MAlt, T.MShift] -- urxvt, gnome-terminal
+      | x == '`'     = pure $ T.EvKey (T.KChar '`')  [T.MAlt] -- urxvt, gnome-terminal
+      | x == '~'     = pure $ T.EvKey (T.KChar '`')  [T.MAlt, T.MShift] -- urxvt, gnome-terminal
+      | x == '\DEL'  = pure $ T.EvKey T.KDelete []
+      | isAsciiLower = pure $ T.EvKey (T.KChar x) [T.MAlt]
+      | otherwise    = error $ show x
 
     decodeCSI :: (MonadInput m) => Char -> m T.Event
     decodeCSI y = withParams1 y $ \ps-> \case
@@ -249,7 +248,7 @@ withParams1 x f
   where
     withParameters 0 _            = fail "CSI: LENGTH LIMIT EXCEEDED"
     withParameters limit ps       = getNext >>= \case
-      y | y >= '0' && y <= '9' -> withParameters (limit - 1) $! y:ps
+      y | isDigit y -> withParameters (limit - 1) $! y:ps
         | otherwise            -> f (reverse ps) y
 
 withN :: Monad m => Int -> [Char] -> (Int -> m a) -> m a
@@ -258,7 +257,7 @@ withN _    ps f               = g ps 0
   where
     g [] i                    = f i
     g (x:xs) i
-      | x >= '0' && x <= '9'  = g xs $! i * 10 - 48 + fromEnum x
+      | isDigit x  = g xs $! i * 10 - 48 + fromEnum x
       | otherwise             = error $ "CSI: INVALID NUMBER " ++ show x
 
 withNM :: Monad m => Int -> Int -> [Char] -> (Int -> Int -> m a) -> m a
@@ -270,7 +269,7 @@ withNM defN defM      ps  f  = g ps 0
     g [] i                   = fail "CSI: INVALID NUMBER"
     g (x:xs) i
       | x == ';'             = withN defM xs (f i)
-      | x >= '0' && x <= '9' = g xs $! i * 10 - 48 + fromEnum x
+      | isDigit x = g xs $! i * 10 - 48 + fromEnum x
       | otherwise            = fail "CSI: INVALID NUMBER"
 
 withNumbers :: (Monad m) => [Char] -> ([Int] -> m a) -> m a
@@ -279,6 +278,6 @@ withNumbers xs f = numbers' xs 0 >>= f
     numbers' [] i
       = pure [i]
     numbers' (x:xs) i
-      | x >= '0' && x <= '9' = numbers' xs (i * 10 - 48 + fromEnum x)
-      | x == ';'             = (i:) <$> numbers' xs 0
-      | otherwise            = fail ""
+      | isDigit x = numbers' xs (i * 10 - 48 + fromEnum x)
+      | x == ';'  = (i:) <$> numbers' xs 0
+      | otherwise = fail ""

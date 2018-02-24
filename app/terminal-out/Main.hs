@@ -1,4 +1,3 @@
-{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
@@ -22,7 +21,6 @@ main = T.withStandardTerminal $ T.runAnsiTerminalT foo
 
 foo :: (T.MonadTerminal m, MonadIO m) => m ()
 foo = T.putDocLn doc >> T.flush
-  where
 
 doc :: PP.Doc ann
 doc = mconcat
