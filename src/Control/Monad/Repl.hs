@@ -28,8 +28,6 @@ import qualified Control.Monad.Terminal.Color  as T
 import qualified Control.Monad.Terminal.Events as T
 import qualified Control.Monad.Terminal.Pretty as P
 
-import           Prelude                       hiding (read)
-
 class Pretty a where
   pretty :: a -> PP.Doc ann
 
@@ -109,7 +107,7 @@ execReplT (ReplT ma) s = replUserState <$> execStateT loop (replTStateDefault s)
     loop = protected >> (replQuit <$> get) >>= \case
       False -> loop
       True  -> pure ()
-    protected = catch ma $ \e-> do
+    protected = catch ma $ \e->
       if e == E.UserInterrupt then
         lift $ T.putDocLn (P.bold $ P.color P.red "Interrupted.")
       else
@@ -124,24 +122,23 @@ instance T.MonadTerminal m => MonadRepl (ReplT s m) where
   pprint a = T.putDoc (pretty a)
   quit = ReplT $ modify (\st-> st { replQuit = True })
   readString = do
-    prompt <- ReplT $ replPrompt <$> get
-    prompt
-    lift $ T.resetAnnotations
-    lift $ T.flush
+    join (ReplT $ replPrompt <$> get)
+    lift T.resetAnnotations
+    lift T.flush
     withStacks [] []
     where
       withStacks xss yss = T.getEvent >>= \case
         T.EvKey (T.KChar 'C') [T.MCtrl] -> do
-          lift $ T.putLn
-          lift $ T.flush
+          lift T.putLn
+          lift T.flush
           readString
         T.EvKey (T.KChar 'D') [T.MCtrl] -> do
-          lift $ T.putLn
-          lift $ T.flush
+          lift T.putLn
+          lift T.flush
           pure Nothing
         T.EvKey T.KEnter [] -> do
-          lift $ T.putLn
-          lift $ T.flush
+          lift T.putLn
+          lift T.flush
           pure $ Just $ reverse xss ++ yss
         T.EvKey T.KErase [] -> case xss of
           []     -> withStacks xss yss
@@ -150,28 +147,27 @@ instance T.MonadTerminal m => MonadRepl (ReplT s m) where
             lift $ T.putString yss
             lift $ T.putChar ' '
             lift $ T.cursorBackward (length yss + 1)
-            lift $ T.flush
+            lift T.flush
             withStacks xs yss
         T.EvKey (T.KLeft 1) [] -> case xss of
           []     -> withStacks xss yss
           (x:xs) -> do
             lift $ T.cursorBackward 1
-            lift $ T.flush
+            lift T.flush
             withStacks xs (x:yss)
         T.EvKey (T.KRight 1) [] -> case yss of
           []     -> withStacks xss yss
           (y:ys) -> do
             lift $ T.cursorForward 1
-            lift $ T.flush
+            lift T.flush
             withStacks (y:xss) ys
         T.EvKey (T.KChar c) []
           | isPrint c || isSpace c -> do
               lift $ T.putChar c
-              lift $ T.flush
+              lift T.flush
               withStacks (c:xss) yss
-          | otherwise -> do
-            withStacks xss yss
+          | otherwise -> withStacks xss yss
         ev -> do
           --lift $ T.putStringLn (show ev)
-          lift $ T.flush
+          lift T.flush
           withStacks xss yss

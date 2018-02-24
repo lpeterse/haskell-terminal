@@ -28,7 +28,7 @@ import qualified System.Terminal.Ansi          as T
 
 import           Control.Monad.Terminal
 
-import           Prelude                       hiding (print, putChar)
+import           Prelude                       hiding (putChar)
 
 main :: IO ()
 main = T.evalAnsiReplT (ini >> repl) 0

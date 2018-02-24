@@ -1,4 +1,3 @@
-{-# LANGUAGE LambdaCase   #-}
 {-# LANGUAGE TypeFamilies #-}
 module Control.Monad.Terminal where
 

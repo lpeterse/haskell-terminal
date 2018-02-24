@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE OverloadedStrings #-}
 module Control.Monad.Terminal.Pretty
   ( -- * Pretty Printing
     -- * Formatting
