@@ -27,11 +27,12 @@ module Control.Monad.Terminal.Pretty
 
 import           Data.Semigroup
 import           Data.String
-import qualified Data.Text                    as Text
-import qualified Data.Text.Prettyprint.Doc    as PP
+import qualified Data.Text                                    as Text
+import qualified Data.Text.Prettyprint.Doc                    as PP
 
-import qualified Control.Monad.Terminal       as T
-import           Control.Monad.Terminal.Color
+import qualified Control.Monad.Terminal                       as T
+import           Control.Monad.Terminal.Ansi.Color
+import qualified Control.Monad.Terminal.Ansi.MonadAnsiPrinter as T
 
 bold :: T.MonadAnsiPrinter m => PP.Doc (T.Annotation m) -> PP.Doc (T.Annotation m)
 bold = PP.annotate (T.bold True)

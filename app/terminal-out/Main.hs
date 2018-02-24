@@ -12,7 +12,6 @@ import qualified Data.Text.Prettyprint.Doc     as PP
 
 import qualified Control.Monad.Terminal        as T
 import qualified Control.Monad.Terminal.Ansi   as T
-import qualified Control.Monad.Terminal.Color  as T
 import qualified Control.Monad.Terminal.Events as T
 import qualified Control.Monad.Terminal.Pretty as T
 

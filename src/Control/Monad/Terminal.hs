@@ -3,7 +3,6 @@
 module Control.Monad.Terminal
   ( MonadPrinter (..)
   , MonadPrettyPrinter (..)
-  , MonadAnsiPrinter (..)
   , MonadEvent (..)
   , waitEvent
   , pollEvent
@@ -15,15 +14,15 @@ import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
 import           Data.Maybe
-import qualified Data.Text                     as Text
-import qualified Data.Text.Prettyprint.Doc     as Pretty
+import qualified Data.Text                         as Text
+import qualified Data.Text.Prettyprint.Doc         as Pretty
 import           Data.Word
-import           Prelude                       hiding (putChar)
+import           Prelude                           hiding (putChar)
 
-import qualified Control.Monad.Terminal.Color  as T
-import qualified Control.Monad.Terminal.Events as T
+import qualified Control.Monad.Terminal.Ansi.Color as T
+import qualified Control.Monad.Terminal.Events     as T
 
-class (MonadPrettyPrinter m, MonadAnsiPrinter m, MonadEvent m, MonadScreen m) => MonadTerminal m where
+class (MonadEvent m, MonadPrettyPrinter m,  MonadScreen m) => MonadTerminal m where
 
 class MonadIO m => MonadEvent m where
   waitForEvent          :: (STM T.Event -> STM a) -> m a
@@ -67,12 +66,6 @@ class MonadPrinter m => MonadPrettyPrinter m where
   resetAnnotations  = pure ()
   {-# MINIMAL putDoc | (putDoc, setAnnotation, resetAnnotations) #-}
 
-class MonadPrettyPrinter m => MonadAnsiPrinter m where
-  bold            :: Bool    -> Annotation m
-  inverted        :: Bool    -> Annotation m
-  underlined      :: Bool    -> Annotation m
-  foreground      :: T.Color -> Annotation m
-  background      :: T.Color -> Annotation m
 
 class MonadPrinter m => MonadScreen m where
   clear :: m ()

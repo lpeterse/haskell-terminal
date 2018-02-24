@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
-module Control.Monad.Terminal.Ansi.Internal where
+module Control.Monad.Terminal.Ansi.Decoder where
 
 import           Control.Monad                 (forever, when)
 import           Control.Monad.STM

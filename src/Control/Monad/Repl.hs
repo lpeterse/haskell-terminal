@@ -24,7 +24,7 @@ import qualified Data.Text.Prettyprint.Doc     as PP
 import           Data.Typeable
 
 import qualified Control.Monad.Terminal        as T
-import qualified Control.Monad.Terminal.Color  as T
+import qualified Control.Monad.Terminal.Ansi   as T
 import qualified Control.Monad.Terminal.Events as T
 import qualified Control.Monad.Terminal.Pretty as P
 
@@ -103,7 +103,7 @@ instance (T.MonadEvent m) => T.MonadEvent (ReplT s m) where
 
 instance (T.MonadTerminal m, T.MonadPrettyPrinter m) => T.MonadTerminal (ReplT s m) where
 
-execReplT :: (T.MonadTerminal m, T.MonadPrinter m, MonadMask m) => ReplT s m () -> s -> m s
+execReplT :: (T.MonadTerminal m, T.MonadAnsiPrinter m, MonadMask m) => ReplT s m () -> s -> m s
 execReplT (ReplT ma) s = replUserState <$> execStateT loop (replTStateDefault s)
   where
     loop = protected >> (replQuit <$> get) >>= \case

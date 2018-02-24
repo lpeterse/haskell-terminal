@@ -1,4 +1,4 @@
-module Control.Monad.Terminal.Color where
+module Control.Monad.Terminal.Ansi.Color where
 
 import           Data.Word
 

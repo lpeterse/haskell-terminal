@@ -13,8 +13,9 @@ import           Control.Concurrent
 import           Control.Concurrent.STM.TChan
 import           Control.Concurrent.STM.TMVar
 import           Control.Concurrent.STM.TVar
-import qualified Control.Exception                        as E
-import           Control.Monad                            (forever, void, when)
+import qualified Control.Exception                            as E
+import           Control.Monad                                (forever, void,
+                                                               when)
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
@@ -22,29 +23,29 @@ import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Reader
 import           Control.Monad.Trans.State
 import           Data.Bits
-import qualified Data.ByteString                          as BS
+import qualified Data.ByteString                              as BS
 import           Data.Char
-import           Data.Function                            (fix)
-import           Data.List.NonEmpty                       (NonEmpty ((:|)))
-import qualified Data.List.NonEmpty                       as N
+import           Data.Function                                (fix)
+import           Data.List.NonEmpty                           (NonEmpty ((:|)))
+import qualified Data.List.NonEmpty                           as N
 import           Data.Maybe
 import           Data.Monoid
-import qualified Data.Text                                as Text
-import qualified Data.Text.IO                             as Text
-import qualified Data.Text.Prettyprint.Doc                as PP
+import qualified Data.Text                                    as Text
+import qualified Data.Text.IO                                 as Text
+import qualified Data.Text.Prettyprint.Doc                    as PP
 import           Data.Word
 import           System.Environment
-import qualified System.IO                                as IO
+import qualified System.IO                                    as IO
 
-import qualified Control.Monad.Repl                       as T
-import qualified Control.Monad.Terminal                   as T
-import qualified Control.Monad.Terminal.Ansi.AnsiTerminal as T
-import qualified Control.Monad.Terminal.Ansi.Internal     as T
-import qualified Control.Monad.Terminal.Color             as T
-import qualified Control.Monad.Terminal.Events            as T
-import qualified Control.Monad.Terminal.Pretty            as T
+import qualified Control.Monad.Terminal                       as T
+import qualified Control.Monad.Terminal.Ansi.AnsiTerminal     as T
+import qualified Control.Monad.Terminal.Ansi.Color            as T
+import qualified Control.Monad.Terminal.Ansi.Decoder          as T
+import qualified Control.Monad.Terminal.Ansi.MonadAnsiPrinter as T
+import qualified Control.Monad.Terminal.Events                as T
+import qualified Control.Monad.Terminal.Pretty                as T
 
-import qualified System.Terminal.Ansi.Platform            as T
+import qualified System.Terminal.Ansi.Platform                as T
 
 newtype AnsiTerminalT m a
   = AnsiTerminalT (ReaderT T.AnsiTerminal m a)

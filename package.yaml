@@ -28,15 +28,16 @@ library:
   exposed-modules:
     - Control.Monad.Repl
     - Control.Monad.Terminal
-    - Control.Monad.Terminal.Color
     - Control.Monad.Terminal.Events
     - Control.Monad.Terminal.Pretty
     - Control.Monad.Terminal.Ansi
     - System.Terminal.Ansi
   other-modules:
-    - Control.Monad.Terminal.Ansi.Internal
+    - Control.Monad.Terminal.Ansi.Color
+    - Control.Monad.Terminal.Ansi.Decoder
     - Control.Monad.Terminal.Ansi.AnsiTerminal
     - Control.Monad.Terminal.Ansi.AnsiTerminalT
+    - Control.Monad.Terminal.Ansi.MonadAnsiPrinter
     - System.Terminal.Ansi.Platform
   source-dirs: src
   when:
