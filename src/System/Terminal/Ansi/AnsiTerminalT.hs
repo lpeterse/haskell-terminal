@@ -78,7 +78,11 @@ instance MonadTrans AnsiTerminalT where
 instance (MonadIO m) => T.MonadTerminal (AnsiTerminalT m) where
 
 instance (MonadIO m) => T.MonadEvent (AnsiTerminalT m) where
-  withEventSTM f = AnsiTerminalT (liftIO . atomically . f . T.envInputEvents =<< ask)
+  withEventSTM f = AnsiTerminalT $ do
+    env <- ask
+    liftIO $ atomically $ do
+      void (T.envInterrupt env) -- Reset the interrupt flag. State is not relevant.
+      f (T.envInputEvents env)  -- Apply user transformation on event source.
 
 instance (MonadIO m) => T.MonadPrinter (AnsiTerminalT m) where
   putChar c = AnsiTerminalT $ do

@@ -35,6 +35,7 @@ data TerminalEnv
   { envTermType     :: BS.ByteString
   , envInputChars   :: STM Char
   , envInputEvents  :: STM T.Event
+  , envInterrupt    :: STM Bool
   , envOutput       :: Text.Text -> STM ()
   , envOutputFlush  :: STM ()
   , envSpecialChars :: Char -> Maybe T.Event
