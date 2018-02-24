@@ -147,7 +147,7 @@ decodeAnsi = decode1 =<< getNext
       'F'        -> pure $ T.EvKey T.KEnd []
       'G'        -> undefined
       'H'        -> pure $ T.EvKey T.KHome []
-      'I'        -> withN 1 ps $ \n-> pure $ T.EvKey (T.KTab    n) []
+      'I'        -> withN 1 ps $ \n-> pure $ T.EvKey T.KTab []
       'J'        -> undefined
       'K'        -> undefined
       'L'        -> undefined
@@ -164,7 +164,7 @@ decodeAnsi = decode1 =<< getNext
       'W'        -> undefined
       'X'        -> undefined
       'Y'        -> undefined
-      'Z'        -> withN 1 ps $ \n-> pure $ T.EvKey (T.KTab n) [T.MShift]
+      'Z'        -> withN 1 ps $ \n-> pure $ T.EvKey T.KTab [T.MShift]
       '^'        -> case ps of
                       [    '2'] -> pure $ T.EvKey T.KInsert   [T.MCtrl]
                       [    '3'] -> pure $ T.EvKey T.KDelete   [T.MCtrl]

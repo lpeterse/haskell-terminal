@@ -105,7 +105,7 @@ withOutputProcessing mainThread output outputFlush ma = do
       -- Synchronous exception will be rethrown to the main thread.
       -- Asynchronous exceptions (apart from `E.AsyncException` thrown by the RTS) won't occur.
       -- In all cases the thread finally writes `True` into the `terminated` variable.
-      loop `E.catch` (\e-> E.throwTo mainThread (e:: E.SomeException)) `E.finally` atomically (writeTVar terminated True)
+      (loop `E.catch` (\e-> E.throwTo mainThread (e:: E.SomeException))) `E.finally` atomically (writeTVar terminated True)
       where
         loop :: IO ()
         loop = do
@@ -127,26 +127,28 @@ withInputProcessing mainThread interrupt chars events ma = do
   where
     run :: TVar Bool -> TVar Bool -> IO ()
     run terminate terminated =
-      loop `E.catch` (\e-> E.throwTo mainThread (e:: E.SomeException)) `E.finally` atomically (writeTVar terminated True)
+      (loop T.LeftButton `E.catch` (\e-> E.throwTo mainThread (e:: E.SomeException))) `E.finally` atomically (writeTVar terminated True)
       where
         timeoutMillis :: CULong
         timeoutMillis = 100
-        loop :: IO ()
-        loop = tryGetConsoleInputEvent >>= \case
+        loop :: T.Button -> IO ()
+        loop lastMouseButton = tryGetConsoleInputEvent >>= \case
           -- `tryGetConsoleInputEvent` is a blocking system call. It cannot be interrupted, but
           -- is guaranteed to return after at most 100ms. In this case it is checked whether
           -- this thread shall either terminate or is allowed to continue.
           -- This is cooperative multitasking to circumvent the limitations of IO on Windows.
-          Nothing -> atomically (readTVar terminate) >>= \t-> unless t loop
-          Just ev -> (flip (>>)) loop $ case ev of
+          Nothing -> atomically (readTVar terminate) >>= \t-> unless t (loop lastMouseButton)
+          Just ev -> case ev of
             KeyEvent { ceKeyChar = c, ceKeyDown = d }
-              | c == '\NUL'          -> pure ()
-              | c == '\ESC' && not d -> atomically (writeTChan chars '\NUL')
+              | c == '\NUL'          -> do
+                                        loop lastMouseButton
+              | c == '\ESC' && not d -> do
+                                        atomically (writeTChan chars '\NUL')
+                                        loop lastMouseButton
               | c == '\ETX' &&     d -> do 
                                         unhandledInterrupt <- atomically $ do
                                           writeTChan chars '\ETX'
                                           swapTVar interrupt True
-                                        when unhandledInterrupt (E.throwTo mainThread E.UserInterrupt)
                                         -- In virtual terminal mode, Windows actually sends Ctrl+C and there is no
                                         -- way a non-responsive application can be killed from keyboard.
                                         -- The solution is to catch this specific event and swap an STM interrupt flag.
@@ -155,11 +157,31 @@ withInputProcessing mainThread interrupt chars events ma = do
                                         -- to reset the interrupt flag in the meantime. In this specific case
                                         -- an asynchronous `E.UserInterrupt` exception is thrown to the main thread
                                         -- and either terminates the application or at least the current computation.
-              |                    d -> atomically (writeTChan chars c)
-              | otherwise            -> pure () -- Other key release events get swallowed.
-            MouseEvent mev           -> atomically $ writeTChan events $ T.MouseEvent mev
-            WindowEvent wev          -> atomically $ writeTChan events $ T.WindowEvent wev
-            UnknownEvent x           -> atomically $ writeTChan events (T.EvUnknownSequence $ "unknown console input event" ++ show x)
+                                        when unhandledInterrupt (E.throwTo mainThread E.UserInterrupt)
+                                        loop lastMouseButton
+              |                    d -> do
+                                        atomically (writeTChan chars c)
+                                        loop lastMouseButton
+              | otherwise            -> do -- Other key release events get swallowed.
+                                        loop lastMouseButton
+            MouseEvent newMouseEvent -> case newMouseEvent of
+                                          T.MouseButtonPressed _  btn -> do
+                                            atomically $ writeTChan events $ T.MouseEvent newMouseEvent
+                                            loop btn
+                                          T.MouseButtonReleased pos _ -> do
+                                            atomically $ do
+                                              writeTChan events $ T.MouseEvent $ T.MouseButtonReleased pos lastMouseButton
+                                              writeTChan events $ T.MouseEvent $ T.MouseButtonClicked  pos lastMouseButton
+                                            loop lastMouseButton
+                                          _ -> do
+                                            atomically $ writeTChan events $ T.MouseEvent newMouseEvent
+                                            loop lastMouseButton
+            WindowEvent wev          -> do
+                                        atomically $ writeTChan events $ T.WindowEvent wev
+                                        loop lastMouseButton
+            UnknownEvent x           -> do
+                                        atomically $ writeTChan events (T.EvUnknownSequence $ "unknown console input event" ++ show x)
+                                        loop lastMouseButton
         -- Wait at most `timeoutMillis` for the handle to signal readyness.
         -- Then either read one console event or return `Nothing`.
         tryGetConsoleInputEvent :: IO (Maybe ConsoleInputEvent)
@@ -174,9 +196,10 @@ withInputProcessing mainThread interrupt chars events ma = do
 
 specialChars :: Char -> Maybe T.Event
 specialChars = \case
-  '\r'    -> Just $ T.EvKey T.KEnter []
-  '\DEL'  -> Just $ T.EvKey T.KErase []
+  '\r'    -> Just $ T.EvKey T.KEnter  []
+  '\DEL'  -> Just $ T.EvKey T.KErase  []
   '\ESC'  -> Just $ T.EvKey T.KEscape []
+  '\HT'   -> Just $ T.EvKey T.KTab    []
   _       -> Nothing
 
 getScreenSize :: IO (Int,Int)
@@ -211,15 +234,15 @@ instance Storable ConsoleInputEvent where
       btn <- peek ptrMouseButtonState
       peek ptrMouseEventFlags >>= \case
         (#const MOUSE_MOVED)    -> pure $ T.MouseMoved pos
-        (#const MOUSE_WHEELED)  -> pure $ T.MouseWheeled pos $ if btn > 0 then T.Up    else T.Down
-        (#const MOUSE_HWHEELED) -> pure $ T.MouseWheeled pos $ if btn > 0 then T.Right else T.Left 
+        (#const MOUSE_WHEELED)  -> pure (T.MouseWheeled pos $ if btn .&. 0xff000000 > 0 then T.Down  else T.Up)
+        (#const MOUSE_HWHEELED) -> pure (T.MouseWheeled pos $ if btn .&. 0xff000000 > 0 then T.Right else T.Left)
         _ -> case btn of
           (#const FROM_LEFT_1ST_BUTTON_PRESSED) -> pure $ T.MouseButtonPressed  pos T.LeftButton
           (#const FROM_LEFT_2ND_BUTTON_PRESSED) -> pure $ T.MouseButtonPressed  pos T.OtherButton
           (#const FROM_LEFT_3RD_BUTTON_PRESSED) -> pure $ T.MouseButtonPressed  pos T.OtherButton
           (#const FROM_LEFT_4TH_BUTTON_PRESSED) -> pure $ T.MouseButtonPressed  pos T.OtherButton
           (#const RIGHTMOST_BUTTON_PRESSED)     -> pure $ T.MouseButtonPressed  pos T.RightButton
-          _                                     -> pure $ T.MouseButtonReleased pos
+          _                                     -> pure $ T.MouseButtonReleased pos T.OtherButton
     (#const FOCUS_EVENT) -> peek ptrFocus >>= \case
       0 -> pure $ WindowEvent T.WindowLostFocus
       _ -> pure $ WindowEvent T.WindowGainedFocus

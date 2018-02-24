@@ -9,7 +9,7 @@ data Key
   | KErase
   | KDelete
   | KEscape
-  | KTab Int
+  | KTab
   | KLeft Int | KRight Int | KUp Int | KDown Int
   | KUpLeft | KUpRight | KDownLeft | KDownRight | KCenter
   | KFun Int | KPrtScr | KPause | KInsert
@@ -38,7 +38,8 @@ data Event
 data MouseEvent
   = MouseMoved          (Int,Int)
   | MouseButtonPressed  (Int,Int) Button
-  | MouseButtonReleased (Int,Int)
+  | MouseButtonReleased (Int,Int) Button
+  | MouseButtonClicked  (Int,Int) Button
   | MouseWheeled        (Int,Int) Direction
   deriving (Eq,Ord,Show)
 
