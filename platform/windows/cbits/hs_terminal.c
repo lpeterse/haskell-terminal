@@ -1,9 +1,4 @@
-#include <windows.h>
-#include <wchar.h>
-#include <stdlib.h>
-#include <stdio.h>
-
-
+#include "hs_terminal.h"
 
 int hs_get_console_input_mode_desired(void) {
     int mode = 0;

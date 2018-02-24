@@ -1,3 +1,6 @@
+#ifndef HS_TERMINAL_H
+#define HS_TERMINAL_H
+
 #define DEFINE_CONSOLEV2_PROPERTIES
 
 #include <windows.h>
@@ -36,3 +39,5 @@ int hs_set_console_output_mode(int);
 
 DWORD hs_wait_console_input(DWORD);
 int hs_read_console_input(INPUT_RECORD*);
+
+#endif
