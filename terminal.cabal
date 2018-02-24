@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 9cd7c0c7e9ee58361168650a7554d7bb01bda633455f7e56d02bf541ef366e8c
+-- hash: c27392731018de2f94b2696ff349fdce18a1685981504f9a0cf75e65faa55813
 
 name:           terminal
 version:        0.1.0.0
@@ -31,8 +31,7 @@ library
       src
   ghc-options: -Werror
   build-depends:
-      async
-    , base >=4.7 && <5
+      base >=4.7 && <5
     , bytestring
     , exceptions
     , prettyprinter
@@ -73,8 +72,7 @@ executable repl-demo
       app/repl-demo
   ghc-options: -Werror -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      async
-    , base >=4.7 && <5
+      base >=4.7 && <5
     , bytestring
     , exceptions
     , prettyprinter
@@ -92,8 +90,7 @@ executable terminal-ev
       app/terminal-ev
   ghc-options: -Werror -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      async
-    , base >=4.7 && <5
+      base >=4.7 && <5
     , bytestring
     , exceptions
     , prettyprinter
@@ -111,8 +108,7 @@ executable terminal-out
       app/terminal-out
   ghc-options: -Werror -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      async
-    , base >=4.7 && <5
+      base >=4.7 && <5
     , bytestring
     , exceptions
     , prettyprinter
@@ -131,8 +127,7 @@ test-suite terminal-test
       test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      async
-    , base >=4.7 && <5
+      base >=4.7 && <5
     , bytestring
     , exceptions
     , prettyprinter

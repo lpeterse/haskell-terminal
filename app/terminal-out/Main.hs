@@ -24,7 +24,7 @@ foo :: (T.MonadTerminal m, MonadIO m) => m ()
 foo = T.putDocLn doc >> T.flush
   where
 
-doc :: PP.Doc T.TermStyle
+doc :: PP.Doc ann
 doc = mconcat
   [ --T.color T.red "Hallo Welt!"
     PP.hardline

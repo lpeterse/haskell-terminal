@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TypeFamilies               #-}
 module System.Terminal.Ansi.AnsiTerminalT
   ( AnsiTerminalT ()
   , runAnsiTerminalT
@@ -13,7 +14,6 @@ module System.Terminal.Ansi.AnsiTerminalT
 where
 
 import           Control.Concurrent
-import qualified Control.Concurrent.Async      as A
 import           Control.Concurrent.STM.TChan
 import           Control.Concurrent.STM.TMVar
 import           Control.Concurrent.STM.TVar
@@ -35,6 +35,7 @@ import           Data.Maybe
 import           Data.Monoid
 import qualified Data.Text                     as Text
 import qualified Data.Text.IO                  as Text
+import qualified Data.Text.Prettyprint.Doc     as PP
 import           Data.Word
 import           System.Environment
 import qualified System.IO                     as IO
@@ -98,50 +99,87 @@ instance (MonadIO m) => T.MonadPrinter (AnsiTerminalT m) where
     env <- ask
     liftIO  $ atomically $ T.envOutputFlush env
 
-instance (MonadIO m) => T.MonadColorPrinter (AnsiTerminalT m) where
-  setUnderline                               True = write "\ESC[4m"
-  setUnderline                              False = write "\ESC[24m"
-  setBold                                    True = write "\ESC[1m"
-  setBold                                   False = write "\ESC[22m"
-  setNegative                                True = write "\ESC[7m"
-  setNegative                               False = write "\ESC[27m"
-  setDefault                                      = write "\ESC[m"
-  setForeground c@T.ColorDefault                  = write "\ESC[39m"
-  setForeground c@(T.Color4Bit T.Black     False) = write "\ESC[30m"
-  setForeground c@(T.Color4Bit T.Red       False) = write "\ESC[31m"
-  setForeground c@(T.Color4Bit T.Green     False) = write "\ESC[32m"
-  setForeground c@(T.Color4Bit T.Yellow    False) = write "\ESC[33m"
-  setForeground c@(T.Color4Bit T.Blue      False) = write "\ESC[34m"
-  setForeground c@(T.Color4Bit T.Magenta   False) = write "\ESC[35m"
-  setForeground c@(T.Color4Bit T.Cyan      False) = write "\ESC[36m"
-  setForeground c@(T.Color4Bit T.White     False) = write "\ESC[37m"
-  setForeground c@(T.Color4Bit T.Black      True) = write "\ESC[90m"
-  setForeground c@(T.Color4Bit T.Red        True) = write "\ESC[91m"
-  setForeground c@(T.Color4Bit T.Green      True) = write "\ESC[92m"
-  setForeground c@(T.Color4Bit T.Yellow     True) = write "\ESC[93m"
-  setForeground c@(T.Color4Bit T.Blue       True) = write "\ESC[94m"
-  setForeground c@(T.Color4Bit T.Magenta    True) = write "\ESC[95m"
-  setForeground c@(T.Color4Bit T.Cyan       True) = write "\ESC[96m"
-  setForeground c@(T.Color4Bit T.White      True) = write "\ESC[97m"
-  setForeground _                                 = error "FIXME"
-  setBackground c@T.ColorDefault                  = write "\ESC[49m"
-  setBackground c@(T.Color4Bit T.Black     False) = write "\ESC[40m"
-  setBackground c@(T.Color4Bit T.Red       False) = write "\ESC[41m"
-  setBackground c@(T.Color4Bit T.Green     False) = write "\ESC[42m"
-  setBackground c@(T.Color4Bit T.Yellow    False) = write "\ESC[43m"
-  setBackground c@(T.Color4Bit T.Blue      False) = write "\ESC[44m"
-  setBackground c@(T.Color4Bit T.Magenta   False) = write "\ESC[45m"
-  setBackground c@(T.Color4Bit T.Cyan      False) = write "\ESC[46m"
-  setBackground c@(T.Color4Bit T.White     False) = write "\ESC[47m"
-  setBackground c@(T.Color4Bit T.Black      True) = write "\ESC[100m"
-  setBackground c@(T.Color4Bit T.Red        True) = write "\ESC[101m"
-  setBackground c@(T.Color4Bit T.Green      True) = write "\ESC[102m"
-  setBackground c@(T.Color4Bit T.Yellow     True) = write "\ESC[103m"
-  setBackground c@(T.Color4Bit T.Blue       True) = write "\ESC[104m"
-  setBackground c@(T.Color4Bit T.Magenta    True) = write "\ESC[105m"
-  setBackground c@(T.Color4Bit T.Cyan       True) = write "\ESC[106m"
-  setBackground c@(T.Color4Bit T.White      True) = write "\ESC[107m"
-  setBackground _                                 = error "FIXME"
+instance (MonadIO m) => T.MonadPrettyPrinter (AnsiTerminalT m) where
+  data Annotation (AnsiTerminalT m)
+    = Bold        Bool
+    | Underlined  Bool
+    | Inverted    Bool
+    | Foreground  T.Color
+    | Background  T.Color deriving (Eq, Ord, Show)
+  putDocLn doc = T.putDoc doc >> T.putLn
+  putDoc doc = do
+    T.resetAnnotations
+    render [] sdoc
+    T.resetAnnotations
+    T.flush
+    where
+      width   = PP.AvailablePerLine 20 0.4
+      options = PP.defaultLayoutOptions { PP.layoutPageWidth = width }
+      sdoc = PP.layoutSmart options doc
+      render anns = \case
+        PP.SFail           -> fail "FAIL"
+        PP.SEmpty          -> pure ()
+        PP.SChar c ss      -> T.putChar c >> render anns ss
+        PP.SText _ t ss    -> T.putText t >> render anns ss
+        PP.SLine n ss      -> T.putLn >> T.putText (Text.replicate n " ") >> render anns ss
+        PP.SAnnPush ann ss -> T.setAnnotation ann >> render (ann:anns) ss
+        PP.SAnnPop ss      -> case anns of
+          []                     -> render [] ss
+          (Bold {}       :anns') -> T.setAnnotation (Bold                False) >> render anns' ss
+          (Underlined {} :anns') -> T.setAnnotation (Underlined          False) >> render anns' ss
+          (Inverted {}   :anns') -> T.setAnnotation (Inverted            False) >> render anns' ss
+          (Foreground {} :anns') -> T.setAnnotation (Foreground T.ColorDefault) >> render anns' ss
+          (Background {} :anns') -> T.setAnnotation (Background T.ColorDefault) >> render anns' ss
+  setAnnotation (Bold                                    True) = write "\ESC[1m"
+  setAnnotation (Bold                                   False) = write "\ESC[22m"
+  setAnnotation (Underlined                              True) = write "\ESC[4m"
+  setAnnotation (Underlined                             False) = write "\ESC[24m"
+  setAnnotation (Inverted                                True) = write "\ESC[7m"
+  setAnnotation (Inverted                               False) = write "\ESC[27m"
+  setAnnotation (Foreground c@T.ColorDefault                 ) = write "\ESC[39m"
+  setAnnotation (Foreground c@(T.Color4Bit T.Black     False)) = write "\ESC[30m"
+  setAnnotation (Foreground c@(T.Color4Bit T.Red       False)) = write "\ESC[31m"
+  setAnnotation (Foreground c@(T.Color4Bit T.Green     False)) = write "\ESC[32m"
+  setAnnotation (Foreground c@(T.Color4Bit T.Yellow    False)) = write "\ESC[33m"
+  setAnnotation (Foreground c@(T.Color4Bit T.Blue      False)) = write "\ESC[34m"
+  setAnnotation (Foreground c@(T.Color4Bit T.Magenta   False)) = write "\ESC[35m"
+  setAnnotation (Foreground c@(T.Color4Bit T.Cyan      False)) = write "\ESC[36m"
+  setAnnotation (Foreground c@(T.Color4Bit T.White     False)) = write "\ESC[37m"
+  setAnnotation (Foreground c@(T.Color4Bit T.Black      True)) = write "\ESC[90m"
+  setAnnotation (Foreground c@(T.Color4Bit T.Red        True)) = write "\ESC[91m"
+  setAnnotation (Foreground c@(T.Color4Bit T.Green      True)) = write "\ESC[92m"
+  setAnnotation (Foreground c@(T.Color4Bit T.Yellow     True)) = write "\ESC[93m"
+  setAnnotation (Foreground c@(T.Color4Bit T.Blue       True)) = write "\ESC[94m"
+  setAnnotation (Foreground c@(T.Color4Bit T.Magenta    True)) = write "\ESC[95m"
+  setAnnotation (Foreground c@(T.Color4Bit T.Cyan       True)) = write "\ESC[96m"
+  setAnnotation (Foreground c@(T.Color4Bit T.White      True)) = write "\ESC[97m"
+  setAnnotation (Foreground _                                ) = error "FIXME"
+  setAnnotation (Background c@T.ColorDefault                 ) = write "\ESC[49m"
+  setAnnotation (Background c@(T.Color4Bit T.Black     False)) = write "\ESC[40m"
+  setAnnotation (Background c@(T.Color4Bit T.Red       False)) = write "\ESC[41m"
+  setAnnotation (Background c@(T.Color4Bit T.Green     False)) = write "\ESC[42m"
+  setAnnotation (Background c@(T.Color4Bit T.Yellow    False)) = write "\ESC[43m"
+  setAnnotation (Background c@(T.Color4Bit T.Blue      False)) = write "\ESC[44m"
+  setAnnotation (Background c@(T.Color4Bit T.Magenta   False)) = write "\ESC[45m"
+  setAnnotation (Background c@(T.Color4Bit T.Cyan      False)) = write "\ESC[46m"
+  setAnnotation (Background c@(T.Color4Bit T.White     False)) = write "\ESC[47m"
+  setAnnotation (Background c@(T.Color4Bit T.Black      True)) = write "\ESC[100m"
+  setAnnotation (Background c@(T.Color4Bit T.Red        True)) = write "\ESC[101m"
+  setAnnotation (Background c@(T.Color4Bit T.Green      True)) = write "\ESC[102m"
+  setAnnotation (Background c@(T.Color4Bit T.Yellow     True)) = write "\ESC[103m"
+  setAnnotation (Background c@(T.Color4Bit T.Blue       True)) = write "\ESC[104m"
+  setAnnotation (Background c@(T.Color4Bit T.Magenta    True)) = write "\ESC[105m"
+  setAnnotation (Background c@(T.Color4Bit T.Cyan       True)) = write "\ESC[106m"
+  setAnnotation (Background c@(T.Color4Bit T.White      True)) = write "\ESC[107m"
+  setAnnotation (Background _                                ) = error "FIXME"
+  resetAnnotations                                             = write "\ESC[m"
+
+instance (MonadIO m) => T.MonadAnsiPrinter (AnsiTerminalT m) where
+  bold       = Bold
+  inverted   = Inverted
+  underlined = Underlined
+  foreground = Foreground
+  background = Background
 
 instance (MonadIO m) => T.MonadScreen (AnsiTerminalT m) where
   clear                                           = write "\ESC[H"

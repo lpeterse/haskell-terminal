@@ -14,7 +14,6 @@ extra-source-files:
 description:         Please see the README on Github at <https://github.com/lpeterse/terminal#readme>
 
 dependencies:
-- async
 - base >= 4.7 && < 5
 - bytestring
 - exceptions

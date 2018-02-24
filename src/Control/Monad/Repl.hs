@@ -26,7 +26,7 @@ import           Data.Typeable
 import qualified Control.Monad.Terminal        as T
 import qualified Control.Monad.Terminal.Color  as T
 import qualified Control.Monad.Terminal.Events as T
-import qualified Control.Monad.Terminal.Pretty as T
+import qualified Control.Monad.Terminal.Pretty as P
 
 import           Prelude                       hiding (read)
 
@@ -74,13 +74,16 @@ instance (T.MonadPrinter m) => T.MonadPrinter (ReplT s m) where
   putTextLn = lift . T.putTextLn
   flush = lift T.flush
 
-instance (T.MonadColorPrinter m) => T.MonadColorPrinter (ReplT s m) where
-  setDefault = lift T.setDefault
-  setForeground = lift . T.setForeground
-  setBackground = lift . T.setBackground
-  setUnderline = lift . T.setUnderline
-  setNegative = lift . T.setNegative
-  setBold = lift . T.setBold
+instance (T.MonadPrettyPrinter m) => T.MonadPrettyPrinter (ReplT s m) where
+  data Annotation (ReplT s m) = Annotation' (T.Annotation m)
+  putDoc doc = lift $ T.putDoc (PP.reAnnotate (\(Annotation' ann)-> ann) doc)
+
+instance (T.MonadPrettyPrinter m, T.MonadAnsiPrinter m) => T.MonadAnsiPrinter (ReplT s m) where
+  bold       x = Annotation' (T.bold x)
+  inverted   x = Annotation' (T.inverted x)
+  underlined x = Annotation' (T.underlined x)
+  foreground x = Annotation' (T.foreground x)
+  background x = Annotation' (T.background x)
 
 instance (T.MonadScreen m) => T.MonadScreen (ReplT s m) where
   clear = lift T.clear
@@ -96,7 +99,7 @@ instance (T.MonadScreen m) => T.MonadScreen (ReplT s m) where
 instance (T.MonadEvent m) => T.MonadEvent (ReplT s m) where
   withEventSTM = lift . T.withEventSTM
 
-instance (T.MonadTerminal m) => T.MonadTerminal (ReplT s m) where
+instance (T.MonadTerminal m, T.MonadPrettyPrinter m) => T.MonadTerminal (ReplT s m) where
 
 execReplT :: (T.MonadTerminal m, T.MonadPrinter m, MonadMask m) => ReplT s m () -> s -> m s
 execReplT (ReplT ma) s = replUserState <$> execStateT loop (replTStateDefault s)
@@ -106,7 +109,7 @@ execReplT (ReplT ma) s = replUserState <$> execStateT loop (replTStateDefault s)
       True  -> pure ()
     protected = catch ma $ \e-> do
       if e == E.UserInterrupt then
-        lift (T.setBold True >> T.setForeground T.red >> T.putStringLn "Interrupted." >> T.setDefault)
+        lift $ T.putDocLn (P.bold $ P.color P.red "Interrupted.")
       else
         throwM e
 
@@ -121,7 +124,7 @@ instance T.MonadTerminal m => MonadRepl (ReplT s m) where
   readString = do
     prompt <- ReplT $ replPrompt <$> get
     prompt
-    lift $ T.setDefault
+    lift $ T.resetAnnotations
     lift $ T.flush
     withStacks [] []
     where
