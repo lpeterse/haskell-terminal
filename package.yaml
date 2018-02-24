@@ -32,10 +32,12 @@ library:
     - Control.Monad.Terminal.Events
     - Control.Monad.Terminal.Modes
     - Control.Monad.Terminal.Pretty
+    - Control.Monad.Terminal.Ansi
     - System.Terminal.Ansi
-    - System.Terminal.Ansi.Internal
   other-modules:
-    - System.Terminal.Ansi.AnsiTerminalT
+    - Control.Monad.Terminal.Ansi.Internal
+    - Control.Monad.Terminal.Ansi.AnsiTerminal
+    - Control.Monad.Terminal.Ansi.AnsiTerminalT
     - System.Terminal.Ansi.Platform
   source-dirs: src
   when:

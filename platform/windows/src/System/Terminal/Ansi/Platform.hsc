@@ -2,7 +2,7 @@
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
 module System.Terminal.Ansi.Platform
-  ( withStandardTerminal
+  ( withTerminal
   ) where
 
 import           Control.Concurrent            (ThreadId, myThreadId, forkIO)
@@ -27,12 +27,12 @@ import qualified System.IO                     as IO
 import qualified System.IO.Error               as IO
 
 import qualified Control.Monad.Terminal.Events as T
-import qualified System.Terminal.Ansi.Internal as T
+import qualified Control.Monad.Terminal.Ansi.AnsiTerminal as T
 
 #include "hs_terminal.h"
 
-withStandardTerminal :: (MonadIO m, MonadMask m) => (T.TerminalEnv -> m a) -> m a
-withStandardTerminal action = do
+withTerminal :: (MonadIO m, MonadMask m) => (T.TerminalEnv -> m a) -> m a
+withTerminal action = do
   mainThread     <- liftIO myThreadId
   interrupt      <- liftIO (newTVarIO False)
   chars          <- liftIO newTChanIO

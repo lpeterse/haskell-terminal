@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 46fe83bf8e03b27066877f072853ffd804ce27cba537acb7210b4f2441254589
+-- hash: fa8780c7c11becdfe04a4da1b0b81a7e3d61d688a0410c35585744403c17735d
 
 name:           terminal
 version:        0.1.0.0
@@ -59,10 +59,12 @@ library
       Control.Monad.Terminal.Events
       Control.Monad.Terminal.Modes
       Control.Monad.Terminal.Pretty
+      Control.Monad.Terminal.Ansi
       System.Terminal.Ansi
-      System.Terminal.Ansi.Internal
   other-modules:
-      System.Terminal.Ansi.AnsiTerminalT
+      Control.Monad.Terminal.Ansi.Internal
+      Control.Monad.Terminal.Ansi.AnsiTerminal
+      Control.Monad.Terminal.Ansi.AnsiTerminalT
       System.Terminal.Ansi.Platform
   default-language: Haskell2010
 

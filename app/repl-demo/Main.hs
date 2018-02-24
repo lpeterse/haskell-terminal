@@ -20,6 +20,7 @@ import           System.Environment
 
 import qualified Control.Monad.Repl            as R
 import qualified Control.Monad.Terminal        as T
+import           Control.Monad.Terminal.Ansi   as T
 import qualified Control.Monad.Terminal.Color  as T
 import qualified Control.Monad.Terminal.Events as T
 import qualified Control.Monad.Terminal.Pretty as P
@@ -30,8 +31,16 @@ import           Control.Monad.Terminal
 
 import           Prelude                       hiding (print, putChar)
 
+type AnsiReplT s m = R.ReplT s (AnsiTerminalT m)
+
+execAnsiReplT :: AnsiReplT s IO () -> s -> IO s
+execAnsiReplT ma s = T.withTerminal $ T.runAnsiTerminalT (R.execReplT ma s)
+
+evalAnsiReplT :: AnsiReplT s IO () -> s -> IO ()
+evalAnsiReplT ma = void . execAnsiReplT ma
+
 main :: IO ()
-main = T.evalAnsiReplT (ini >> repl) 0
+main = evalAnsiReplT (ini >> repl) 0
   where
     ini = R.setPrompt $ T.putDoc $ P.bold (P.color P.blue "foo") <> "@bar % "
 

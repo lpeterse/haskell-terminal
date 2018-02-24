@@ -1,5 +1,5 @@
 module System.Terminal.Ansi
-  ( module System.Terminal.Ansi.AnsiTerminalT
+  ( withTerminal
   ) where
 
-import           System.Terminal.Ansi.AnsiTerminalT
+import           System.Terminal.Ansi.Platform
