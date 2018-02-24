@@ -31,7 +31,7 @@ import qualified Control.Monad.Terminal.Ansi.AnsiTerminal as T
 
 #include "hs_terminal.h"
 
-withTerminal :: (MonadIO m, MonadMask m) => (T.TerminalEnv -> m a) -> m a
+withTerminal :: (MonadIO m, MonadMask m) => (T.AnsiTerminal -> m a) -> m a
 withTerminal action = do
   mainThread     <- liftIO myThreadId
   interrupt      <- liftIO (newTVarIO False)
@@ -43,15 +43,15 @@ withTerminal action = do
   withConsoleModes $
     withOutputProcessing mainThread output outputFlush $
       withInputProcessing mainThread interrupt chars events $ action $
-        T.TerminalEnv {
-          T.envTermType       = "xterm"
-        , T.envInputChars     = readTChan  chars
-        , T.envInputEvents    = readTChan  events
-        , T.envInterrupt      = swapTVar   interrupt False
-        , T.envOutput         = putTMVar   output
-        , T.envOutputFlush    = putTMVar   outputFlush ()
-        , T.envScreenSize     = readTVar   screenSize
-        , T.envSpecialChars   = specialChars
+        T.AnsiTerminal {
+          T.ansiTermType       = "xterm"
+        , T.ansiInputChars     = readTChan  chars
+        , T.ansiInputEvents    = readTChan  events
+        , T.ansiInterrupt      = swapTVar   interrupt False
+        , T.ansiOutput         = putTMVar   output
+        , T.ansiOutputFlush    = putTMVar   outputFlush ()
+        , T.ansiScreenSize     = readTVar   screenSize
+        , T.ansiSpecialChars   = specialChars
         }
 
 withConsoleModes :: (MonadIO m, MonadMask m) => m a -> m a

@@ -30,7 +30,6 @@ library:
     - Control.Monad.Terminal
     - Control.Monad.Terminal.Color
     - Control.Monad.Terminal.Events
-    - Control.Monad.Terminal.Modes
     - Control.Monad.Terminal.Pretty
     - Control.Monad.Terminal.Ansi
     - System.Terminal.Ansi

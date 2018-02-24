@@ -14,7 +14,7 @@ import qualified System.Terminal.Ansi          as T
 
 main :: IO ()
 main = T.withTerminal $ T.runAnsiTerminalT $ fix $ \loop-> do
-  ev <- T.getEvent
+  ev <- T.waitEvent
   T.putStringLn (show ev)
   T.flush
   when (ev == T.EvKey (T.KChar 'C') [T.MCtrl]) (E.throwM UserInterrupt)

@@ -13,7 +13,6 @@ import           Data.Maybe
 import           Data.Word
 
 import qualified Control.Monad.Terminal.Events as T
-import qualified Control.Monad.Terminal.Modes  as T
 
 class Monad m => MonadInput m where
   getNext         :: m Char

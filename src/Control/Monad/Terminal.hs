@@ -1,6 +1,15 @@
 {-# LANGUAGE LambdaCase   #-}
 {-# LANGUAGE TypeFamilies #-}
-module Control.Monad.Terminal where
+module Control.Monad.Terminal
+  ( MonadPrinter (..)
+  , MonadPrettyPrinter (..)
+  , MonadAnsiPrinter (..)
+  , MonadEvent (..)
+  , waitEvent
+  , pollEvent
+  , MonadScreen (..)
+  , MonadTerminal (..)
+  ) where
 
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
@@ -13,7 +22,6 @@ import           Prelude                       hiding (putChar)
 
 import qualified Control.Monad.Terminal.Color  as T
 import qualified Control.Monad.Terminal.Events as T
-import qualified Control.Monad.Terminal.Modes  as T
 
 class (MonadPrettyPrinter m, MonadAnsiPrinter m, MonadEvent m, MonadScreen m) => MonadTerminal m where
 
@@ -21,11 +29,11 @@ class MonadIO m => MonadEvent m where
   waitForEvent          :: (STM T.Event -> STM a) -> m a
   waitForInterruptEvent :: (STM () -> STM a) -> m a
 
-getEvent     :: MonadEvent m => m T.Event
-getEvent      = waitForEvent id
+waitEvent :: MonadEvent m => m T.Event
+waitEvent  = waitForEvent id
 
-tryGetEvent  :: MonadEvent m => m (Maybe T.Event)
-tryGetEvent   = waitForEvent $ \ev-> (Just <$> ev) `orElse` pure Nothing
+pollEvent :: MonadEvent m => m (Maybe T.Event)
+pollEvent  = waitForEvent $ \ev-> (Just <$> ev) `orElse` pure Nothing
 
 class Monad m => MonadPrinter m where
   putLn              :: m ()

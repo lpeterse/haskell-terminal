@@ -1,5 +1,5 @@
 module Control.Monad.Terminal.Ansi
-  ( TerminalEnv (..)
+  ( AnsiTerminal (..)
   , AnsiTerminalT ()
   , runAnsiTerminalT
   ) where

@@ -130,7 +130,7 @@ instance T.MonadTerminal m => MonadRepl (ReplT s m) where
     lift $ T.flush
     withStacks [] []
     where
-      withStacks xss yss = T.getEvent >>= \case
+      withStacks xss yss = T.waitEvent >>= \case
         T.EvKey (T.KChar 'C') [T.MCtrl] -> do
           lift $ T.putLn
           lift $ T.flush

@@ -42,24 +42,23 @@ import qualified Control.Monad.Terminal.Ansi.AnsiTerminal as T
 import qualified Control.Monad.Terminal.Ansi.Internal     as T
 import qualified Control.Monad.Terminal.Color             as T
 import qualified Control.Monad.Terminal.Events            as T
-import qualified Control.Monad.Terminal.Modes             as T
 import qualified Control.Monad.Terminal.Pretty            as T
 
 import qualified System.Terminal.Ansi.Platform            as T
 
 newtype AnsiTerminalT m a
-  = AnsiTerminalT (ReaderT T.TerminalEnv m a)
+  = AnsiTerminalT (ReaderT T.AnsiTerminal m a)
   deriving (Functor, Applicative, Monad, MonadIO, MonadThrow, MonadCatch, MonadMask)
 
-runAnsiTerminalT :: (MonadIO m, MonadMask m) => AnsiTerminalT m a -> T.TerminalEnv -> m a
-runAnsiTerminalT (AnsiTerminalT action) env =
-  runReaderT action env { T.envInputEvents = events }
+runAnsiTerminalT :: (MonadIO m, MonadMask m) => AnsiTerminalT m a -> T.AnsiTerminal -> m a
+runAnsiTerminalT (AnsiTerminalT action) ansi =
+  runReaderT action ansi { T.ansiInputEvents = events }
   where
-    events = (mapEvent <$> runReaderT T.decodeAnsi (T.envInputChars env)) `orElse` T.envInputEvents env
+    events = (mapEvent <$> runReaderT T.decodeAnsi (T.ansiInputChars ansi)) `orElse` T.ansiInputEvents ansi
     mapEvent ev@(T.EvKey (T.KChar c) [])
       | c == '\NUL' = T.EvKey T.KNull []
-      | c  < ' '    = fromMaybe (T.EvKey (T.KChar $ toEnum $ 64 + fromEnum c) [T.MCtrl]) (T.envSpecialChars env c)
-      | otherwise   = fromMaybe ev (T.envSpecialChars env c)
+      | c  < ' '    = fromMaybe (T.EvKey (T.KChar $ toEnum $ 64 + fromEnum c) [T.MCtrl]) (T.ansiSpecialChars ansi c)
+      | otherwise   = fromMaybe ev (T.ansiSpecialChars ansi c)
     mapEvent ev = ev
 
 instance MonadTrans AnsiTerminalT where
@@ -69,27 +68,27 @@ instance (MonadIO m) => T.MonadTerminal (AnsiTerminalT m) where
 
 instance (MonadIO m) => T.MonadEvent (AnsiTerminalT m) where
   waitForEvent f = AnsiTerminalT $ do
-    env <- ask
+    ansi <- ask
     liftIO $ atomically $ do
-      void (T.envInterrupt env) -- Reset the interrupt flag. State is not relevant.
-      f (T.envInputEvents env)  -- Apply user transformation on event source.
+      void (T.ansiInterrupt ansi) -- Reset the interrupt flag. State is not relevant.
+      f (T.ansiInputEvents ansi)  -- Apply user transformation on event source.
   waitForInterruptEvent f = AnsiTerminalT $ do
-    env <- ask
-    liftIO $ atomically $ f $ T.envInterrupt env >>= check
+    ansi <- ask
+    liftIO $ atomically $ f $ T.ansiInterrupt ansi >>= check
 
 instance (MonadIO m) => T.MonadPrinter (AnsiTerminalT m) where
   putChar c = AnsiTerminalT $ do
-    env <- ask
-    liftIO $ atomically $ T.envOutput env $ Text.singleton c
+    ansi <- ask
+    liftIO $ atomically $ T.ansiOutput ansi $ Text.singleton c
   putString = \case
     [] -> pure ()
     (x:xs) -> T.putChar x >> T.putString xs
   putText t = AnsiTerminalT $ do
-    env <- ask
-    liftIO $ atomically $ T.envOutput env t
+    ansi <- ask
+    liftIO $ atomically $ T.ansiOutput ansi t
   flush = AnsiTerminalT $ do
-    env <- ask
-    liftIO  $ atomically $ T.envOutputFlush env
+    ansi <- ask
+    liftIO  $ atomically $ T.ansiOutputFlush ansi
   getLineWidth = snd <$> T.getScreenSize
 
 instance (MonadIO m) => T.MonadPrettyPrinter (AnsiTerminalT m) where
@@ -186,10 +185,10 @@ instance (MonadIO m) => T.MonadScreen (AnsiTerminalT m) where
   --askCursorPosition                               = write "\ESC[6n"
   getCursorPosition                               = pure (0,0)
   getScreenSize = AnsiTerminalT $ do
-    env <- ask
-    liftIO $ atomically $ T.envScreenSize env
+    ansi <- ask
+    liftIO $ atomically $ T.ansiScreenSize ansi
 
 write :: (MonadIO m) => Text.Text -> AnsiTerminalT m ()
 write t = AnsiTerminalT $ do
-  env <- ask
-  liftIO $ atomically $ T.envOutput env t
+  ansi <- ask
+  liftIO $ atomically $ T.ansiOutput ansi t
