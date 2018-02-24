@@ -1,6 +1,18 @@
 module Control.Monad.Terminal.Events where
 
+import           Control.Monad.IO.Class
+import           Control.Monad.STM
 import           Data.ByteString
+
+class (MonadIO m) => MonadEvent m where
+  waitForEvent          :: (STM Event -> STM a) -> m a
+  waitForInterruptEvent :: (STM () -> STM a) -> m a
+
+waitEvent :: MonadEvent m => m Event
+waitEvent  = waitForEvent id
+
+pollEvent :: MonadEvent m => m (Maybe Event)
+pollEvent  = waitForEvent $ \ev-> (Just <$> ev) `orElse` pure Nothing
 
 data Key
   = KNull

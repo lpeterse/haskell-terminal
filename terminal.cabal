@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 3f0f4d235b83e5bd316f40811c1e8311b4270179e1f597b0b25a54d3ffad322d
+-- hash: d7df22868a90e24b001f9a1a059c446ae3a3b0e1e82d0f2d53e5ff6303fa82fd
 
 name:           terminal
 version:        0.1.0.0
@@ -55,8 +55,9 @@ library
   exposed-modules:
       Control.Monad.Repl
       Control.Monad.Terminal
-      Control.Monad.Terminal.Events
       Control.Monad.Terminal.Ansi
+      Control.Monad.Terminal.Events
+      Control.Monad.Terminal.Printer
       System.Terminal.Ansi
   other-modules:
       Control.Monad.Terminal.Ansi.Color
