@@ -76,94 +76,101 @@ withConsoleModes = bracket before after . const
     after (i, o) = liftIO $ do
       setConsoleInputMode i
       setConsoleOutputMode o
-    getConsoleInputMode = alloca $ \ptr-> do
-      unsafeGetConsoleInputMode ptr
-      peek ptr
     setConsoleInputMode mode = do
-      unsafeSetConsoleInputMode mode
-    getConsoleOutputMode = alloca $ \ptr-> do
-      unsafeGetConsoleOutputMode ptr
-      peek ptr
+      r <- unsafeSetConsoleInputMode mode
+      -- TODO: Function reports error, but nonetheless has the correct effect. Windows bug?
+      when (r == 0) $ pure () -- E.throwIO (IO.userError "setConsoleInputMode: not a tty?")
     setConsoleOutputMode mode = do
-      unsafeSetConsoleOutputMode mode
+      r <- unsafeSetConsoleOutputMode mode
+      when (r == 0) $ E.throwIO (IO.userError "setConsoleOutputMode: not a tty?")
+    getConsoleInputMode = alloca $ \ptr-> do
+      r <- unsafeGetConsoleInputMode ptr
+      when (r == 0) $ E.throwIO (IO.userError "getConsoleInputMode: not a tty?")
+      peek ptr
+    getConsoleOutputMode = alloca $ \ptr-> do
+      r <- unsafeGetConsoleOutputMode ptr
+      when (r == 0) $ E.throwIO (IO.userError "getConsoleOutputMode: not a tty?")
+      peek ptr
 
-withInputProcessing mainThreadId interrupt chars events ma = do
+withOutputProcessing :: (MonadIO m, MonadMask m) => ThreadId -> TMVar Text.Text -> TMVar () -> m a -> m a
+withOutputProcessing mainThread output outputFlush ma = do
   terminate  <- liftIO (newTVarIO False)
   terminated <- liftIO (newTVarIO False)
   bracket_
-    (liftIO $ forkIO $ processInput mainThreadId terminate terminated interrupt chars events)
+    (liftIO $ forkIO $ run terminate terminated)
     (liftIO (atomically (writeTVar terminate True) >> atomically (readTVar terminated >>= check))) ma
+  where
+    run :: TVar Bool -> TVar Bool -> IO ()
+    run terminate terminated =
+      -- Synchronous exception will be rethrown to the main thread.
+      -- Asynchronous exceptions (apart from `E.AsyncException` thrown by the RTS) won't occur.
+      -- In all cases the thread finally writes `True` into the `terminated` variable.
+      loop `E.catch` (\e-> E.throwTo mainThread (e:: E.SomeException)) `E.finally` atomically (writeTVar terminated True)
+      where
+        loop :: IO ()
+        loop = do
+          x <- atomically $ (readTVar terminate >>= check >> pure Nothing)
+                  `orElse` (Just . Just <$> takeTMVar output)
+                  `orElse` (takeTMVar outputFlush >> pure (Just Nothing))
+          case x of
+            Nothing       -> pure ()
+            Just Nothing  -> IO.hFlush IO.stdout >> loop
+            Just (Just t) -> Text.putStr t       >> loop
 
-withOutputProcessing mainThreadId output outputFlush ma = do
+withInputProcessing :: (MonadIO m, MonadMask m) => ThreadId -> TVar Bool -> TChan Char -> TChan T.Event -> m a -> m a
+withInputProcessing mainThread interrupt chars events ma = do
   terminate  <- liftIO (newTVarIO False)
   terminated <- liftIO (newTVarIO False)
   bracket_
-    (liftIO $ forkIO $ processOutput mainThreadId terminate terminated output outputFlush)
+    (liftIO $ forkIO $ run terminate terminated)
     (liftIO (atomically (writeTVar terminate True) >> atomically (readTVar terminated >>= check))) ma
-
-processOutput :: ThreadId -> TVar Bool -> TVar Bool -> TMVar Text.Text -> TMVar () -> IO ()
-processOutput mainThread terminate terminated output outputFlush =
-  loop `E.catch` (\e-> E.throwTo mainThread (e:: E.SomeException)) `E.finally` atomically (writeTVar terminated True)
   where
-    loop :: IO ()
-    loop = do
-      x <- atomically $ (readTVar terminate >>= check >> pure Nothing)
-               `orElse` (Just . Just <$> takeTMVar output)
-               `orElse` (takeTMVar outputFlush >> pure (Just Nothing))
-      case x of
-        Nothing       -> pure ()
-        Just Nothing  -> IO.hFlush IO.stdout >> loop
-        Just (Just t) -> Text.putStr t       >> loop
-
-processInput :: ThreadId -> TVar Bool -> TVar Bool ->  TVar Bool -> TChan Char -> TChan T.Event -> IO ()
-processInput mainThread terminate terminated interrupt chars events =
-  -- Synchronous exception will be rethrown to the main thread.
-  -- Asynchronous exceptions (apart from `E.AsyncException` thrown by the RTS) won't occur.
-  -- In all cases the thread finally writes `True` into the `terminated` variable.
-  loop `E.catch` (\e-> E.throwTo mainThread (e:: E.SomeException)) `E.finally` atomically (writeTVar terminated True)
-  where
-    timeoutMillis :: CULong
-    timeoutMillis = 100
-    loop :: IO ()
-    loop = tryGetConsoleInputEvent >>= \case
-      -- `tryGetConsoleInputEvent` is a blocking system call. It cannot be interrupted, but
-      -- is guaranteed to return after at most 100ms. In this case it is checked whether
-      -- this thread shall either terminate or is allowed to continue.
-      -- This is cooperative multitasking to circumvent the limitations of IO on Windows.
-      Nothing -> atomically (readTVar terminate) >>= \t-> unless t loop
-      Just ev -> (flip (>>)) loop $ case ev of
-        KeyEvent { ceKeyChar = c, ceKeyDown = d }
-          | c == '\NUL'          -> pure ()
-          | c == '\ESC' && not d -> atomically (writeTChan chars '\NUL')
-          | c == '\ETX' &&     d -> do 
-                                    unhandledInterrupt <- atomically $ do
-                                      writeTChan chars '\ETX'
-                                      swapTVar interrupt True
-                                    when unhandledInterrupt (E.throwTo mainThread E.UserInterrupt)
-                                    -- In virtual terminal mode, Windows actually sends Ctrl+C and there is no
-                                    -- way a non-responsive application can be killed from keyboard.
-                                    -- The solution is to catch this specific event and swap an STM interrupt flag.
-                                    -- If the old value is found to be True then it must at least be the second
-                                    -- time the user has pressed Ctrl+C _and_ the application was to busy to
-                                    -- to reset the interrupt flag in the meantime. In this specific case
-                                    -- an asynchronous `E.UserInterrupt` exception is thrown to the main thread
-                                    -- and either terminates the application or at least the current computation.
-          |                    d -> atomically (writeTChan chars c)
-          | otherwise            -> pure () -- Other key release events get swallowed.
-        MouseEvent mev           -> atomically $ writeTChan events $ T.MouseEvent mev
-        WindowEvent wev          -> atomically $ writeTChan events $ T.WindowEvent wev
-        UnknownEvent x           -> atomically $ writeTChan events (T.EvUnknownSequence $ "unknown console input event" ++ show x)
-    -- Wait at most `timeoutMillis` for the handle to signal readyness.
-    -- Then either read one console event or return `Nothing`.
-    tryGetConsoleInputEvent :: IO (Maybe ConsoleInputEvent)
-    tryGetConsoleInputEvent =
-      unsafeWaitConsoleInput timeoutMillis >>= \case
-        (#const WAIT_TIMEOUT)  -> pure Nothing    -- Timeout occured.
-        (#const WAIT_OBJECT_0) -> alloca $ \ptr-> -- Handle signaled readyness.
-              unsafeReadConsoleInput ptr >>= \case
-                0 -> Just <$> peek ptr
-                _ -> E.throwIO (IO.userError "getConsoleInputEvent: error reading console events")
-        _ -> E.throwIO (IO.userError "getConsoleInputEvent: error waiting for console events")
+    run :: TVar Bool -> TVar Bool -> IO ()
+    run terminate terminated =
+      loop `E.catch` (\e-> E.throwTo mainThread (e:: E.SomeException)) `E.finally` atomically (writeTVar terminated True)
+      where
+        timeoutMillis :: CULong
+        timeoutMillis = 100
+        loop :: IO ()
+        loop = tryGetConsoleInputEvent >>= \case
+          -- `tryGetConsoleInputEvent` is a blocking system call. It cannot be interrupted, but
+          -- is guaranteed to return after at most 100ms. In this case it is checked whether
+          -- this thread shall either terminate or is allowed to continue.
+          -- This is cooperative multitasking to circumvent the limitations of IO on Windows.
+          Nothing -> atomically (readTVar terminate) >>= \t-> unless t loop
+          Just ev -> (flip (>>)) loop $ case ev of
+            KeyEvent { ceKeyChar = c, ceKeyDown = d }
+              | c == '\NUL'          -> pure ()
+              | c == '\ESC' && not d -> atomically (writeTChan chars '\NUL')
+              | c == '\ETX' &&     d -> do 
+                                        unhandledInterrupt <- atomically $ do
+                                          writeTChan chars '\ETX'
+                                          swapTVar interrupt True
+                                        when unhandledInterrupt (E.throwTo mainThread E.UserInterrupt)
+                                        -- In virtual terminal mode, Windows actually sends Ctrl+C and there is no
+                                        -- way a non-responsive application can be killed from keyboard.
+                                        -- The solution is to catch this specific event and swap an STM interrupt flag.
+                                        -- If the old value is found to be True then it must at least be the second
+                                        -- time the user has pressed Ctrl+C _and_ the application was to busy to
+                                        -- to reset the interrupt flag in the meantime. In this specific case
+                                        -- an asynchronous `E.UserInterrupt` exception is thrown to the main thread
+                                        -- and either terminates the application or at least the current computation.
+              |                    d -> atomically (writeTChan chars c)
+              | otherwise            -> pure () -- Other key release events get swallowed.
+            MouseEvent mev           -> atomically $ writeTChan events $ T.MouseEvent mev
+            WindowEvent wev          -> atomically $ writeTChan events $ T.WindowEvent wev
+            UnknownEvent x           -> atomically $ writeTChan events (T.EvUnknownSequence $ "unknown console input event" ++ show x)
+        -- Wait at most `timeoutMillis` for the handle to signal readyness.
+        -- Then either read one console event or return `Nothing`.
+        tryGetConsoleInputEvent :: IO (Maybe ConsoleInputEvent)
+        tryGetConsoleInputEvent =
+          unsafeWaitConsoleInput timeoutMillis >>= \case
+            (#const WAIT_TIMEOUT)  -> pure Nothing    -- Timeout occured.
+            (#const WAIT_OBJECT_0) -> alloca $ \ptr-> -- Handle signaled readyness.
+                  unsafeReadConsoleInput ptr >>= \case
+                    0 -> Just <$> peek ptr
+                    _ -> E.throwIO (IO.userError "getConsoleInputEvent: error reading console events")
+            _ -> E.throwIO (IO.userError "getConsoleInputEvent: error waiting for console events")
 
 specialChars :: Char -> Maybe T.Event
 specialChars = \case
