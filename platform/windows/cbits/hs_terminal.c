@@ -100,7 +100,7 @@ int hs_get_console_winsize(int *rows, int *cols) {
 int hs_read_console_input(INPUT_RECORD *record) {
     HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
     INPUT_RECORD irInBuf[1];
-    DWORD recordsRead = 0; 
+    DWORD recordsRead = 0;
 
     if (!ReadConsoleInputW(h, record, 1, &recordsRead)) {
         return -1;
@@ -109,4 +109,17 @@ int hs_read_console_input(INPUT_RECORD *record) {
         return -1;
     }
     return 0;
+}
+
+int hs_wait_console_input(void) {
+    HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
+    switch (WaitForSingleObject(h, 100)) {
+        case WAIT_OBJECT_0:
+            return 0;
+        case WAIT_TIMEOUT:
+            return 1;
+        case WAIT_ABANDONED:
+        case WAIT_FAILED:
+            return -1;
+    }
 }

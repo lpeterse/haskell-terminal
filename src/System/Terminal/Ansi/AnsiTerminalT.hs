@@ -69,7 +69,7 @@ runAnsiTerminalT (AnsiTerminalT action) env =
     mapEvent ev@(T.EvKey (T.KChar c) [])
       | c == '\NUL' = T.EvKey T.KNull []
       | c  < ' '    = fromMaybe (T.EvKey (T.KChar $ toEnum $ 64 + fromEnum c) [T.MCtrl]) (T.envSpecialChars env c)
-      | otherwise   = ev
+      | otherwise   = fromMaybe ev (T.envSpecialChars env c)
     mapEvent ev = ev
 
 instance MonadTrans AnsiTerminalT where

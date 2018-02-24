@@ -3,12 +3,12 @@ module System.Terminal.Ansi.Platform
   ( withStandardTerminal
   ) where
 
-import           Control.Concurrent            (ThreadId, myThreadId, threadDelay)
+import           Control.Concurrent            (ThreadId, myThreadId, threadDelay, yield, forkIO)
 import           Control.Concurrent.Async      (async, cancel, withAsync)
 import           Control.Concurrent.STM.TChan  (TChan, newTChanIO, readTChan, writeTChan)
 import           Control.Concurrent.STM.TMVar
 import           Control.Concurrent.STM.TVar   (TVar, newTVarIO, readTVar, swapTVar, writeTVar)
-import           Control.Monad                 (forever, void, when)
+import           Control.Monad                 (forever, void, when, unless)
 import           Control.Monad.Catch           (MonadMask, bracket)
 import           Control.Monad.IO.Class        (MonadIO, liftIO)
 import           Control.Monad.STM             (STM, atomically, check, orElse)
@@ -40,77 +40,62 @@ withStandardTerminal action = withTerminalInput $ withTerminalOutput $ do
   outputFlush    <- liftIO newEmptyTMVarIO
   screenSize     <- liftIO (newTVarIO =<< getScreenSize)
   cursorPosition <- liftIO newEmptyTMVarIO
-  withResizeMonitoring screenSize events $
-    withOutputProcessing mainThreadId output outputFlush $ 
-      withInputProcessing mainThreadId interruptFlag cursorPosition chars events $ action $
-        T.TerminalEnv {
-          T.envTermType       = "vt101"
-        , T.envInputChars     = readTChan  chars
-        , T.envInputEvents    = readTChan  events
-        , T.envOutput         = putTMVar   output
-        , T.envOutputFlush    = putTMVar   outputFlush ()
-        , T.envSpecialChars   = specialChars
-        --, T.envInterrupt      = swapTVar interruptFlag False >>= check
-        --, T.envScreenSize     = readTVar screenSize
-        --, T.envCursorPosition = takeTMVar cursorPosition
-        }
+  withOutputProcessing mainThreadId output outputFlush $
+    withInputProcessing mainThreadId interruptFlag cursorPosition chars events $
+    (\ma-> liftIO (print "BEFORE") >> ma >>= \a-> liftIO (print "AFTER") >> pure a) $
+    action $
+      T.TerminalEnv {
+        T.envTermType       = "xterm"
+      , T.envInputChars     = readTChan  chars
+      , T.envInputEvents    = readTChan  events
+      , T.envOutput         = putTMVar   output
+      , T.envOutputFlush    = putTMVar   outputFlush ()
+      , T.envSpecialChars   = specialChars
+      --, T.envInterrupt      = swapTVar interruptFlag False >>= check
+      --, T.envScreenSize     = readTVar screenSize
+      --, T.envCursorPosition = takeTMVar cursorPosition
+      }
   where
     withTerminalInput = bracket
       ( liftIO getConsoleInputModeDesired >>= liftIO . setConsoleInputMode )
       ( liftIO . setConsoleInputMode ) . const
+
     withTerminalOutput = bracket
       ( liftIO getConsoleOutputModeDesired >>= liftIO . setConsoleOutputMode )
       ( liftIO . setConsoleOutputMode ) . const
+
+    withInputProcessing mainThreadId interruptFlag cursorPosition chars events ma = do
+      terminate  <- liftIO (newTVarIO False)
+      terminated <- liftIO (newTVarIO False)
+      bracket
+        (liftIO $ forkIO $ processInput mainThreadId terminate terminated interruptFlag cursorPosition chars events)
+        (\a-> liftIO (atomically (writeTVar terminate True) >> atomically (readTVar terminated >>= check)))
+        (\a-> ma)
+
     withOutputProcessing mainThreadId output outputFlush = bracket
       (liftIO $ async run)
       (liftIO . cancel) . const
       where
         run = forever $ atomically ((Left <$> takeTMVar output) `orElse` (Right <$> takeTMVar outputFlush)) >>= \case
-            Left  t -> Text.putStr t
-            Right _ -> IO.hFlush IO.stdout
+          Left  t -> Text.putStr t
+          Right _ -> IO.hFlush IO.stdout
 
-    -- The "\ESC[0" trick certainly requires some explanation:
-    -- IO on Windows is blocking which means that a thread blocked
-    -- on reading from a file descriptor cannot be killed/canceled
-    -- and any other thread trying to cancel it will be blocked, too.
-    -- The observed behavior here was that the cleanup procedure waited
-    -- indefinitely for the input processing thread to die after having
-    -- send it an exception.
-    -- The solution is to send this specific escape sequence which asks
-    -- the terminal to report its device attributes. This incoming event
-    -- unblocks the input processing thread which then dies immediately.
-    withInputProcessing mainThreadId interruptFlag cursorPosition chars events = bracket
-      (liftIO $ async $ processInput mainThreadId interruptFlag cursorPosition chars events)
-      (\a-> liftIO $ withAsync trigger $ const $ cancel a) . const
-      where
-        trigger = do
-          threadDelay 100000 -- Yes, it's a race..
-          IO.hPutStr IO.stdout "\ESC[0c"
-          IO.hFlush  IO.stdout
-    withResizeMonitoring screenSize events = bracket
-      (liftIO $ async monitor)
-      (liftIO . cancel) . const
-      where
-        monitor = forever $ do
-          threadDelay 100000
-          new <- getScreenSize
-          old <- atomically $ readTVar screenSize
-          when (new /= old) $ atomically $ do
-            writeTVar screenSize new
-            writeTChan events $ T.EvResize new
-
-processInput :: ThreadId -> TVar Bool -> TMVar (Int, Int) -> TChan Char -> TChan T.Event -> IO ()
-processInput mainThreadId interruptFlag cursorPosition chars events =
-  forever $ getConsoleInputEvent >>= \case
-    KeyEvent { ceKeyChar = c, ceKeyDown = d }
-      | c == '\NUL'          -> pure ()
-      | c == '\ESC' && not d -> atomically (writeTChan chars '\NUL')
-      |                    d -> atomically (writeTChan chars c)
-      | otherwise            -> pure ()
-    MouseEvent mev           -> atomically $ writeTChan events $ T.MouseEvent mev
-    FocusEvent {}            -> atomically $ writeTChan events T.FocusEvent
-    WindowBufferSizeEvent {} -> atomically $ writeTChan events $ T.EvResize (0,0)
-    UnknownEvent x           -> atomically $ writeTChan events (T.EvUnknownSequence $ "unknown console input event" ++ show x)
+processInput :: ThreadId -> TVar Bool -> TVar Bool ->  TVar Bool -> TMVar (Int, Int) -> TChan Char -> TChan T.Event -> IO ()
+processInput mainThreadId terminate terminated interruptFlag cursorPosition chars events =
+  loop `E.catch` (\e-> E.throwTo mainThreadId (e:: E.SomeException)) `E.finally` atomically (writeTVar terminated True)
+  where
+    (<<) a b = b >> a
+    loop = tryGetConsoleInputEvent >>= \case
+      Nothing -> atomically (readTVar terminate) >>= \t-> unless t loop
+      Just ev -> loop << case ev of
+        KeyEvent { ceKeyChar = c, ceKeyDown = d }
+          | c == '\NUL'          -> pure ()
+          | c == '\ESC' && not d -> atomically (writeTChan chars '\NUL')
+          |                    d -> atomically (writeTChan chars c)
+          | otherwise            -> pure ()
+        MouseEvent mev           -> atomically $ writeTChan events $ T.MouseEvent mev
+        WindowEvent wev          -> atomically $ writeTChan events $ T.WindowEvent wev
+        UnknownEvent x           -> atomically $ writeTChan events (T.EvUnknownSequence $ "unknown console input event" ++ show x)
 
 {-
     runAnsiDecoder :: TMVar Char -> IO ()
@@ -136,6 +121,7 @@ specialChars :: Char -> Maybe T.Event
 specialChars = \case
   '\r'    -> Just $ T.EvKey T.KEnter []
   '\DEL'  -> Just $ T.EvKey T.KErase []
+  '\ESC'  -> Just $ T.EvKey T.KEscape []
   _       -> Nothing
 
 getScreenSize :: IO (Int,Int)
@@ -172,9 +158,8 @@ data ConsoleInputEvent
     , ceKeyChar            :: Char
     , ceKeyControlKeyState :: ControlKeyState
     }
-  | MouseEvent T.MouseEvent
-  | FocusEvent
-  | WindowBufferSizeEvent
+  | MouseEvent  T.MouseEvent
+  | WindowEvent T.WindowEvent
   | UnknownEvent CUShort
   deriving (Eq, Ord, Show)
 
@@ -202,8 +187,13 @@ instance Storable ConsoleInputEvent where
           (#const FROM_LEFT_4TH_BUTTON_PRESSED) -> pure $ T.MouseButtonPressed  pos T.OtherButton
           (#const RIGHTMOST_BUTTON_PRESSED)     -> pure $ T.MouseButtonPressed  pos T.RightButton
           _                                     -> pure $ T.MouseButtonReleased pos
-    (#const FOCUS_EVENT) -> pure FocusEvent
-    (#const WINDOW_BUFFER_SIZE_EVENT) -> pure WindowBufferSizeEvent
+    (#const FOCUS_EVENT) -> peek ptrFocus >>= \case
+      0 -> pure $ WindowEvent T.WindowLostFocus
+      _ -> pure $ WindowEvent T.WindowGainedFocus
+    (#const WINDOW_BUFFER_SIZE_EVENT) -> do
+      row <- peek ptrWindowSizeX
+      col <- peek ptrWindowSizeY
+      pure $ WindowEvent $ T.WindowSizeChanged (fromIntegral row, fromIntegral col)
     evt -> pure (UnknownEvent evt)
     where
       peekEventType         = (#peek struct _INPUT_RECORD, EventType) ptr :: IO CUShort
@@ -217,17 +207,27 @@ instance Storable ConsoleInputEvent where
       ptrMousePositionY     = (#ptr struct _COORD, Y) ptrMousePosition :: Ptr CShort
       ptrMouseEventFlags    = (#ptr struct _MOUSE_EVENT_RECORD, dwEventFlags) ptrEvent :: Ptr CULong
       ptrMouseButtonState   = (#ptr struct _MOUSE_EVENT_RECORD, dwButtonState) ptrEvent :: Ptr CULong
+      ptrWindowSize         = (#ptr struct _WINDOW_BUFFER_SIZE_RECORD, dwSize) ptrEvent :: Ptr a
+      ptrWindowSizeX        = (#ptr struct _COORD, X) ptrWindowSize :: Ptr CShort
+      ptrWindowSizeY        = (#ptr struct _COORD, Y) ptrWindowSize :: Ptr CShort
+      ptrFocus              = (#ptr struct _FOCUS_EVENT_RECORD, bSetFocus) ptrEvent :: Ptr CInt
   poke = undefined
 
-foreign import ccall unsafe "hs_read_console_input"
+foreign import ccall "hs_wait_console_input"
+  unsafeWaitConsoleInput :: IO CInt
+
+foreign import ccall "hs_read_console_input"
   unsafeReadConsoleInput :: Ptr ConsoleInputEvent -> IO CInt
 
-getConsoleInputEvent :: IO ConsoleInputEvent
-getConsoleInputEvent =
-  alloca $ \ptr->
-    unsafeReadConsoleInput ptr >>= \case
-      0 -> peek ptr
-      _ -> E.throwIO (IO.userError "getConsoleInputEvent: error reading console events")
+tryGetConsoleInputEvent :: IO (Maybe ConsoleInputEvent)
+tryGetConsoleInputEvent =
+  unsafeWaitConsoleInput >>= \case
+    1 -> pure Nothing -- timeout
+    0 -> alloca $ \ptr->
+          unsafeReadConsoleInput ptr >>= \case
+            0 -> Just <$> peek ptr
+            _ -> E.throwIO (IO.userError "getConsoleInputEvent: error reading console events")
+    _ -> E.throwIO (IO.userError "getConsoleInputEvent: error waiting for console events")
 
 isCapsLockOn :: ControlKeyState -> Bool
 isCapsLockOn (ControlKeyState x) = x .&. (#const CAPSLOCK_ON) /= 0
