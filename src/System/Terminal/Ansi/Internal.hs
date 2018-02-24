@@ -28,6 +28,7 @@ data TerminalEnv
   , envInterrupt    :: STM Bool
   , envOutput       :: Text.Text -> STM ()
   , envOutputFlush  :: STM ()
+  , envScreenSize   :: STM (Int,Int)
   , envSpecialChars :: Char -> Maybe T.Event
   }
 

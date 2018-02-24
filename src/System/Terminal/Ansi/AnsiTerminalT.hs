@@ -79,11 +79,14 @@ instance MonadTrans AnsiTerminalT where
 instance (MonadIO m) => T.MonadTerminal (AnsiTerminalT m) where
 
 instance (MonadIO m) => T.MonadEvent (AnsiTerminalT m) where
-  withEventSTM f = AnsiTerminalT $ do
+  waitForEvent f = AnsiTerminalT $ do
     env <- ask
     liftIO $ atomically $ do
       void (T.envInterrupt env) -- Reset the interrupt flag. State is not relevant.
       f (T.envInputEvents env)  -- Apply user transformation on event source.
+  waitForInterruptEvent f = AnsiTerminalT $ do
+    env <- ask
+    liftIO $ atomically $ f $ T.envInterrupt env >>= check
 
 instance (MonadIO m) => T.MonadPrinter (AnsiTerminalT m) where
   putChar c = AnsiTerminalT $ do
@@ -98,6 +101,7 @@ instance (MonadIO m) => T.MonadPrinter (AnsiTerminalT m) where
   flush = AnsiTerminalT $ do
     env <- ask
     liftIO  $ atomically $ T.envOutputFlush env
+  getLineWidth = snd <$> T.getScreenSize
 
 instance (MonadIO m) => T.MonadPrettyPrinter (AnsiTerminalT m) where
   data Annotation (AnsiTerminalT m)
@@ -192,7 +196,9 @@ instance (MonadIO m) => T.MonadScreen (AnsiTerminalT m) where
   cursorVisible                              True = write "\ESC[?25h"
   --askCursorPosition                               = write "\ESC[6n"
   getCursorPosition                               = pure (0,0)
-  getScreenSize                                   = pure (0,0)
+  getScreenSize = AnsiTerminalT $ do
+    env <- ask
+    liftIO $ atomically $ T.envScreenSize env
 
 write :: (MonadIO m) => Text.Text -> AnsiTerminalT m ()
 write t = AnsiTerminalT $ do

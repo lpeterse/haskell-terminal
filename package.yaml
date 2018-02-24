@@ -65,6 +65,7 @@ executables:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
+    - async
     - terminal
   terminal-ev:
     main:                Main.hs

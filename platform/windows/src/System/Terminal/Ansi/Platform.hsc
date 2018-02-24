@@ -39,6 +39,7 @@ withStandardTerminal action = do
   events         <- liftIO newTChanIO
   output         <- liftIO newEmptyTMVarIO
   outputFlush    <- liftIO newEmptyTMVarIO
+  screenSize     <- liftIO (newTVarIO =<< getScreenSize)
   withConsoleModes $
     withOutputProcessing mainThread output outputFlush $
       withInputProcessing mainThread interrupt chars events $ action $
@@ -49,6 +50,7 @@ withStandardTerminal action = do
         , T.envInterrupt      = swapTVar   interrupt False
         , T.envOutput         = putTMVar   output
         , T.envOutputFlush    = putTMVar   outputFlush ()
+        , T.envScreenSize     = readTVar   screenSize
         , T.envSpecialChars   = specialChars
         }
 

@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: c27392731018de2f94b2696ff349fdce18a1685981504f9a0cf75e65faa55813
+-- hash: 46fe83bf8e03b27066877f072853ffd804ce27cba537acb7210b4f2441254589
 
 name:           terminal
 version:        0.1.0.0
@@ -72,7 +72,8 @@ executable repl-demo
       app/repl-demo
   ghc-options: -Werror -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      async
+    , base >=4.7 && <5
     , bytestring
     , exceptions
     , prettyprinter

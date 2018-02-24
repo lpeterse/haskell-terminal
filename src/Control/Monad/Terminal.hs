@@ -18,17 +18,20 @@ import qualified Control.Monad.Terminal.Modes  as T
 class (MonadPrettyPrinter m, MonadAnsiPrinter m, MonadEvent m, MonadScreen m) => MonadTerminal m where
 
 class MonadIO m => MonadEvent m where
-  withEventSTM :: (STM T.Event -> STM a) -> m a
+  waitForEvent          :: (STM T.Event -> STM a) -> m a
+  waitForInterruptEvent :: (STM () -> STM a) -> m a
 
 getEvent     :: MonadEvent m => m T.Event
-getEvent      = withEventSTM id
+getEvent      = waitForEvent id
 
 tryGetEvent  :: MonadEvent m => m (Maybe T.Event)
-tryGetEvent   = withEventSTM $ \e-> (Just <$> e) `orElse` pure Nothing
+tryGetEvent   = waitForEvent $ \ev-> (Just <$> ev) `orElse` pure Nothing
 
 class Monad m => MonadPrinter m where
   putLn              :: m ()
   putLn               = putChar '\n'
+  putCr              :: m ()
+  putCr               = putChar '\r'
   putChar            :: Char -> m ()
   putString          :: String -> m ()
   putString           = mapM_ putChar
@@ -41,7 +44,9 @@ class Monad m => MonadPrinter m where
 
   flush              :: m ()
   flush               = pure ()
-  {-# MINIMAL putChar #-}
+
+  getLineWidth       :: m Int
+  {-# MINIMAL putChar, getLineWidth #-}
 
 class MonadPrinter m => MonadPrettyPrinter m where
   data Annotation m

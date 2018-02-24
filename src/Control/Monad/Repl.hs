@@ -46,7 +46,7 @@ class T.MonadPrinter m => MonadRepl m where
   quit         :: m ()
 
 newtype ReplT s m a = ReplT (StateT (ReplTState s m) m a)
-  deriving (Functor, Applicative, Monad, MonadIO)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadThrow, MonadCatch, MonadMask)
 
 data ReplTState s m
   = ReplTState
@@ -73,6 +73,7 @@ instance (T.MonadPrinter m) => T.MonadPrinter (ReplT s m) where
   putText = lift . T.putText
   putTextLn = lift . T.putTextLn
   flush = lift T.flush
+  getLineWidth = lift T.getLineWidth
 
 instance (T.MonadPrettyPrinter m) => T.MonadPrettyPrinter (ReplT s m) where
   data Annotation (ReplT s m) = Annotation' (T.Annotation m)
@@ -97,7 +98,8 @@ instance (T.MonadScreen m) => T.MonadScreen (ReplT s m) where
   getCursorPosition = lift T.getCursorPosition
 
 instance (T.MonadEvent m) => T.MonadEvent (ReplT s m) where
-  withEventSTM = lift . T.withEventSTM
+  waitForEvent = lift . T.waitForEvent
+  waitForInterruptEvent = lift . T.waitForInterruptEvent
 
 instance (T.MonadTerminal m, T.MonadPrettyPrinter m) => T.MonadTerminal (ReplT s m) where
 
@@ -128,7 +130,7 @@ instance T.MonadTerminal m => MonadRepl (ReplT s m) where
     lift $ T.flush
     withStacks [] []
     where
-      withStacks xss yss = lift (T.withEventSTM id) >>= \case
+      withStacks xss yss = T.getEvent >>= \case
         T.EvKey (T.KChar 'C') [T.MCtrl] -> do
           lift $ T.putLn
           lift $ T.flush
@@ -170,6 +172,6 @@ instance T.MonadTerminal m => MonadRepl (ReplT s m) where
           | otherwise -> do
             withStacks xss yss
         ev -> do
-          lift $ T.putStringLn (show ev)
+          --lift $ T.putStringLn (show ev)
           lift $ T.flush
           withStacks xss yss
