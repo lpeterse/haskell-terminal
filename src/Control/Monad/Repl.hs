@@ -26,7 +26,6 @@ import           Data.Typeable
 import qualified Control.Monad.Terminal        as T
 import qualified Control.Monad.Terminal.Ansi   as T
 import qualified Control.Monad.Terminal.Events as T
-import qualified Control.Monad.Terminal.Pretty as P
 
 import           Prelude                       hiding (read)
 
@@ -111,7 +110,7 @@ execReplT (ReplT ma) s = replUserState <$> execStateT loop (replTStateDefault s)
       True  -> pure ()
     protected = catch ma $ \e-> do
       if e == E.UserInterrupt then
-        lift $ T.putDocLn (P.bold $ P.color P.red "Interrupted.")
+        lift $ T.putDocLn (PP.annotate (T.bold True) $ PP.annotate (T.foreground T.red) "Interrupted.")
       else
         throwM e
 

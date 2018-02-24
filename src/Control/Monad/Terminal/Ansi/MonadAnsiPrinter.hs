@@ -1,5 +1,17 @@
 {-# LANGUAGE TypeFamilies #-}
-module Control.Monad.Terminal.Ansi.MonadAnsiPrinter where
+module Control.Monad.Terminal.Ansi.MonadAnsiPrinter
+  ( MonadAnsiPrinter (..)
+    -- * Pretty Printing
+    -- ** Standard Colors
+  , black
+  , red
+  , green
+  , yellow
+  , blue
+  , magenta
+  , cyan
+  , white
+  ) where
 
 import           Control.Monad.Terminal
 import           Control.Monad.Terminal.Ansi.Color

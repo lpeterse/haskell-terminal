@@ -29,7 +29,6 @@ library:
     - Control.Monad.Repl
     - Control.Monad.Terminal
     - Control.Monad.Terminal.Events
-    - Control.Monad.Terminal.Pretty
     - Control.Monad.Terminal.Ansi
     - System.Terminal.Ansi
   other-modules:

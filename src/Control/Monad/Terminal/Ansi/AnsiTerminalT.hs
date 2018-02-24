@@ -43,7 +43,6 @@ import qualified Control.Monad.Terminal.Ansi.Color            as T
 import qualified Control.Monad.Terminal.Ansi.Decoder          as T
 import qualified Control.Monad.Terminal.Ansi.MonadAnsiPrinter as T
 import qualified Control.Monad.Terminal.Events                as T
-import qualified Control.Monad.Terminal.Pretty                as T
 
 import qualified System.Terminal.Ansi.Platform                as T
 

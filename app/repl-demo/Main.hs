@@ -16,13 +16,13 @@ import           Data.Char
 import           Data.Function                 (fix)
 import           Data.Monoid
 import qualified Data.Text                     as Text
+import qualified Data.Text.Prettyprint.Doc     as PP
 import           System.Environment
 
 import qualified Control.Monad.Repl            as R
 import qualified Control.Monad.Terminal        as T
 import           Control.Monad.Terminal.Ansi   as T
 import qualified Control.Monad.Terminal.Events as T
-import qualified Control.Monad.Terminal.Pretty as P
 
 import qualified System.Terminal.Ansi          as T
 
@@ -41,7 +41,7 @@ evalAnsiReplT ma = void . execAnsiReplT ma
 main :: IO ()
 main = evalAnsiReplT (ini >> repl) 0
   where
-    ini = R.setPrompt $ T.putDoc $ P.bold (P.color P.blue "foo") <> "@bar % "
+    ini = R.setPrompt $ T.putDoc $ PP.annotate (T.bold True) $ (PP.annotate (T.foreground T.blue) "foo") <> "@bar % "
 
 repl :: (T.MonadTerminal m, R.MonadRepl m, R.ReplState m ~ Int, MonadMask m) => m ()
 repl = R.readString >>= \case

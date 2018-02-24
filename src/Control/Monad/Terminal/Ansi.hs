@@ -3,6 +3,14 @@ module Control.Monad.Terminal.Ansi
   , AnsiTerminalT ()
   , runAnsiTerminalT
   , MonadAnsiPrinter (..)
+  , black
+  , red
+  , green
+  , yellow
+  , blue
+  , magenta
+  , cyan
+  , white
   ) where
 
 import           Control.Monad.Terminal.Ansi.AnsiTerminal
