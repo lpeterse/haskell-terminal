@@ -196,6 +196,7 @@ instance (MonadIO m) => T.MonadColorPrinter (AnsiTerminalT m) where
 
 instance (MonadIO m) => T.MonadScreen (AnsiTerminalT m) where
   clear                                           = write "\ESC[H"
+  putCr                                           = write "\r"
   cursorUp i                                      = write $ "\ESC[" <> Text.pack (show i) <> "A"
   cursorDown i                                    = write $ "\ESC[" <> Text.pack (show i) <> "B"
   cursorForward i                                 = write $ "\ESC[" <> Text.pack (show i) <> "C"

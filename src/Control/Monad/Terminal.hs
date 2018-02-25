@@ -61,4 +61,3 @@ class MonadPrinter m => MonadScreen m where
   --
   --    * Subsequent output shall overwrite previous output on the line.
   putCr              :: m ()
-  putCr               = putChar '\r'

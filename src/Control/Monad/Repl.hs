@@ -91,6 +91,7 @@ instance (T.MonadPrettyPrinter m, T.MonadColorPrinter m) => T.MonadColorPrinter 
 
 instance (T.MonadScreen m) => T.MonadScreen (ReplT s m) where
   clear = lift T.clear
+  putCr = lift T.putCr
   cursorUp = lift . T.cursorUp
   cursorDown = lift . T.cursorDown
   cursorForward = lift . T.cursorForward
