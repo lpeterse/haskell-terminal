@@ -70,13 +70,19 @@ instance (MonadIO m) => T.MonadInput (AnsiTerminalT m) where
 instance (MonadIO m) => T.MonadPrinter (AnsiTerminalT m) where
   putChar c = AnsiTerminalT $ do
     ansi <- ask
-    liftIO $ atomically $ T.ansiOutput ansi $ Text.singleton c
+    when (safeChar c) $
+      liftIO $ atomically $ T.ansiOutput ansi $ Text.singleton c
   putString = \case
-    [] -> pure ()
+    []     -> pure ()
     (x:xs) -> T.putChar x >> T.putString xs
   putText t = AnsiTerminalT $ do
     ansi <- ask
-    liftIO $ atomically $ T.ansiOutput ansi t
+    liftIO $ loop (atomically . T.ansiOutput ansi) (Text.filter safeChar t)
+    where
+      loop out t0
+        | Text.null t0 = pure ()
+        | otherwise    = let (t1,t2) = Text.splitAt 80 t0
+                         in  out t1 >> loop out t2
   flush = AnsiTerminalT $ do
     ansi <- ask
     liftIO  $ atomically $ T.ansiOutputFlush ansi
@@ -202,6 +208,16 @@ instance (MonadIO m) => T.MonadScreen (AnsiTerminalT m) where
   getScreenSize = AnsiTerminalT $ do
     ansi <- ask
     liftIO $ atomically $ T.ansiScreenSize ansi
+
+-- | See https://en.wikipedia.org/wiki/List_of_Unicode_characters
+safeChar :: Char -> Bool
+safeChar c
+  | c == '\n'   = True  -- Newline
+  | c == '\t'   = True  -- Horizontal tab
+  | c  < ' '    = False -- All other C0 control characters.
+  | c  < '\DEL' = True  -- Printable remainder of ASCII. Start of C1.
+  | c  < '\xa0' = False -- C1 up to start of Latin-1.
+  | otherwise   = True
 
 write :: (MonadIO m) => Text.Text -> AnsiTerminalT m ()
 write t = AnsiTerminalT $ do

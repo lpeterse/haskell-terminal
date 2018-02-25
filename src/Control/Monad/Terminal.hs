@@ -39,6 +39,8 @@ module Control.Monad.Terminal
   , MonadScreen (..)
   ) where
 
+import           Prelude                        hiding (putChar)
+
 import           Control.Monad.Terminal.Input
 import           Control.Monad.Terminal.Printer
 
@@ -54,3 +56,9 @@ class MonadPrinter m => MonadScreen m where
   cursorVisible :: Bool -> m ()
   getScreenSize :: m (Int,Int)
   getCursorPosition :: m (Int,Int)
+  -- | Move the carriage to the beginning of the current line.
+  --    TODO: Rename.
+  --
+  --    * Subsequent output shall overwrite previous output on the line.
+  putCr              :: m ()
+  putCr               = putChar '\r'
