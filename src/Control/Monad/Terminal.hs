@@ -9,6 +9,8 @@ module Control.Monad.Terminal
   , MonadPrinter (..)
     -- ** MonadPrettyPrinter
   , MonadPrettyPrinter (..)
+  , putPretty
+  , putPrettyLn
     -- ** MonadFormatPrinter
   , MonadFormatPrinter (..)
     -- ** MonadColorPrinter
@@ -19,11 +21,14 @@ module Control.Monad.Terminal
   , Color (..)
   , ColorMode (..)
     -- * Input Processing
+    -- ** waitEvent
+    , waitEvent
+    -- ** waitEventOrElse
+    , waitEventOrElse
+    -- ** waitInterruptOrElse
+    , waitInterruptOrElse
     -- ** MonadInput
   , MonadInput (..)
-  , waitEvent
-  , pollEvent
-  , waitInterruptOrElse
     -- ** Events
   , Event (..)
   , Key (..)

@@ -5,8 +5,8 @@ import           Control.Monad.IO.Class
 import           Control.Monad.STM
 import           Data.ByteString
 
--- | This monad describes an environment that offers a stream of `Event`s
---   and an out-of-band signaling for interrupts.
+-- | This monad describes an environment that maintains a stream of `Event`s
+--   and offers out-of-band signaling for interrupts.
 --
 --     * An interrupt shall occur if the user either presses CTRL+C
 --       or any other mechanism the environment designates for that purpose.
@@ -34,19 +34,32 @@ class (MonadIO m) => MonadInput m where
   --      transaction, but might not succeed every time.
   waitMapInterruptAndEvents :: (STM () -> STM Event -> STM a) -> m a
 
--- | Wait for the next event transformed by a given mapper.
+-- | Wait for the next event.
 --
---    * This operation resets the interrupt flag if the transaction succeeds,
+--    * Returns as soon as an event occurs.
+--    * This operation resets the interrupt flag it returns,
 --      signaling responsiveness to the execution environment.
 --    * `Event.InterruptEvent`s occur in the event stream at their correct
---      position wrt to ordering of events. This is eventually not desired
---      when trying to handle interrupts with highest priority.
-waitMapEvents :: MonadInput m => (STM Event -> STM a) -> m a
-waitMapEvents f = waitMapInterruptAndEvents $ \intr evs->
-  (intr `orElse` pure ()) >> f evs
+--      position wrt to ordering of events. They are returned as regular
+--      events. This is eventually not desired when trying to handle interrupts
+--      with highest priority and `waitInterruptOrElse` should be considered then.
+waitEvent :: MonadInput m => m Event
+waitEvent = waitMapInterruptAndEvents $ \intr evs->
+  (intr `orElse` pure ()) >> evs
 
---waitEventOrElse :: MonadInput m => STM a -> m (Maybe (Either Event a))
---waitEventOrElse stma =
+-- | Wait simultaneously for the next event or a given transaction.
+--
+--    * Returns as soon as either an event occurs or the given transaction
+--      succeeds.
+--    * This operation resets the interrupt flag whenever it returns,
+--      signaling responsiveness to the execution environment.
+--    * `Event.InterruptEvent`s occur in the event stream at their correct
+--      position wrt to ordering of events. They are returned as regular
+--      events. This is eventually not desired when trying to handle interrupts
+--      with highest priority and `waitInterruptOrElse` should be considered then.
+waitEventOrElse :: MonadInput m => STM a -> m (Either Event a)
+waitEventOrElse stma = waitMapInterruptAndEvents $ \intr evs->
+  (intr `orElse` pure ()) >> ((Prelude.Left <$> evs) `orElse` (Prelude.Right <$> stma))
 
 -- | Wait simultaneously for the next interrupt or a given transaction.
 --
@@ -61,23 +74,10 @@ waitInterruptOrElse stma = waitMapInterruptAndEvents $ \intr evs->
   (intr >> dropTillInterruptEvent evs >> pure Nothing) `orElse` (Just <$> stma)
   where
     dropTillInterruptEvent :: STM Event -> STM ()
-    dropTillInterruptEvent evs = evs >>= \case
-      InterruptEvent -> pure ()
-      -- It is very critical that the `MonadInput` instance is correct wrt to
-      -- putting an `InterruptEvent` into the stream for every interrupt.
-      -- If an implementation fails to fulfill this requirement one will
-      -- encounter a "thread blocked indefinitely in an STM transaction"
-      -- here.
-      _              -> dropTillInterruptEvent evs
-
-waitEvent        :: MonadInput m => m Event
-waitEvent         = waitMapEvents id
-
-waitInterrupt    :: MonadInput m => m ()
-waitInterrupt     = waitInterruptOrElse retry >> pure ()
-
-pollEvent        :: MonadInput m => m (Maybe Event)
-pollEvent         = waitMapEvents $ \ev-> (Just <$> ev) `orElse` pure Nothing
+    dropTillInterruptEvent evs = ((Just <$> evs) `orElse` pure Nothing) >>= \case
+      Nothing             -> pure ()
+      Just InterruptEvent -> pure ()
+      _                   -> dropTillInterruptEvent evs
 
 data Key
   = KNull
