@@ -5,5 +5,12 @@ module System.Terminal.Ansi
   , runAnsiTerminalT
   ) where
 
+import           Control.Monad.Catch           (MonadMask)
+import           Control.Monad.IO.Class        (MonadIO)
+
 import           Control.Monad.Terminal.Ansi
-import           System.Terminal.Ansi.Platform
+import qualified System.Terminal.Ansi.Platform as Platform
+
+-- | (Indirection just for upcoming documentation).
+withTerminal :: (MonadIO m, MonadMask m) => (AnsiTerminal -> m a) -> m a
+withTerminal  = Platform.withTerminal

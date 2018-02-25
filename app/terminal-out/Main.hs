@@ -20,13 +20,13 @@ main = withTerminal $ runAnsiTerminalT foo
 foo :: (MonadTerminal m, MonadIO m) => m ()
 foo = putDocLn doc >> flush
 
-doc :: (MonadColorPrinter m, Annotation m ~ ann) => PP.Doc ann
+doc :: (MonadFormatPrinter m, MonadColorPrinter m, Annotation m ~ ann) => PP.Doc ann
 doc = mconcat
   [ PP.annotate (foreground $ bright Red) "Hallo Welt!"
   , PP.hardline
-  , PP.indent 10 $ "ssdfhsjdfhksjdhfkjsdhfks" PP.<+> "hdfjkshdfkjshddh" PP.<+> "fjksdhfkshdfkjshdfjks"
+  , PP.hang 10 $ "ssdfhsjdfhksjdhfkjsdhfks" PP.<+> "hdfjkshdfkjshddh" PP.<+> "fjksdhfkshdfkjshdfjks"
             PP.<+> "hdfkjshdfjhskdjfhsjksdhfjshdfjshdkj" PP.<+> "fhsdkjfhskjdfhjksdhfjksdhfjks"
-            PP.<+> "hdfkjshdfkh" PP.<+> "jdhfkjshdfkjshdfksjhdkfjhsdkjfhs" PP.<+> "dkjfhskjdhfkjshdfkjshdfj"
+            PP.<+> "hdfkjshdfkh" PP.<+> PP.annotate bold "jdhfkjshdfkjshdfksjhdkfjhsdkjfhs" PP.<+> "dkjfhskjdhfkjshdfkjshdfj"
             PP.<+> "kshdfkjshdfkjshf"
   , PP.line
   , PP.line

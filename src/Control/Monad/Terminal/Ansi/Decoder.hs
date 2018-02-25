@@ -4,7 +4,7 @@
 {-# LANGUAGE LambdaCase                 #-}
 module Control.Monad.Terminal.Ansi.Decoder where
 
-import           Control.Monad                 (forever, when)
+import           Control.Monad                (forever, when)
 import           Control.Monad.STM
 import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Reader
@@ -12,20 +12,20 @@ import           Data.Char
 import           Data.Maybe
 import           Data.Word
 
-import qualified Control.Monad.Terminal.Events as T
+import qualified Control.Monad.Terminal.Input as T
 
-class Monad m => MonadInput m where
+class Monad m => MonadAnsiInput m where
   getNext         :: m Char
   getNextNonBlock :: m (Maybe Char)
 
-instance MonadInput (ReaderT (STM Char) STM) where
+instance MonadAnsiInput (ReaderT (STM Char) STM) where
   getNext = ask >>= lift
   getNextNonBlock = ask >>= \mc-> lift ((Just <$> mc) `orElse` pure Nothing)
 
-decodeAnsi :: MonadInput m => m T.Event
+decodeAnsi :: MonadAnsiInput m => m T.Event
 decodeAnsi = decode1 =<< getNext
   where
-    decode1 :: MonadInput m => Char -> m T.Event
+    decode1 :: MonadAnsiInput m => Char -> m T.Event
     decode1 c
       -- The first 31 values are control codes.
       -- The ESC character _might_ introduce an escape sequence
@@ -34,12 +34,12 @@ decodeAnsi = decode1 =<< getNext
       | c == '\ESC' = decodeEscape
       | otherwise   = pure $ T.EvKey (T.KChar c) []
 
-    decodeEscape :: MonadInput m => m T.Event
+    decodeEscape :: MonadAnsiInput m => m T.Event
     decodeEscape = getNext >>= \case
       '\NUL' -> pure $ T.EvKey (T.KChar '\ESC') [] -- a single escape is always followed by a filling NUL character (instead of timing)
       x      -> decodeEscapeSequence x
 
-    decodeEscapeSequence :: (MonadInput m) => Char -> m T.Event
+    decodeEscapeSequence :: (MonadAnsiInput m) => Char -> m T.Event
     decodeEscapeSequence x
       | x >= '\SOH' && x <= '\EM' = pure $ T.EvKey (T.KChar $ toEnum $ 64 + fromEnum x) [T.MCtrl, T.MAlt] -- urxvt
       | x == '\ESC' = getNext >>= \case
@@ -107,7 +107,7 @@ decodeAnsi = decode1 =<< getNext
       | x >= 'a' && x <= 'z' = pure $ T.EvKey (T.KChar x) [T.MAlt]
       | otherwise   = error $ show x
 
-    decodeCSI :: (MonadInput m) => Char -> m T.Event
+    decodeCSI :: (MonadAnsiInput m) => Char -> m T.Event
     decodeCSI y = withParams1 y $ \ps-> \case
       '\ESC'     -> pure $ T.EvKey (T.KChar '[') [T.MAlt]             -- urxvt
       '$'        -> pure $ T.EvKey T.KDelete [T.MAlt, T.MShift]       -- urxvt, gnome-terminal
@@ -224,7 +224,7 @@ decodeAnsi = decode1 =<< getNext
           [1,7] -> pure $ T.EvKey (key 1) [T.MCtrl, T.MAlt] -- gnome-terminal
           xs    -> error (show xs)
 
-withParams1 :: MonadInput m => Char -> ([Char] -> Char -> m a) -> m a
+withParams1 :: MonadAnsiInput m => Char -> ([Char] -> Char -> m a) -> m a
 withParams1 x f
   | x >= '0' && x <= '?' = withParameters 256 [x]
   | otherwise            = f [] x

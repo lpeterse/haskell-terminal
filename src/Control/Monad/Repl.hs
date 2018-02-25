@@ -9,7 +9,7 @@ module Control.Monad.Repl
   ) where
 
 import           Control.Concurrent
-import qualified Control.Exception             as E
+import qualified Control.Exception          as E
 import           Control.Monad
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
@@ -18,16 +18,14 @@ import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Reader
 import           Control.Monad.Trans.State
 import           Data.Char
-import           Data.Function                 (fix)
-import qualified Data.Text                     as Text
-import qualified Data.Text.Prettyprint.Doc     as PP
+import           Data.Function              (fix)
+import qualified Data.Text                  as Text
+import qualified Data.Text.Prettyprint.Doc  as PP
 import           Data.Typeable
 
-import qualified Control.Monad.Terminal        as T
-import qualified Control.Monad.Terminal.Ansi   as T
-import qualified Control.Monad.Terminal.Events as T
+import qualified Control.Monad.Terminal     as T
 
-import           Prelude                       hiding (read)
+import           Prelude                    hiding (read)
 
 class Pretty a where
   pretty :: a -> PP.Doc ann
@@ -102,9 +100,8 @@ instance (T.MonadScreen m) => T.MonadScreen (ReplT s m) where
   getScreenSize = lift T.getScreenSize
   getCursorPosition = lift T.getCursorPosition
 
-instance (T.MonadEvent m) => T.MonadEvent (ReplT s m) where
-  waitForEvent = lift . T.waitForEvent
-  waitForInterruptEvent = lift . T.waitForInterruptEvent
+instance (T.MonadInput m) => T.MonadInput (ReplT s m) where
+  waitMapInterruptAndEvents = lift . T.waitMapInterruptAndEvents
 
 instance (T.MonadTerminal m, T.MonadPrettyPrinter m) => T.MonadTerminal (ReplT s m) where
 

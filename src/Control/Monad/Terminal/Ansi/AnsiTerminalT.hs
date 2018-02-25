@@ -39,10 +39,8 @@ import qualified System.IO                                as IO
 import qualified Control.Monad.Terminal                   as T
 import qualified Control.Monad.Terminal.Ansi.AnsiTerminal as T
 import qualified Control.Monad.Terminal.Ansi.Decoder      as T
-import qualified Control.Monad.Terminal.Events            as T
+import qualified Control.Monad.Terminal.Input             as T
 import qualified Control.Monad.Terminal.Printer           as T
-
-import qualified System.Terminal.Ansi.Platform            as T
 
 newtype AnsiTerminalT m a
   = AnsiTerminalT (ReaderT T.AnsiTerminal m a)
@@ -64,15 +62,10 @@ instance MonadTrans AnsiTerminalT where
 
 instance (MonadIO m) => T.MonadTerminal (AnsiTerminalT m) where
 
-instance (MonadIO m) => T.MonadEvent (AnsiTerminalT m) where
-  waitForEvent f = AnsiTerminalT $ do
+instance (MonadIO m) => T.MonadInput (AnsiTerminalT m) where
+  waitMapInterruptAndEvents f = AnsiTerminalT $ do
     ansi <- ask
-    liftIO $ atomically $ do
-      void (T.ansiInterrupt ansi) -- Reset the interrupt flag. State is not relevant.
-      f (T.ansiInputEvents ansi)  -- Apply user transformation on event source.
-  waitForInterruptEvent f = AnsiTerminalT $ do
-    ansi <- ask
-    liftIO $ atomically $ f $ T.ansiInterrupt ansi >>= check
+    liftIO $ atomically $ f (T.ansiInterrupt ansi) (T.ansiInputEvents ansi)
 
 instance (MonadIO m) => T.MonadPrinter (AnsiTerminalT m) where
   putChar c = AnsiTerminalT $ do

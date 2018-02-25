@@ -26,7 +26,7 @@ import           Foreign.Storable
 import qualified System.IO                     as IO
 import qualified System.IO.Error               as IO
 
-import qualified Control.Monad.Terminal.Events as T
+import qualified Control.Monad.Terminal.Input as T
 import qualified Control.Monad.Terminal.Ansi.AnsiTerminal as T
 
 #include "hs_terminal.h"
@@ -47,7 +47,7 @@ withTerminal action = do
           T.ansiTermType       = "xterm"
         , T.ansiInputChars     = readTChan  chars
         , T.ansiInputEvents    = readTChan  events
-        , T.ansiInterrupt      = swapTVar   interrupt False
+        , T.ansiInterrupt      = swapTVar   interrupt False >>= check
         , T.ansiOutput         = putTMVar   output
         , T.ansiOutputFlush    = putTMVar   outputFlush ()
         , T.ansiScreenSize     = readTVar   screenSize
@@ -149,7 +149,7 @@ withInputProcessing mainThread interrupt chars events ma = do
                                         loop lastMouseButton
               | c == '\ETX' &&     d -> do 
                                         unhandledInterrupt <- atomically $ do
-                                          writeTChan chars '\ETX'
+                                          writeTChan events T.InterruptEvent
                                           swapTVar interrupt True
                                         -- In virtual terminal mode, Windows actually sends Ctrl+C and there is no
                                         -- way a non-responsive application can be killed from keyboard.
