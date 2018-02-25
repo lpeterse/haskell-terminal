@@ -117,22 +117,22 @@ instance (MonadIO m) => T.MonadPrettyPrinter (AnsiTerminalT m) where
           []                     -> render [] ss
           (Bold         :anns')
             | Bold       `elem` anns' -> pure ()
-            | otherwise               -> T.unsetAnnotation Bold       >> render anns' ss
+            | otherwise               -> T.resetAnnotation Bold       >> render anns' ss
           (Italic       :anns')
             | Italic     `elem` anns' -> pure ()
-            | otherwise               -> T.unsetAnnotation Italic     >> render anns' ss
+            | otherwise               -> T.resetAnnotation Italic     >> render anns' ss
           (Underlined   :anns')
             | Underlined `elem` anns' -> pure ()
-            | otherwise               -> T.unsetAnnotation Underlined >> render anns' ss
+            | otherwise               -> T.resetAnnotation Underlined >> render anns' ss
           (Inverted     :anns')
             | Inverted   `elem` anns' -> pure ()
-            | otherwise               -> T.unsetAnnotation Inverted   >> render anns' ss
+            | otherwise               -> T.resetAnnotation Inverted   >> render anns' ss
           (Foreground c :anns') -> case oldFG anns' of
             Just d  -> T.setAnnotation   (Foreground d) >> render anns' ss
-            Nothing -> T.unsetAnnotation (Foreground c) >> render anns' ss
+            Nothing -> T.resetAnnotation (Foreground c) >> render anns' ss
           (Background c :anns') -> case oldBG anns' of
             Just d  -> T.setAnnotation   (Background d) >> render anns' ss
-            Nothing -> T.unsetAnnotation (Background c) >> render anns' ss
+            Nothing -> T.resetAnnotation (Background c) >> render anns' ss
 
   setAnnotation Bold                                      = write "\ESC[1m"
   setAnnotation Italic                                    = pure ()
@@ -170,12 +170,12 @@ instance (MonadIO m) => T.MonadPrettyPrinter (AnsiTerminalT m) where
   setAnnotation (Background (T.Color T.Bright T.Magenta)) = write "\ESC[105m"
   setAnnotation (Background (T.Color T.Bright T.Cyan   )) = write "\ESC[106m"
   setAnnotation (Background (T.Color T.Bright T.White  )) = write "\ESC[107m"
-  unsetAnnotation Bold           = write "\ESC[22m"
-  unsetAnnotation Italic         = pure ()
-  unsetAnnotation Underlined     = write "\ESC[24m"
-  unsetAnnotation Inverted       = write "\ESC[27m"
-  unsetAnnotation (Foreground _) = write "\ESC[39m"
-  unsetAnnotation (Background _) = write "\ESC[49m"
+  resetAnnotation Bold           = write "\ESC[22m"
+  resetAnnotation Italic         = pure ()
+  resetAnnotation Underlined     = write "\ESC[24m"
+  resetAnnotation Inverted       = write "\ESC[27m"
+  resetAnnotation (Foreground _) = write "\ESC[39m"
+  resetAnnotation (Background _) = write "\ESC[49m"
   resetAnnotations               = write "\ESC[m"
 
 instance (MonadIO m) => T.MonadFormatPrinter (AnsiTerminalT m) where

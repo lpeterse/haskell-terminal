@@ -76,7 +76,7 @@ instance (T.MonadPrettyPrinter m) => T.MonadPrettyPrinter (ReplT s m) where
   data Annotation (ReplT s m) = Annotation' (T.Annotation m)
   putDoc doc = lift $ T.putDoc (PP.reAnnotate (\(Annotation' ann)-> ann) doc)
   setAnnotation (Annotation' a) = lift (T.setAnnotation a)
-  unsetAnnotation (Annotation' a) = lift (T.unsetAnnotation a)
+  resetAnnotation (Annotation' a) = lift (T.resetAnnotation a)
   resetAnnotations = lift T.resetAnnotations
 
 instance (T.MonadPrettyPrinter m, T.MonadFormatPrinter m) => T.MonadFormatPrinter (ReplT s m) where

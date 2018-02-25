@@ -6,29 +6,35 @@ module Main where
 import           Control.Concurrent
 import           Control.Monad
 import           Control.Monad.IO.Class
-import           Data.Monoid
-import           System.Environment
-
-import qualified Data.Text.Prettyprint.Doc as PP
 
 import           Control.Monad.Terminal
+import           Data.Text.Prettyprint.Doc
 import           System.Terminal.Ansi
+
+import           Prelude                   hiding ((<>))
 
 main :: IO ()
 main = withTerminal $ runAnsiTerminalT foo
 
 foo :: (MonadTerminal m, MonadIO m) => m ()
-foo = putDocLn doc >> flush
+foo = printer >> flush
 
-doc :: (MonadFormatPrinter m, MonadColorPrinter m, Annotation m ~ ann) => PP.Doc ann
+printer :: (MonadFormatPrinter m, MonadColorPrinter m) => m ()
+printer = putDoc $ annotate (foreground $ bright Blue) "This is blue!" <> line
+                <> annotate bold ("Just bold!" <+> otherDoc <+> "..just bold again")
+
+doc :: (MonadFormatPrinter m, MonadColorPrinter m, Annotation m ~ ann) => Doc ann
 doc = mconcat
-  [ PP.annotate (foreground $ bright Red) "Hallo Welt!"
-  , PP.hardline
-  , PP.hang 10 $ "ssdfhsjdfhksjdhfkjsdhfks" PP.<+> "hdfjkshdfkjshddh" PP.<+> "fjksdhfkshdfkjshdfjks"
-            PP.<+> "hdfkjshdfjhskdjfhsjksdhfjshdfjshdkj" PP.<+> "fhsdkjfhskjdfhjksdhfjksdhfjks"
-            PP.<+> "hdfkjshdfkh" PP.<+> PP.annotate bold "jdhfkjshdfkjshdfksjhdkfjhsdkjfhs" PP.<+> "dkjfhskjdhfkjshdfkjshdfj"
-            PP.<+> "kshdfkjshdfkjshf"
-  , PP.line
-  , PP.line
-  , PP.annotate (background $ dull Blue) "FOOBAR"
+  [ annotate (foreground $ bright Red) "Hallo Welt!"
+  , hardline
+  , hang 10 $ "ssdfhsjdfhksjdhfkjsdhfks" <+> "hdfjkshdfkjshddh" <+> "fjksdhfkshdfkjshdfjks"
+            <+> "hdfkjshdfjhskdjfhsjksdhfjshdfjshdkj" <+> "fhsdkjfhskjdfhjksdhfjksdhfjks"
+            <+> "hdfkjshdfkh" <+> annotate bold "jdhfkjshdfkjshdfksjhdkfjhsdkjfhs" <+> "dkjfhskjdhfkjshdfkjshdfj"
+            <+> "kshdfkjshdfkjshf"
+  , line
+  , line
+  , annotate (background $ dull Blue) "FOOBAR"
   ]
+
+otherDoc :: (MonadColorPrinter m, Annotation m ~ ann) => Doc ann
+otherDoc = annotate (background $ dull Red) "BOLD ON RED BACKGROUND"

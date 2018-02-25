@@ -56,7 +56,8 @@ class Monad m => MonadPrinter m where
   -- | Print a `Text` and an additional newline.
   putTextLn          :: Text -> m ()
   putTextLn           = putStringLn . Data.Text.unpack
-  -- | Flush the output buffer.
+  -- | Flush the output buffer and make the all previous output actually
+  --   visible after a reasonably short amount of time.
   --
   --    * The operation may return before the buffer has actually been flushed.
   flush              :: m ()
@@ -70,18 +71,81 @@ class Monad m => MonadPrinter m where
   getLineWidth       :: m Int
   {-# MINIMAL putChar, getLineWidth #-}
 
+-- | This class is the foundation for all environments that allow
+--   annotated text and `Doc`uments to be printed to.
+--
+--    * Prefer using the `Data.Text.Prettyprint.Doc` module and the
+--      `putDoc` operation whenever trying to print structured or
+--      formatted text as it automatically deals with nested annotations
+--      and the current line width.
 class MonadPrinter m => MonadPrettyPrinter m where
+  -- | This associated type represents all possible annotations that are available
+  --   in the current environment.
+  --
+  --   When writing polymorphic code against these monadic interfaces
+  --   the concrete instantiation of this type is usually unknown and class
+  --   instances are generally advised to not expose value constructors for
+  --   this type.
+  --
+  --   Instead, subclasses like `MonadFormatPrinter` and `MonadColorPrinter`
+  --   offer abstract value constructors like `bold`, `underlined`, `inverted`
+  --   which are then given meaning by the concrete class instance. The
+  --   environment `Control.Monad.Terminal.AnsiTerminalT` for example
+  --   implements all of these classes.
   data Annotation m
+  -- | Print an annotated `Doc`.
+  --
+  --   * This operation performs `resetAnnotations` on entry and on exit.
+  --   * This operation can deal with nested annotations (see example).
+  --
+  -- Example:
+  --
+  -- @
+  -- {-# LANGUAGE OverloadedStrings #-}
+  -- import Control.Monad.Terminal
+  -- import Data.Text.Prettyprint.Doc
+  --
+  -- printer :: (`MonadFormatPrinter` m, `MonadColorPrinter` m) => m ()
+  -- printer = `putDoc` $ `annotate` (foreground $ `bright` `Blue`) "This is blue!" <> `line`
+  --                 <> `annotate` `bold` ("Just bold!" <> otherDoc <> "..just bold again")
+  --
+  -- otherDoc :: (`MonadColorPrinter` m, `Annotation` m ~ ann) => `Doc` ann
+  -- otherDoc = `annotate` (`background` $ `dull` `Red`) " BOLD ON RED BACKGROUND "
+  -- @
+  --
+  -- Note the necessary unification of `Annotation` `m` and `ann` in the definition of `otherDoc`!
   putDoc           :: Doc (Annotation m) -> m ()
+  -- | Like `putDoc` but adds an additional newline.
   putDocLn         :: Doc (Annotation m) -> m ()
   putDocLn doc      = putDoc doc >> putLn
+  -- | Set an annotation so that it affects subsequent output.
   setAnnotation    :: Annotation m -> m ()
   setAnnotation _   = pure ()
-  unsetAnnotation  :: Annotation m -> m ()
-  unsetAnnotation _ = pure ()
+  -- | Reset an annotation so that it does no longer affect subsequent output.
+  --
+  -- * Binary attributes like `bold` or `underlined` shall just be reset to their opposite.
+  --
+  -- * For non-binary attributes like colors all of their possible values shall be treated
+  --   as equal, so that
+  --
+  --   @
+  --   `setAnnotation` (`foreground` $ `bright` `Blue`) >> `resetAnnotation` (`foreground` $ `dull` `Red`)
+  --   @
+  --
+  --   results in the foreground color attribute reset afterwards whereas after
+  --
+  --   @
+  --   `setAnnotation` (`foreground` $ `bright` `Blue`) >> `resetAnnotation` (`background` $ `dull` `Red`)
+  --   @
+  --
+  --   the foreground color is still set as `bright` `Blue`.
+  --
+  resetAnnotation  :: Annotation m -> m ()
+  resetAnnotation _ = pure ()
+  -- | Reset all annotations to their default.
   resetAnnotations :: m ()
   resetAnnotations  = pure ()
-  {-# MINIMAL putDoc | (putDoc, setAnnotation, unsetAnnotation, resetAnnotations) #-}
+  {-# MINIMAL putDoc, setAnnotation, resetAnnotation, resetAnnotations #-}
 
 putPretty :: (MonadPrettyPrinter m, Pretty a) => a -> m ()
 putPretty = putDoc . pretty
