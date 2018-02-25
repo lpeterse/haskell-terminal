@@ -1,26 +1,41 @@
 {-# LANGUAGE LambdaCase   #-}
 {-# LANGUAGE TypeFamilies #-}
 module Control.Monad.Terminal
-  ( MonadPrinter (..)
-  , MonadPrettyPrinter (..)
-  , MonadColorPrinter (..)
+  ( -- ** Printing
+    -- ** MonadPrinter
+    MonadPrinter (..)
+    -- ** MonadFormatPrinter
   , MonadFormatPrinter (..)
+    -- ** MonadPrettyPrinter
+  , MonadPrettyPrinter (..)
+    -- ** MonadColorPrinter
+  , MonadColorPrinter (..)
+  , Color (..)
+  , ColorMode (..)
+  , dull
+  , bright
+  , BasicColor (..)
+    -- * Input Processing
+    -- ** Event
+  , Event (..)
+  , Key (..)
+  , Modifier (..)
+  , MouseEvent (..)
+    -- ** MonadEvent
   , MonadEvent (..)
   , waitEvent
   , pollEvent
+    -- * Screen Manipulation
+    -- ** MonadScreen
   , MonadScreen (..)
+    -- * MonadTerminal
   , MonadTerminal (..)
-  , Color (..)
-  , ColorMode (..)
-  , BasicColor (..)
-  , dull
-  , bright
   ) where
 
 import           Control.Monad.Terminal.Events
 import           Control.Monad.Terminal.Printer
 
-class (MonadEvent m, MonadPrettyPrinter m,  MonadScreen m) => MonadTerminal m where
+class (MonadEvent m, MonadPrettyPrinter m, MonadFormatPrinter m, MonadColorPrinter m, MonadScreen m) => MonadTerminal m where
 
 class MonadPrinter m => MonadScreen m where
   clear :: m ()

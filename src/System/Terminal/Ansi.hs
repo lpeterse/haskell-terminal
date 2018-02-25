@@ -1,5 +1,9 @@
 module System.Terminal.Ansi
-  ( withTerminal
+  ( AnsiTerminal (..)
+  , AnsiTerminalT ()
+  , withTerminal
+  , runAnsiTerminalT
   ) where
 
+import           Control.Monad.Terminal.Ansi
 import           System.Terminal.Ansi.Platform

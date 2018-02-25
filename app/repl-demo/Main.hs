@@ -6,34 +6,28 @@ module Main where
 import           Control.Concurrent
 import           Control.Concurrent.Async
 import           Control.Concurrent.STM.TVar
-import qualified Control.Exception             as E
+import qualified Control.Exception           as E
 import           Control.Monad
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
 import           Control.Monad.Trans.Class
 import           Data.Char
-import           Data.Function                 (fix)
+import           Data.Function               (fix)
 import           Data.Monoid
-import qualified Data.Text                     as Text
-import qualified Data.Text.Prettyprint.Doc     as PP
+import qualified Data.Text                   as Text
+import qualified Data.Text.Prettyprint.Doc   as PP
+import           Prelude                     hiding (print, putChar)
 import           System.Environment
 
-import qualified Control.Monad.Repl            as R
-import qualified Control.Monad.Terminal        as T
-import           Control.Monad.Terminal.Ansi   as T
-import qualified Control.Monad.Terminal.Events as T
-
-import qualified System.Terminal.Ansi          as T
-
+import qualified Control.Monad.Repl          as R
 import           Control.Monad.Terminal
-
-import           Prelude                       hiding (print, putChar)
+import           System.Terminal.Ansi
 
 type AnsiReplT s m = R.ReplT s (AnsiTerminalT m)
 
 execAnsiReplT :: AnsiReplT s IO () -> s -> IO s
-execAnsiReplT ma s = T.withTerminal $ T.runAnsiTerminalT (R.execReplT ma s)
+execAnsiReplT ma s = withTerminal $ runAnsiTerminalT (R.execReplT ma s)
 
 evalAnsiReplT :: AnsiReplT s IO () -> s -> IO ()
 evalAnsiReplT ma = void . execAnsiReplT ma
@@ -41,9 +35,9 @@ evalAnsiReplT ma = void . execAnsiReplT ma
 main :: IO ()
 main = evalAnsiReplT (ini >> repl) 0
   where
-    ini = R.setPrompt $ T.putDoc $ PP.annotate T.bold $ (PP.annotate (T.foreground $ T.bright T.Blue) "foo") <> "@bar % "
+    ini = R.setPrompt $ putDoc $ PP.annotate bold $ (PP.annotate (foreground $ bright Blue) "foo") <> "@bar % "
 
-repl :: (T.MonadTerminal m, T.MonadColorPrinter m, R.MonadRepl m, R.ReplState m ~ Int, MonadMask m) => m ()
+repl :: (MonadTerminal m, MonadColorPrinter m, R.MonadRepl m, R.ReplState m ~ Int, MonadMask m) => m ()
 repl = R.readString >>= \case
   Nothing -> R.quit
   Just s -> case s of
@@ -53,20 +47,20 @@ repl = R.readString >>= \case
     "inc"      -> R.load >>= R.store . succ
     "dec"      -> R.load >>= R.store . pred
     "loop"     -> R.print [1..]
-    "cursor"   -> T.getCursorPosition >>= \xy-> R.print xy
+    "cursor"   -> getCursorPosition >>= \xy-> R.print xy
     "progress" -> withProgressBar $ \update-> forM_ [1..100] $ \i-> do
                     threadDelay 100000
                     update $ fromIntegral i / 100
     "colors"   -> printColors
     line       -> R.print line
 
-printColors ::  (T.MonadColorPrinter m) => m ()
+printColors ::  (MonadColorPrinter m) => m ()
 printColors = do
-  T.putDocLn doc
+  putDocLn doc
   where
-    doc = PP.annotate (T.foreground $ T.bright T.Yellow) (" yellow " <> PP.annotate (T.foreground $ T.dull T.Red) " red " <> " yellow ")
+    doc = PP.annotate (foreground $ bright Yellow) (" yellow " <> PP.annotate (foreground $ dull Red) " red " <> " yellow ")
 
-withProgressBar :: (T.MonadTerminal m, MonadMask m, Real p) => ((p -> IO ()) -> IO a) -> m a
+withProgressBar :: (MonadTerminal m, MonadMask m, Real p) => ((p -> IO ()) -> IO a) -> m a
 withProgressBar action = do
   progress  <- liftIO $ newTVarIO 0
   progress' <- liftIO $ newTVarIO (-1)
@@ -98,3 +92,4 @@ withProgressBar action = do
 
 withAsyncM :: (MonadIO m, MonadMask m) => IO a -> (Async a -> m b) -> m b
 withAsyncM ioa = bracket (liftIO $ async ioa) (liftIO . cancel)
+

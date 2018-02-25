@@ -28,10 +28,6 @@ data Key
   | KHome | KPageUp | KEnd | KPageDown | KBegin | KMenu
   deriving (Eq,Ord,Show)
 
-data Signal
-  = Interrupt
-  deriving (Eq,Ord,Show)
-
 -- | Modifier keys. Key codes are interpreted such that users are more
 -- likely to have Meta than Alt; for instance on the PC Linux console,
 -- 'MMeta' will generally correspond to the physical Alt key.

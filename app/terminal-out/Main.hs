@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeFamilies      #-}
 module Main where
 
 import           Control.Concurrent
@@ -8,32 +9,26 @@ import           Control.Monad.IO.Class
 import           Data.Monoid
 import           System.Environment
 
-import qualified Data.Text.Prettyprint.Doc     as PP
+import qualified Data.Text.Prettyprint.Doc as PP
 
-import qualified Control.Monad.Terminal        as T
-import qualified Control.Monad.Terminal.Ansi   as T
-import qualified Control.Monad.Terminal.Events as T
-
-import qualified System.Terminal.Ansi          as T
+import           Control.Monad.Terminal
+import           System.Terminal.Ansi
 
 main :: IO ()
-main = T.withTerminal $ T.runAnsiTerminalT foo
+main = withTerminal $ runAnsiTerminalT foo
 
-foo :: (T.MonadTerminal m, MonadIO m) => m ()
-foo = T.putDocLn doc >> T.flush
-  where
+foo :: (MonadTerminal m, MonadIO m) => m ()
+foo = putDocLn doc >> flush
 
-doc :: PP.Doc ann
+doc :: (MonadColorPrinter m, Annotation m ~ ann) => PP.Doc ann
 doc = mconcat
-  [ --T.color T.red "Hallo Welt!"
-    PP.hardline
+  [ PP.annotate (foreground $ bright Red) "Hallo Welt!"
+  , PP.hardline
   , PP.indent 10 $ "ssdfhsjdfhksjdhfkjsdhfks" PP.<+> "hdfjkshdfkjshddh" PP.<+> "fjksdhfkshdfkjshdfjks"
             PP.<+> "hdfkjshdfjhskdjfhsjksdhfjshdfjshdkj" PP.<+> "fhsdkjfhskjdfhjksdhfjksdhfjks"
             PP.<+> "hdfkjshdfkh" PP.<+> "jdhfkjshdfkjshdfksjhdkfjhsdkjfhs" PP.<+> "dkjfhskjdhfkjshdfkjshdfj"
             PP.<+> "kshdfkjshdfkjshf"
   , PP.line
   , PP.line
-  -- , T.onColor T.blue "FOOBAR"
+  , PP.annotate (background $ dull Blue) "FOOBAR"
   ]
-
-
