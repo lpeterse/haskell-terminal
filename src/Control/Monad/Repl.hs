@@ -116,7 +116,7 @@ execReplT (ReplT ma) s = replUserState <$> execStateT loop (replTStateDefault s)
       True  -> pure ()
     protected = catch ma $ \e-> do
       if e == E.UserInterrupt then
-        lift $ T.putDocLn (PP.annotate T.bold $ PP.annotate (T.foreground T.red) "Interrupted.")
+        lift $ T.putDocLn (PP.annotate T.bold $ PP.annotate (T.foreground $ T.bright T.Red) "Interrupted.")
       else
         throwM e
 

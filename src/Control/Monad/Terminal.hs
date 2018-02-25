@@ -10,15 +10,11 @@ module Control.Monad.Terminal
   , pollEvent
   , MonadScreen (..)
   , MonadTerminal (..)
-  , Color ()
-  , black
-  , red
-  , green
-  , yellow
-  , blue
-  , magenta
-  , cyan
-  , white
+  , Color (..)
+  , ColorMode (..)
+  , BasicColor (..)
+  , dull
+  , bright
   ) where
 
 import           Control.Monad.Terminal.Events

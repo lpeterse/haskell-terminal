@@ -51,13 +51,15 @@ class MonadPrettyPrinter m => MonadColorPrinter m where
   foreground      :: Color -> Annotation m
   background      :: Color -> Annotation m
 
-data Color
-  = Color4Bit  Color3Bit Bool
-  | Color8Bit  Word8
-  | Color24bit Word8 Word8 Word8
+data Color = Color ColorMode BasicColor
   deriving (Eq, Ord, Show)
 
-data Color3Bit
+data ColorMode
+  = Dull
+  | Bright
+  deriving (Eq, Ord, Show)
+
+data BasicColor
   = Black
   | Red
   | Green
@@ -68,29 +70,8 @@ data Color3Bit
   | White
   deriving (Eq, Ord, Show)
 
-rgb :: Word8 -> Word8 -> Word8 -> Color
-rgb  = Color24bit
+dull :: BasicColor -> Color
+dull = Color Dull
 
-black :: Color
-black = Color4Bit Black False
-
-red :: Color
-red = Color4Bit Red False
-
-green :: Color
-green = Color4Bit Green False
-
-yellow :: Color
-yellow  = Color4Bit Yellow False
-
-blue :: Color
-blue = Color4Bit Blue False
-
-magenta :: Color
-magenta = Color4Bit Magenta False
-
-cyan :: Color
-cyan = Color4Bit Cyan False
-
-white :: Color
-white = Color4Bit White False
+bright :: BasicColor -> Color
+bright = Color Bright

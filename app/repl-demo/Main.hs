@@ -41,7 +41,7 @@ evalAnsiReplT ma = void . execAnsiReplT ma
 main :: IO ()
 main = evalAnsiReplT (ini >> repl) 0
   where
-    ini = R.setPrompt $ T.putDoc $ PP.annotate T.bold $ (PP.annotate (T.foreground T.blue) "foo") <> "@bar % "
+    ini = R.setPrompt $ T.putDoc $ PP.annotate T.bold $ (PP.annotate (T.foreground $ T.bright T.Blue) "foo") <> "@bar % "
 
 repl :: (T.MonadTerminal m, T.MonadColorPrinter m, R.MonadRepl m, R.ReplState m ~ Int, MonadMask m) => m ()
 repl = R.readString >>= \case
@@ -64,7 +64,7 @@ printColors ::  (T.MonadColorPrinter m) => m ()
 printColors = do
   T.putDocLn doc
   where
-    doc = PP.annotate (T.foreground T.yellow) (" yellow " <> PP.annotate (T.foreground T.red) " red " <> " yellow ")
+    doc = PP.annotate (T.foreground $ T.bright T.Yellow) (" yellow " <> PP.annotate (T.foreground $ T.dull T.Red) " red " <> " yellow ")
 
 withProgressBar :: (T.MonadTerminal m, MonadMask m, Real p) => ((p -> IO ()) -> IO a) -> m a
 withProgressBar action = do
