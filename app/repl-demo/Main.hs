@@ -43,7 +43,7 @@ main = evalAnsiReplT (ini >> repl) 0
   where
     ini = R.setPrompt $ T.putDoc $ PP.annotate T.bold $ (PP.annotate (T.foreground T.blue) "foo") <> "@bar % "
 
-repl :: (T.MonadTerminal m, R.MonadRepl m, R.ReplState m ~ Int, MonadMask m) => m ()
+repl :: (T.MonadTerminal m, T.MonadColorPrinter m, R.MonadRepl m, R.ReplState m ~ Int, MonadMask m) => m ()
 repl = R.readString >>= \case
   Nothing -> R.quit
   Just s -> case s of
@@ -57,7 +57,14 @@ repl = R.readString >>= \case
     "progress" -> withProgressBar $ \update-> forM_ [1..100] $ \i-> do
                     threadDelay 100000
                     update $ fromIntegral i / 100
+    "colors"   -> printColors
     line       -> R.print line
+
+printColors ::  (T.MonadColorPrinter m) => m ()
+printColors = do
+  T.putDocLn doc
+  where
+    doc = PP.annotate (T.foreground T.yellow) (" yellow " <> PP.annotate (T.foreground T.red) " red " <> " yellow ")
 
 withProgressBar :: (T.MonadTerminal m, MonadMask m, Real p) => ((p -> IO ()) -> IO a) -> m a
 withProgressBar action = do

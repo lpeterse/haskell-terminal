@@ -95,8 +95,8 @@ instance (MonadIO m) => T.MonadPrettyPrinter (AnsiTerminalT m) where
     | Italic
     | Underlined
     | Inverted
-    | Foreground  T.Color
-    | Background  T.Color deriving (Eq, Ord, Show)
+    | Foreground T.Color
+    | Background T.Color deriving (Eq, Ord, Show)
   putDocLn doc = T.putDoc doc >> T.putLn
   putDoc doc = do
     w <- T.getLineWidth
@@ -107,6 +107,12 @@ instance (MonadIO m) => T.MonadPrettyPrinter (AnsiTerminalT m) where
     where
       options w   = PP.defaultLayoutOptions { PP.layoutPageWidth = PP.AvailablePerLine w 1.0 }
       sdoc w      = PP.layoutSmart (options w) doc
+      oldFG []                = Nothing
+      oldFG (Foreground c:xs) = Just c
+      oldFG (_:xs)            = oldFG xs
+      oldBG []                = Nothing
+      oldBG (Background c:xs) = Just c
+      oldBG (_:xs)            = oldBG xs
       render anns = \case
         PP.SFail           -> pure ()
         PP.SEmpty          -> pure ()
@@ -116,12 +122,24 @@ instance (MonadIO m) => T.MonadPrettyPrinter (AnsiTerminalT m) where
         PP.SAnnPush ann ss -> T.setAnnotation ann >> render (ann:anns) ss
         PP.SAnnPop ss      -> case anns of
           []                     -> render [] ss
-          (Bold         :anns') -> T.unsetAnnotation Bold           >> render anns' ss
-          (Italic       :anns') -> T.unsetAnnotation Italic         >> render anns' ss
-          (Underlined   :anns') -> T.unsetAnnotation Underlined     >> render anns' ss
-          (Inverted     :anns') -> T.unsetAnnotation Inverted       >> render anns' ss
-          (Foreground c :anns') -> T.unsetAnnotation (Foreground c) >> render anns' ss
-          (Background c :anns') -> T.unsetAnnotation (Background c) >> render anns' ss
+          (Bold         :anns')
+            | Bold       `elem` anns' -> pure ()
+            | otherwise               -> T.unsetAnnotation Bold       >> render anns' ss
+          (Italic       :anns')
+            | Italic     `elem` anns' -> pure ()
+            | otherwise               -> T.unsetAnnotation Italic     >> render anns' ss
+          (Underlined   :anns')
+            | Underlined `elem` anns' -> pure ()
+            | otherwise               -> T.unsetAnnotation Underlined >> render anns' ss
+          (Inverted     :anns')
+            | Inverted   `elem` anns' -> pure ()
+            | otherwise               -> T.unsetAnnotation Inverted   >> render anns' ss
+          (Foreground c :anns') -> case oldFG anns' of
+            Just d  -> T.setAnnotation   (Foreground d) >> render anns' ss
+            Nothing -> T.unsetAnnotation (Foreground c) >> render anns' ss
+          (Background c :anns') -> case oldBG anns' of
+            Just d  -> T.setAnnotation   (Background d) >> render anns' ss
+            Nothing -> T.unsetAnnotation (Background c) >> render anns' ss
 
   setAnnotation Bold                                           = write "\ESC[1m"
   setAnnotation Italic                                         = pure ()
