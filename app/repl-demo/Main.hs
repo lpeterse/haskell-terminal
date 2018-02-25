@@ -41,7 +41,7 @@ evalAnsiReplT ma = void . execAnsiReplT ma
 main :: IO ()
 main = evalAnsiReplT (ini >> repl) 0
   where
-    ini = R.setPrompt $ T.putDoc $ PP.annotate (T.bold True) $ (PP.annotate (T.foreground T.blue) "foo") <> "@bar % "
+    ini = R.setPrompt $ T.putDoc $ PP.annotate T.bold $ (PP.annotate (T.foreground T.blue) "foo") <> "@bar % "
 
 repl :: (T.MonadTerminal m, R.MonadRepl m, R.ReplState m ~ Int, MonadMask m) => m ()
 repl = R.readString >>= \case

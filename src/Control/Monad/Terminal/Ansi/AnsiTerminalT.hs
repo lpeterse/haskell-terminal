@@ -13,9 +13,8 @@ import           Control.Concurrent
 import           Control.Concurrent.STM.TChan
 import           Control.Concurrent.STM.TMVar
 import           Control.Concurrent.STM.TVar
-import qualified Control.Exception                            as E
-import           Control.Monad                                (forever, void,
-                                                               when)
+import qualified Control.Exception                        as E
+import           Control.Monad                            (forever, void, when)
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
@@ -23,28 +22,27 @@ import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Reader
 import           Control.Monad.Trans.State
 import           Data.Bits
-import qualified Data.ByteString                              as BS
+import qualified Data.ByteString                          as BS
 import           Data.Char
-import           Data.Function                                (fix)
-import           Data.List.NonEmpty                           (NonEmpty ((:|)))
-import qualified Data.List.NonEmpty                           as N
+import           Data.Function                            (fix)
+import           Data.List.NonEmpty                       (NonEmpty ((:|)))
+import qualified Data.List.NonEmpty                       as N
 import           Data.Maybe
 import           Data.Monoid
-import qualified Data.Text                                    as Text
-import qualified Data.Text.IO                                 as Text
-import qualified Data.Text.Prettyprint.Doc                    as PP
+import qualified Data.Text                                as Text
+import qualified Data.Text.IO                             as Text
+import qualified Data.Text.Prettyprint.Doc                as PP
 import           Data.Word
 import           System.Environment
-import qualified System.IO                                    as IO
+import qualified System.IO                                as IO
 
-import qualified Control.Monad.Terminal                       as T
-import qualified Control.Monad.Terminal.Ansi.AnsiTerminal     as T
-import qualified Control.Monad.Terminal.Ansi.Color            as T
-import qualified Control.Monad.Terminal.Ansi.Decoder          as T
-import qualified Control.Monad.Terminal.Ansi.MonadAnsiPrinter as T
-import qualified Control.Monad.Terminal.Events                as T
+import qualified Control.Monad.Terminal                   as T
+import qualified Control.Monad.Terminal.Ansi.AnsiTerminal as T
+import qualified Control.Monad.Terminal.Ansi.Decoder      as T
+import qualified Control.Monad.Terminal.Events            as T
+import qualified Control.Monad.Terminal.Printer           as T
 
-import qualified System.Terminal.Ansi.Platform                as T
+import qualified System.Terminal.Ansi.Platform            as T
 
 newtype AnsiTerminalT m a
   = AnsiTerminalT (ReaderT T.AnsiTerminal m a)
@@ -93,23 +91,24 @@ instance (MonadIO m) => T.MonadPrinter (AnsiTerminalT m) where
 
 instance (MonadIO m) => T.MonadPrettyPrinter (AnsiTerminalT m) where
   data Annotation (AnsiTerminalT m)
-    = Bold        Bool
-    | Underlined  Bool
-    | Inverted    Bool
+    = Bold
+    | Italic
+    | Underlined
+    | Inverted
     | Foreground  T.Color
     | Background  T.Color deriving (Eq, Ord, Show)
   putDocLn doc = T.putDoc doc >> T.putLn
   putDoc doc = do
+    w <- T.getLineWidth
     T.resetAnnotations
-    render [] sdoc
+    render [] (sdoc w)
     T.resetAnnotations
     T.flush
     where
-      width   = PP.AvailablePerLine 20 0.4
-      options = PP.defaultLayoutOptions { PP.layoutPageWidth = width }
-      sdoc = PP.layoutSmart options doc
+      options w   = PP.defaultLayoutOptions { PP.layoutPageWidth = PP.AvailablePerLine w 1.0 }
+      sdoc w      = PP.layoutSmart (options w) doc
       render anns = \case
-        PP.SFail           -> fail "FAIL"
+        PP.SFail           -> pure ()
         PP.SEmpty          -> pure ()
         PP.SChar c ss      -> T.putChar c >> render anns ss
         PP.SText _ t ss    -> T.putText t >> render anns ss
@@ -117,18 +116,17 @@ instance (MonadIO m) => T.MonadPrettyPrinter (AnsiTerminalT m) where
         PP.SAnnPush ann ss -> T.setAnnotation ann >> render (ann:anns) ss
         PP.SAnnPop ss      -> case anns of
           []                     -> render [] ss
-          (Bold {}       :anns') -> T.setAnnotation (Bold                False) >> render anns' ss
-          (Underlined {} :anns') -> T.setAnnotation (Underlined          False) >> render anns' ss
-          (Inverted {}   :anns') -> T.setAnnotation (Inverted            False) >> render anns' ss
-          (Foreground {} :anns') -> T.setAnnotation (Foreground T.ColorDefault) >> render anns' ss
-          (Background {} :anns') -> T.setAnnotation (Background T.ColorDefault) >> render anns' ss
-  setAnnotation (Bold                                    True) = write "\ESC[1m"
-  setAnnotation (Bold                                   False) = write "\ESC[22m"
-  setAnnotation (Underlined                              True) = write "\ESC[4m"
-  setAnnotation (Underlined                             False) = write "\ESC[24m"
-  setAnnotation (Inverted                                True) = write "\ESC[7m"
-  setAnnotation (Inverted                               False) = write "\ESC[27m"
-  setAnnotation (Foreground c@T.ColorDefault                 ) = write "\ESC[39m"
+          (Bold         :anns') -> T.unsetAnnotation Bold           >> render anns' ss
+          (Italic       :anns') -> T.unsetAnnotation Italic         >> render anns' ss
+          (Underlined   :anns') -> T.unsetAnnotation Underlined     >> render anns' ss
+          (Inverted     :anns') -> T.unsetAnnotation Inverted       >> render anns' ss
+          (Foreground c :anns') -> T.unsetAnnotation (Foreground c) >> render anns' ss
+          (Background c :anns') -> T.unsetAnnotation (Background c) >> render anns' ss
+
+  setAnnotation Bold                                           = write "\ESC[1m"
+  setAnnotation Italic                                         = pure ()
+  setAnnotation Underlined                                     = write "\ESC[4m"
+  setAnnotation Inverted                                       = write "\ESC[7m"
   setAnnotation (Foreground c@(T.Color4Bit T.Black     False)) = write "\ESC[30m"
   setAnnotation (Foreground c@(T.Color4Bit T.Red       False)) = write "\ESC[31m"
   setAnnotation (Foreground c@(T.Color4Bit T.Green     False)) = write "\ESC[32m"
@@ -146,7 +144,6 @@ instance (MonadIO m) => T.MonadPrettyPrinter (AnsiTerminalT m) where
   setAnnotation (Foreground c@(T.Color4Bit T.Cyan       True)) = write "\ESC[96m"
   setAnnotation (Foreground c@(T.Color4Bit T.White      True)) = write "\ESC[97m"
   setAnnotation (Foreground _                                ) = error "FIXME"
-  setAnnotation (Background c@T.ColorDefault                 ) = write "\ESC[49m"
   setAnnotation (Background c@(T.Color4Bit T.Black     False)) = write "\ESC[40m"
   setAnnotation (Background c@(T.Color4Bit T.Red       False)) = write "\ESC[41m"
   setAnnotation (Background c@(T.Color4Bit T.Green     False)) = write "\ESC[42m"
@@ -164,12 +161,21 @@ instance (MonadIO m) => T.MonadPrettyPrinter (AnsiTerminalT m) where
   setAnnotation (Background c@(T.Color4Bit T.Cyan       True)) = write "\ESC[106m"
   setAnnotation (Background c@(T.Color4Bit T.White      True)) = write "\ESC[107m"
   setAnnotation (Background _                                ) = error "FIXME"
-  resetAnnotations                                             = write "\ESC[m"
+  unsetAnnotation Bold           = write "\ESC[22m"
+  unsetAnnotation Italic         = pure ()
+  unsetAnnotation Underlined     = write "\ESC[24m"
+  unsetAnnotation Inverted       = write "\ESC[27m"
+  unsetAnnotation (Foreground _) = write "\ESC[39m"
+  unsetAnnotation (Background _) = write "\ESC[49m"
+  resetAnnotations               = write "\ESC[m"
 
-instance (MonadIO m) => T.MonadAnsiPrinter (AnsiTerminalT m) where
+instance (MonadIO m) => T.MonadFormatPrinter (AnsiTerminalT m) where
   bold       = Bold
-  inverted   = Inverted
+  italic     = Italic
   underlined = Underlined
+
+instance (MonadIO m) => T.MonadColorPrinter (AnsiTerminalT m) where
+  inverted   = Inverted
   foreground = Foreground
   background = Background
 

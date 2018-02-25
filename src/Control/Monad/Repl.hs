@@ -77,13 +77,19 @@ instance (T.MonadPrinter m) => T.MonadPrinter (ReplT s m) where
 instance (T.MonadPrettyPrinter m) => T.MonadPrettyPrinter (ReplT s m) where
   data Annotation (ReplT s m) = Annotation' (T.Annotation m)
   putDoc doc = lift $ T.putDoc (PP.reAnnotate (\(Annotation' ann)-> ann) doc)
+  setAnnotation (Annotation' a) = lift (T.setAnnotation a)
+  unsetAnnotation (Annotation' a) = lift (T.unsetAnnotation a)
+  resetAnnotations = lift T.resetAnnotations
 
-instance (T.MonadPrettyPrinter m, T.MonadAnsiPrinter m) => T.MonadAnsiPrinter (ReplT s m) where
-  bold       x = Annotation' (T.bold x)
-  inverted   x = Annotation' (T.inverted x)
-  underlined x = Annotation' (T.underlined x)
-  foreground x = Annotation' (T.foreground x)
-  background x = Annotation' (T.background x)
+instance (T.MonadPrettyPrinter m, T.MonadFormatPrinter m) => T.MonadFormatPrinter (ReplT s m) where
+  bold       = Annotation' T.bold
+  italic     = Annotation' T.italic
+  underlined = Annotation' T.underlined
+
+instance (T.MonadPrettyPrinter m, T.MonadColorPrinter m) => T.MonadColorPrinter (ReplT s m) where
+  inverted     = Annotation' T.inverted
+  foreground c = Annotation' (T.foreground c)
+  background c = Annotation' (T.background c)
 
 instance (T.MonadScreen m) => T.MonadScreen (ReplT s m) where
   clear = lift T.clear
@@ -102,7 +108,7 @@ instance (T.MonadEvent m) => T.MonadEvent (ReplT s m) where
 
 instance (T.MonadTerminal m, T.MonadPrettyPrinter m) => T.MonadTerminal (ReplT s m) where
 
-execReplT :: (T.MonadTerminal m, T.MonadAnsiPrinter m, MonadMask m) => ReplT s m () -> s -> m s
+execReplT :: (T.MonadTerminal m, T.MonadColorPrinter m, T.MonadFormatPrinter m, MonadMask m) => ReplT s m () -> s -> m s
 execReplT (ReplT ma) s = replUserState <$> execStateT loop (replTStateDefault s)
   where
     loop = protected >> (replQuit <$> get) >>= \case
@@ -110,7 +116,7 @@ execReplT (ReplT ma) s = replUserState <$> execStateT loop (replTStateDefault s)
       True  -> pure ()
     protected = catch ma $ \e-> do
       if e == E.UserInterrupt then
-        lift $ T.putDocLn (PP.annotate (T.bold True) $ PP.annotate (T.foreground T.red) "Interrupted.")
+        lift $ T.putDocLn (PP.annotate T.bold $ PP.annotate (T.foreground T.red) "Interrupted.")
       else
         throwM e
 

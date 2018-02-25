@@ -33,11 +33,9 @@ library:
     - Control.Monad.Terminal.Printer
     - System.Terminal.Ansi
   other-modules:
-    - Control.Monad.Terminal.Ansi.Color
     - Control.Monad.Terminal.Ansi.Decoder
     - Control.Monad.Terminal.Ansi.AnsiTerminal
     - Control.Monad.Terminal.Ansi.AnsiTerminalT
-    - Control.Monad.Terminal.Ansi.MonadAnsiPrinter
     - System.Terminal.Ansi.Platform
   source-dirs: src
   when:

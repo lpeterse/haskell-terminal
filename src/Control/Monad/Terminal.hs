@@ -3,14 +3,24 @@
 module Control.Monad.Terminal
   ( MonadPrinter (..)
   , MonadPrettyPrinter (..)
+  , MonadColorPrinter (..)
+  , MonadFormatPrinter (..)
   , MonadEvent (..)
   , waitEvent
   , pollEvent
   , MonadScreen (..)
   , MonadTerminal (..)
+  , Color ()
+  , black
+  , red
+  , green
+  , yellow
+  , blue
+  , magenta
+  , cyan
+  , white
   ) where
 
-import qualified Control.Monad.Terminal.Ansi.Color as T
 import           Control.Monad.Terminal.Events
 import           Control.Monad.Terminal.Printer
 
