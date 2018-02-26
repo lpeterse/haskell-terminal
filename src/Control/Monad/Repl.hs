@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# OPTIONS_GHC -ddump-deriv #-}
 module Control.Monad.Repl
   ( MonadRepl (..)
   , ReplT ()

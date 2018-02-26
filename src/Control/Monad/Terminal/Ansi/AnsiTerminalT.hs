@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# OPTIONS_GHC -ddump-deriv #-}
 module Control.Monad.Terminal.Ansi.AnsiTerminalT
   ( AnsiTerminalT ()
   , runAnsiTerminalT
