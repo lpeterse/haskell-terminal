@@ -141,20 +141,27 @@ class MonadPrinter m => MonadPrettyPrinter m where
   resetAnnotations  = pure ()
   {-# MINIMAL putDoc, setAnnotation, resetAnnotation, resetAnnotations #-}
 
-putPretty :: (MonadPrettyPrinter m, Pretty a) => a -> m ()
-putPretty = putDoc . pretty
-
-putPrettyLn :: (MonadPrettyPrinter m, Pretty a) => a -> m ()
-putPrettyLn = putDocLn . pretty
-
+-- | This class offers abstract constructors for text formatting
+--   annotations.
 class MonadPrettyPrinter m => MonadFormatPrinter m where
+  -- | This annotation makes text appear __bold__.
   bold            :: Annotation m
+  -- | This annotation makes text appear /italic/.
   italic          :: Annotation m
+  -- | This annotation makes text appear underlined.
   underlined      :: Annotation m
 
+-- | This class offers abstract value constructors for
+--   foreground and background coloring.
 class MonadPrettyPrinter m => MonadColorPrinter m where
+  -- | This annotation swaps foreground and background color.
+  --
+  --   * This operation is idempotent: Applying the annotation a second time
+  --     won't swap it back. Use `resetAnnotation` instead.
   inverted        :: Annotation m
+  -- | This annotation sets the __foreground__ color (the text color).
   foreground      :: Color -> Annotation m
+  -- | This annotation set the __background__ color.
   background      :: Color -> Annotation m
 
 data Color = Color ColorMode BasicColor

@@ -9,8 +9,6 @@ module Control.Monad.Terminal
   , MonadPrinter (..)
     -- ** MonadPrettyPrinter
   , MonadPrettyPrinter (..)
-  , putPretty
-  , putPrettyLn
     -- ** MonadFormatPrinter
   , MonadFormatPrinter (..)
     -- ** MonadColorPrinter
@@ -32,8 +30,9 @@ module Control.Monad.Terminal
     -- ** Events
   , Event (..)
   , Key (..)
-  , Modifier (..)
   , MouseEvent (..)
+  , WindowEvent (..)
+  , Modifier (..)
     -- * Screen Manipulation
     -- ** MonadScreen
   , MonadScreen (..)

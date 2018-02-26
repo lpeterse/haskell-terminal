@@ -15,6 +15,7 @@ description:         Please see the README on Github at <https://github.com/lpet
 
 dependencies:
 - base >= 4.7 && < 5
+- async
 - bytestring
 - exceptions
 - stm
@@ -27,12 +28,13 @@ library:
   #-fwarn-incomplete-patterns
   exposed-modules:
     - Control.Monad.Repl
+    - Control.Monad.Repl.IO
     - Control.Monad.Terminal
+    - System.Terminal.Ansi
+  other-modules:
     - Control.Monad.Terminal.Ansi
     - Control.Monad.Terminal.Input
     - Control.Monad.Terminal.Printer
-    - System.Terminal.Ansi
-  other-modules:
     - Control.Monad.Terminal.Ansi.Decoder
     - Control.Monad.Terminal.Ansi.AnsiTerminal
     - Control.Monad.Terminal.Ansi.AnsiTerminalT

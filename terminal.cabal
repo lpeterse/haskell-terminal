@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 9b918423868f5a13dc174369b1460b9aeb8244a58e56f31da64aefe3104d8ad8
+-- hash: b6efe504967f80f92f51023d58c798add7aacdfc45189282189bbbae80b8c0ab
 
 name:           terminal
 version:        0.1.0.0
@@ -31,7 +31,8 @@ library
       src
   ghc-options: -Werror -O0
   build-depends:
-      base >=4.7 && <5
+      async
+    , base >=4.7 && <5
     , bytestring
     , exceptions
     , prettyprinter
@@ -54,12 +55,13 @@ library
         platform/posix/cbits/hs_terminal.c
   exposed-modules:
       Control.Monad.Repl
+      Control.Monad.Repl.IO
       Control.Monad.Terminal
+      System.Terminal.Ansi
+  other-modules:
       Control.Monad.Terminal.Ansi
       Control.Monad.Terminal.Input
       Control.Monad.Terminal.Printer
-      System.Terminal.Ansi
-  other-modules:
       Control.Monad.Terminal.Ansi.Decoder
       Control.Monad.Terminal.Ansi.AnsiTerminal
       Control.Monad.Terminal.Ansi.AnsiTerminalT
@@ -91,7 +93,8 @@ executable terminal-ev
       app/terminal-ev
   ghc-options: -Werror -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      async
+    , base >=4.7 && <5
     , bytestring
     , exceptions
     , prettyprinter
@@ -109,7 +112,8 @@ executable terminal-out
       app/terminal-out
   ghc-options: -Werror -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      async
+    , base >=4.7 && <5
     , bytestring
     , exceptions
     , prettyprinter
@@ -128,7 +132,8 @@ test-suite terminal-test
       test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      async
+    , base >=4.7 && <5
     , bytestring
     , exceptions
     , prettyprinter

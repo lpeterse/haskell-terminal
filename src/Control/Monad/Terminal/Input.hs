@@ -3,7 +3,6 @@ module Control.Monad.Terminal.Input where
 
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
-import           Data.ByteString
 
 -- | This monad describes an environment that maintains a stream of `Event`s
 --   and offers out-of-band signaling for interrupts.

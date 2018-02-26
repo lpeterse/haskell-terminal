@@ -7,6 +7,7 @@ import           Control.Concurrent
 import qualified Control.Concurrent.Async      as A
 import           Control.Concurrent.STM.TChan
 import           Control.Concurrent.STM.TVar
+import           Control.Concurrent.STM.TMVar
 import qualified Control.Exception             as E
 import           Control.Monad                 (forever, when, void)
 import           Control.Monad.Catch
@@ -17,58 +18,50 @@ import           Control.Monad.Trans.Reader
 import           Control.Monad.Trans.State
 import           Data.Bits
 import qualified Data.ByteString               as BS
+import qualified Data.ByteString.Char8         as BS8
+import           Data.Maybe
+import qualified Data.Text                     as Text
+import qualified Data.Text.IO                  as Text
 import           Data.Word
 import           Foreign.C.Types
 import           Foreign.Marshal.Alloc
 import           Foreign.Ptr
 import           Foreign.Storable
+import           System.Environment
 import qualified System.IO                     as IO
-import qualified System.Exit as IO
 import qualified System.IO.Error               as IO
-import qualified GHC.Conc as Conc
-import qualified Data.Dynamic as Dyn
+import qualified GHC.Conc                      as Conc
+import qualified Data.Dynamic                  as Dyn
 
-import qualified Control.Monad.Terminal.Events as T
-import qualified System.Terminal.Ansi.Internal as T
+import qualified Control.Monad.Terminal        as T
+import qualified Control.Monad.Terminal.Ansi   as T
 
 #include "Rts.h"
 #include "hs_terminal.h"
 
-{-
-instance MonadInput (StateT BS.ByteString IO) where
-  getNext = do
-    st <- get
-    case BS.uncons st of
-      Just (b,bs) -> put bs >> pure b
-      Nothing -> do
-        ccs <- liftIO $ BS.hGetSome IO.stdin 1024
-        put (BS.tail ccs)
-        pure (BS.head ccs)
-  getNextNonBlock = do
-    st <- get
-    case BS.uncons st of
-      Just (b,bs) -> put bs >> pure (Just b)
-      Nothing -> do
-        ccs <- liftIO $ BS.hGetNonBlocking IO.stdin 1024
-        case BS.uncons ccs of
-          Just (c,cs) -> put cs >> pure (Just c)
-          Nothing     -> pure Nothing
-  wait = liftIO $ threadDelay 100000
--}
-
-withTerminal :: (MonadIO m, MonadMask m) => (T.TermEnv -> m a) -> m a
+withTerminal :: (MonadIO m, MonadMask m) => (T.AnsiTerminal -> m a) -> m a
 withTerminal action = do
-  mainThreadId <- liftIO myThreadId
-  eventChan <- liftIO newTChanIO
-  screenSize <- liftIO (newTVarIO =<< getWindowSize)
-  withTermiosSettings $ do
-    withResizeHandler (atomically . writeTChan eventChan . T.EvResize =<< getWindowSize) $
-      withInputProcessing eventChan $ action $ T.TermEnv {
-            T.envInput      = readTChan eventChan
-          , T.envInterrupt  = retry --
-          , T.envScreenSize = readTVar screenSize
-          , T.envCursorPosition = retry
-        }
+  termType    <- BS8.pack . fromMaybe "xterm" <$> liftIO (lookupEnv "TERM")
+  mainThread  <- liftIO myThreadId
+  interrupt   <- liftIO (newTVarIO False)
+  chars       <- liftIO newTChanIO
+  output      <- liftIO newEmptyTMVarIO
+  outputFlush <- liftIO newEmptyTMVarIO
+  events      <- liftIO newTChanIO
+  screenSize  <- liftIO (newTVarIO =<< getWindowSize)
+  withTermiosSettings $
+    withResizeHandler (atomically . writeTChan events . T.WindowEvent . T.WindowSizeChanged =<< getWindowSize) $
+    withInputProcessing mainThread interrupt chars events $ 
+    withOutputProcessing output outputFlush $ action $ T.AnsiTerminal {
+        T.ansiTermType       = termType
+      , T.ansiInputChars     = readTChan chars
+      , T.ansiInputEvents    = readTChan events
+      , T.ansiInterrupt      = swapTVar interrupt False >>= check
+      , T.ansiOutput         = putTMVar output
+      , T.ansiOutputFlush    = putTMVar outputFlush ()
+      , T.ansiScreenSize     = readTVar screenSize
+      , T.ansiSpecialChars   = const Nothing
+      }
 
 withTermiosSettings :: (MonadIO m, MonadMask m) => m a -> m a
 withTermiosSettings ma = bracket before after between
@@ -90,29 +83,42 @@ withResizeHandler handler = bracket installHandler restoreHandler . const
       void $ stg_sig_install (#const SIGWINCH) oldAction nullPtr
       pure ()
 
-withInputProcessing :: (MonadIO m, MonadMask m) => (TChan T.Event) -> m a -> m a
-withInputProcessing eventChan = bracket
+withOutputProcessing :: (MonadIO m, MonadMask m) => TMVar Text.Text -> TMVar () -> m a -> m a
+withOutputProcessing output outputFlush = bracket
+  ( liftIO $ A.async run )
+  ( liftIO . A.cancel ) . const
+  where
+    run = forever $ atomically ((Just <$> takeTMVar output) `orElse` (takeTMVar outputFlush >> pure Nothing)) >>= \case
+      Nothing -> IO.hFlush IO.stdout
+      Just t  -> Text.hPutStr IO.stdout t
+
+withInputProcessing :: (MonadIO m, MonadMask m) => ThreadId -> TVar Bool -> TChan Char -> TChan T.Event -> m a -> m a
+withInputProcessing mainThread interrupt chars events = bracket
   ( liftIO $ A.async run )
   ( liftIO . A.cancel ) . const
   where
     run = do 
       termios <- getTermios
-      flip evalStateT BS.empty $ forever $
-        liftIO . atomically . writeTChan eventChan =<< mapEvent termios <$> T.decodeAnsi
-
-    mapEvent termios ev@(T.EvKey (T.KChar c) [])
-      | c == '\NUL'                = T.EvKey T.KNull []
-      | c == termiosVINTR  termios = T.EvKey (T.KChar 'C')  [T.MCtrl]
-      | c == termiosVEOF   termios = T.EvKey (T.KChar 'D')  [T.MCtrl]
-      | c == termiosVKILL  termios = T.EvKey (T.KChar 'U')  [T.MCtrl]
-      | c == termiosVQUIT  termios = T.EvKey (T.KChar '\\') [T.MCtrl]
-      | c == termiosVERASE termios = T.EvKey T.KErase []
-      | c == '\DEL'                = T.EvKey T.KDelete []
-      | c == '\b'                  = T.EvKey T.KDelete []
-      | c == '\n'                  = T.EvKey T.KEnter []
-      | c  < ' '                   = T.EvKey (T.KChar $ toEnum $ 64 + fromEnum c) [T.MCtrl]
-      | otherwise                  = ev
-    mapEvent termios ev            = ev
+      forever $ do
+        c <- IO.getChar
+        case specialChar termios c of
+          Nothing -> liftIO (atomically $ writeTChan chars c)
+          Just ev -> case ev of
+            T.InterruptEvent -> do
+              unhandledInterrupt <- liftIO (atomically $ writeTChan events T.InterruptEvent >> swapTVar interrupt True)
+              when unhandledInterrupt (E.throwTo mainThread E.UserInterrupt)
+            _                -> liftIO (atomically $ writeTChan events ev)
+    specialChar termios c
+      | c == '\NUL'                = Just $ T.EvKey T.KNull []
+      | c == termiosVINTR  termios = Just $ T.InterruptEvent
+      | c == termiosVEOF   termios = Just $ T.EvKey (T.KChar 'D')  [T.MCtrl]
+      | c == termiosVKILL  termios = Just $ T.EvKey (T.KChar 'U')  [T.MCtrl]
+      | c == termiosVQUIT  termios = Just $ T.EvKey (T.KChar '\\') [T.MCtrl]
+      | c == termiosVERASE termios = Just $ T.EvKey T.KErase  []
+      | c == '\DEL'                = Just $ T.EvKey T.KDelete []
+      | c == '\b'                  = Just $ T.EvKey T.KDelete []
+      | c == '\n'                  = Just $ T.EvKey T.KEnter  []
+      | otherwise                  = Nothing
 
 getWindowSize :: IO (Int, Int)
 getWindowSize =

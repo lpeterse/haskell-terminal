@@ -1,10 +1,7 @@
 module Control.Monad.Terminal.Ansi.AnsiTerminal where
 
-import           Control.Concurrent.STM.TChan
-import           Control.Concurrent.STM.TVar
 import           Control.Monad.STM
 import           Data.ByteString
-import           Data.Char
 import           Data.Text
 
 import           Control.Monad.Terminal.Input
