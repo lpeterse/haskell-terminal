@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
@@ -10,7 +11,8 @@ module Control.Monad.Repl
   ) where
 
 import           Control.Concurrent
-import qualified Control.Exception          as E
+import           Control.Concurrent.STM.TVar
+import qualified Control.Exception           as E
 import           Control.Monad
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
@@ -19,14 +21,14 @@ import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Reader
 import           Control.Monad.Trans.State
 import           Data.Char
-import           Data.Function              (fix)
-import qualified Data.Text                  as Text
-import qualified Data.Text.Prettyprint.Doc  as PP
+import           Data.Function               (fix)
+import qualified Data.Text                   as Text
+import qualified Data.Text.Prettyprint.Doc   as PP
 import           Data.Typeable
 
-import qualified Control.Monad.Terminal     as T
+import qualified Control.Monad.Terminal      as T
 
-import           Prelude                    hiding (read)
+import           Prelude                     hiding (read)
 
 class Pretty a where
   pretty :: a -> PP.Doc ann
@@ -48,17 +50,16 @@ newtype ReplT s m a = ReplT (StateT (ReplTState s m) m a)
 
 data ReplTState s m
   = ReplTState
-  { replQuit      :: Bool
-  , replPrompt    :: ReplT s m ()
-  , replUserState :: s
+  { replQuit      :: !(TVar Bool)
+  , replPrompt    :: !(ReplT s m ())
+  , replUserState :: !s
   }
 
-replTStateDefault :: T.MonadPrinter m => s -> ReplTState s m
-replTStateDefault s = ReplTState {
-    replQuit = False
-  , replPrompt = T.putString "> "
-  , replUserState = s
-  }
+replTStateDefault :: (T.MonadPrinter m, MonadIO m) => s -> m (ReplTState s m)
+replTStateDefault s = ReplTState
+  <$> liftIO (newTVarIO False)
+  <*> pure (T.putString "> ")
+  <*> pure s
 
 instance MonadTrans (ReplT s) where
   lift = ReplT . lift
@@ -107,17 +108,16 @@ instance (T.MonadInput m) => T.MonadInput (ReplT s m) where
 
 instance (T.MonadTerminal m, T.MonadPrettyPrinter m) => T.MonadTerminal (ReplT s m) where
 
-execReplT :: (T.MonadTerminal m, T.MonadColorPrinter m, T.MonadFormatPrinter m, MonadMask m) => ReplT s m () -> s -> m s
-execReplT (ReplT ma) s = replUserState <$> execStateT loop (replTStateDefault s)
+execReplT :: (T.MonadTerminal m, T.MonadColorPrinter m, T.MonadFormatPrinter m, MonadIO m, MonadMask m) => ReplT s m () -> s -> m s
+execReplT (ReplT ma) s = do
+  st <- replTStateDefault s
+  execReplT' st
   where
-    loop = protected >> (replQuit <$> get) >>= \case
-      False -> loop
-      True  -> pure ()
-    protected = catch ma $ \e-> do
-      if e == E.UserInterrupt then
-        lift $ T.putDocLn (PP.annotate T.bold $ PP.annotate (T.foreground $ T.bright T.Red) "Interrupted.")
-      else
-        throwM e
+  execReplT' st = do
+    st' <- execStateT ma st
+    liftIO (atomically $ readTVar $ replQuit st') >>= \case
+      True  -> pure (replUserState st')
+      False -> execReplT' st'
 
 instance T.MonadTerminal m => MonadRepl (ReplT s m) where
   type ReplState (ReplT s m) = s
@@ -126,7 +126,9 @@ instance T.MonadTerminal m => MonadRepl (ReplT s m) where
   store ust = ReplT $ modify (\st-> st { replUserState = ust })
   print a = T.putStringLn (show a)
   pprint a = T.putDoc (pretty a)
-  quit = ReplT $ modify (\st-> st { replQuit = True })
+  quit = ReplT $ do
+    st <- get
+    liftIO $ atomically $ writeTVar (replQuit st) True
   readString = do
     prompt <- ReplT $ replPrompt <$> get
     prompt

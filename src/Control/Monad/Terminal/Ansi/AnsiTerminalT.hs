@@ -25,6 +25,7 @@ import           Control.Monad.Trans.State
 import           Data.Bits
 import qualified Data.ByteString                          as BS
 import           Data.Char
+import           Data.Foldable                            (forM_)
 import           Data.Function                            (fix)
 import           Data.List.NonEmpty                       (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty                       as N
@@ -72,10 +73,11 @@ instance (MonadIO m) => T.MonadPrinter (AnsiTerminalT m) where
   putChar c = AnsiTerminalT $ do
     ansi <- ask
     when (safeChar c) $
-      liftIO $ atomically $ T.ansiOutput ansi $ Text.singleton c
-  putString = \case
-    []     -> pure ()
-    (x:xs) -> T.putChar x >> T.putString xs
+      liftIO $ atomically $ T.ansiOutput ansi $! Text.singleton c
+  putString cs = AnsiTerminalT $ do
+    ansi <- ask
+    liftIO $ forM_ (filter safeChar cs) $ \c->
+      atomically $ T.ansiOutput ansi $! Text.singleton c
   putText t = AnsiTerminalT $ do
     ansi <- ask
     liftIO $ loop (atomically . T.ansiOutput ansi) (Text.filter safeChar t)

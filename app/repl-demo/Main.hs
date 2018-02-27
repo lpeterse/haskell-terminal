@@ -47,7 +47,7 @@ repl = R.readString >>= \case
     "load"     -> R.load >>= R.print
     "inc"      -> R.load >>= R.store . succ
     "dec"      -> R.load >>= R.store . pred
-    "loop"     -> R.print [1..]
+    "loop"     -> putString (show [1..])
     "cursor"   -> getCursorPosition >>= \xy-> R.print xy
     "progress" -> void $ R.runWithProgressBar $ \update-> (`finally` threadDelay 3000000) $ forM_ [1..100] $ \i-> do
                     threadDelay 100000
