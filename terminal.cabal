@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: b6efe504967f80f92f51023d58c798add7aacdfc45189282189bbbae80b8c0ab
+-- hash: 3259d9c0ea3ef9d92e063dbf35e32e3439e89c5e473a2ea0d9a414e8f2e48349
 
 name:           terminal
 version:        0.1.0.0
@@ -29,7 +29,7 @@ source-repository head
 library
   hs-source-dirs:
       src
-  ghc-options: -Werror -O0
+  ghc-options: -Werror -O2
   build-depends:
       async
     , base >=4.7 && <5
@@ -72,7 +72,7 @@ executable repl-demo
   main-is: Main.hs
   hs-source-dirs:
       app/repl-demo
-  ghc-options: -Werror -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -O2 -Werror -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       async
     , base >=4.7 && <5

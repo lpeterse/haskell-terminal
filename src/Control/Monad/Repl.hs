@@ -3,11 +3,10 @@
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE TypeFamilies               #-}
-{-# OPTIONS_GHC -ddump-deriv #-}
 module Control.Monad.Repl
   ( MonadRepl (..)
   , ReplT ()
-  , execReplT
+  , runReplT
   ) where
 
 import           Control.Concurrent
@@ -30,39 +29,42 @@ import qualified Control.Monad.Terminal      as T
 
 import           Prelude                     hiding (read)
 
-class Pretty a where
-  pretty :: a -> PP.Doc ann
-
 class T.MonadPrinter m => MonadRepl m where
   type ReplState m
-  setPrompt    :: m () -> m ()
+  --setPrompt    :: m () -> m ()
   readString   :: m (Maybe String)
   readText     :: m (Maybe Text.Text)
   readText      = (Text.pack <$>) <$> readString
-  load         :: m (ReplState m)
-  store        :: ReplState m -> m ()
+  --load         :: m (ReplState m)
+  --store        :: ReplState m -> m ()
   print        :: Show a => a -> m ()
-  pprint       :: Pretty a => a -> m ()
-  quit         :: m ()
+  quit         :: m a
 
-newtype ReplT s m a = ReplT (StateT (ReplTState s m) m a)
-  deriving (Functor, Applicative, Monad, MonadIO, MonadThrow, MonadCatch, MonadMask)
+newtype ReplT s m a = ReplT { unReplT ::  ( a -> s -> m s) -> s -> m s }
 
-data ReplTState s m
-  = ReplTState
-  { replQuit      :: !(TVar Bool)
-  , replPrompt    :: !(ReplT s m ())
-  , replUserState :: !s
-  }
+runReplT  :: (Monad m) => ReplT s m a -> s -> m s
+runReplT m = unReplT m (const pure)
 
-replTStateDefault :: (T.MonadPrinter m, MonadIO m) => s -> m (ReplTState s m)
-replTStateDefault s = ReplTState
-  <$> liftIO (newTVarIO False)
-  <*> pure (T.putString "> ")
-  <*> pure s
+instance (Monad m) => Functor (ReplT s m) where
+  fmap f fa = ReplT $ \cont->
+    unReplT fa (\a1-> cont (f a1))
+
+instance (Monad m) => Applicative (ReplT s m) where
+  pure a = ReplT $ \cont s-> cont a s
+  fab <*> fa = ReplT $ \cont->
+    unReplT fa (\a-> unReplT fab (\f-> cont (f a)))
+
+instance (Monad m) => Monad (ReplT s m) where
+  ma >>= k = ReplT $ \cont->
+    unReplT ma (\a-> unReplT (k a) cont)
 
 instance MonadTrans (ReplT s) where
-  lift = ReplT . lift
+  lift ma = ReplT $ \cont s->
+    ma >>= \a-> cont a s
+
+instance (MonadIO m) => MonadIO (ReplT s m) where
+  liftIO ma = ReplT $ \cont s->
+    liftIO ma >>= \a-> cont a s
 
 instance (T.MonadPrinter m) => T.MonadPrinter (ReplT s m) where
   putLn = lift T.putLn
@@ -108,30 +110,14 @@ instance (T.MonadInput m) => T.MonadInput (ReplT s m) where
 
 instance (T.MonadTerminal m, T.MonadPrettyPrinter m) => T.MonadTerminal (ReplT s m) where
 
-execReplT :: (T.MonadTerminal m, T.MonadColorPrinter m, T.MonadFormatPrinter m, MonadIO m, MonadMask m) => ReplT s m () -> s -> m s
-execReplT (ReplT ma) s = do
-  st <- replTStateDefault s
-  execReplT' st
-  where
-  execReplT' st = do
-    st' <- execStateT ma st
-    liftIO (atomically $ readTVar $ replQuit st') >>= \case
-      True  -> pure (replUserState st')
-      False -> execReplT' st'
-
 instance T.MonadTerminal m => MonadRepl (ReplT s m) where
   type ReplState (ReplT s m) = s
-  setPrompt a = ReplT $ modify (\st-> st { replPrompt = a })
-  load = ReplT $ replUserState <$> get
-  store ust = ReplT $ modify (\st-> st { replUserState = ust })
+  quit = ReplT $ \_ s-> pure s
+  --setPrompt a = ReplT $ modify (\st-> st { replPrompt = a })
+  --load = ReplT $ replUserState <$> get
+  --store ust = ReplT $ modify (\st-> st { replUserState = ust })
   print a = T.putStringLn (show a)
-  pprint a = T.putDoc (pretty a)
-  quit = ReplT $ do
-    st <- get
-    liftIO $ atomically $ writeTVar (replQuit st) True
   readString = do
-    prompt <- ReplT $ replPrompt <$> get
-    prompt
     lift $ T.resetAnnotations
     lift $ T.flush
     withStacks [] []
@@ -181,5 +167,4 @@ instance T.MonadTerminal m => MonadRepl (ReplT s m) where
           --lift $ T.putStringLn (show ev)
           lift $ T.flush
           withStacks xss yss
-
 
