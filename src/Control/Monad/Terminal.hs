@@ -42,8 +42,6 @@ module Control.Monad.Terminal
   , MonadScreen (..)
   ) where
 
-import           Prelude                        hiding (putChar)
-
 import           Control.Monad.Terminal.Input
 import           Control.Monad.Terminal.Printer
 

@@ -49,14 +49,19 @@ newtype AnsiTerminalT m a
   deriving (Functor, Applicative, Monad, MonadIO, MonadThrow, MonadCatch, MonadMask)
 
 runAnsiTerminalT :: (MonadIO m, MonadMask m) => AnsiTerminalT m a -> T.AnsiTerminal -> m a
-runAnsiTerminalT (AnsiTerminalT action) ansi =
-  runReaderT action ansi { T.ansiInputEvents = events }
+runAnsiTerminalT (AnsiTerminalT action) ansi = do
+  chars <- liftIO newTChanIO
+  runReaderT action ansi { T.ansiInputEvents = getNextEvent (T.ansiInputEvents ansi) chars }
   where
-    events = (mapEvent <$> runReaderT T.decodeAnsi (T.ansiInputChars ansi)) `orElse` T.ansiInputEvents ansi
-    mapEvent ev@(T.KeyEvent (T.KeyChar c) mods)
-      | mods == mempty && c  < ' '= T.KeyEvent (T.KeyChar $ toEnum $ 64 + fromEnum c) T.ctrlKey
-      | otherwise                 = ev
-    mapEvent ev                   = ev
+    getNextEvent getEvent chars = getAnsiEvent `orElse` getOtherEvent
+      where
+        getAnsiEvent  = runReaderT T.decodeAnsi (readTChan chars)
+        getOtherEvent = getEvent >>= \case
+          T.KeyEvent (T.KeyChar c) mods
+            | mods == mempty -> do
+                writeTChan chars c
+                pure $ T.OtherEvent $ "Pushed " ++ show c ++ "into ANSI decoder."
+          event -> pure event
 
 instance MonadTrans AnsiTerminalT where
   lift = AnsiTerminalT . lift

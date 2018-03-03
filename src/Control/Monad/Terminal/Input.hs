@@ -108,9 +108,9 @@ instance Show Modifiers where
   show (Modifiers 2) = "ctrlKey"
   show (Modifiers 4) = "altKey"
   show (Modifiers 8) = "metaKey"
-  show i = "(" ++ concat (intersperse " .|. " ls) ++ ")"
+  show i = "(" ++ intercalate " .|. " ls ++ ")"
     where
-      ls = foldl (\acc x-> if x .&. i /= mempty then (show x):acc else acc) []
+      ls = foldl (\acc x-> if x .&. i /= mempty then show x:acc else acc) []
                  [metaKey, altKey, ctrlKey, shiftKey]
 
 shiftKey, ctrlKey, altKey, metaKey :: Modifiers

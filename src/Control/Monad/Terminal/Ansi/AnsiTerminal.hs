@@ -9,7 +9,6 @@ import           Control.Monad.Terminal.Input
 data AnsiTerminal
   = AnsiTerminal
   { ansiTermType    :: ByteString
-  , ansiInputChars  :: STM Char
   , ansiInputEvents :: STM Event
   , ansiInterrupt   :: STM ()
   , ansiOutput      :: Text -> STM ()

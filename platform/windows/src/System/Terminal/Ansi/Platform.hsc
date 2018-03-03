@@ -36,17 +36,15 @@ withTerminal :: (MonadIO m, MonadMask m) => (T.AnsiTerminal -> m a) -> m a
 withTerminal action = do
   mainThread     <- liftIO myThreadId
   interrupt      <- liftIO (newTVarIO False)
-  chars          <- liftIO newTChanIO
   events         <- liftIO newTChanIO
   output         <- liftIO newEmptyTMVarIO
   outputFlush    <- liftIO newEmptyTMVarIO
   screenSize     <- liftIO (newTVarIO =<< getScreenSize)
   withConsoleModes $
     withOutputProcessing mainThread output outputFlush $
-      withInputProcessing mainThread interrupt chars events $ action $
+      withInputProcessing mainThread interrupt events $ action $
         T.AnsiTerminal {
           T.ansiTermType       = "xterm"
-        , T.ansiInputChars     = readTChan  chars
         , T.ansiInputEvents    = readTChan  events
         , T.ansiInterrupt      = swapTVar   interrupt False >>= check
         , T.ansiOutput         = putTMVar   output
@@ -119,8 +117,8 @@ withOutputProcessing mainThread output outputFlush ma = do
             Just Nothing  -> IO.hFlush IO.stdout >> loop
             Just (Just t) -> Text.putStr t       >> loop
 
-withInputProcessing :: (MonadIO m, MonadMask m) => ThreadId -> TVar Bool -> TChan Char -> TChan T.Event -> m a -> m a
-withInputProcessing mainThread interrupt chars events ma = do
+withInputProcessing :: (MonadIO m, MonadMask m) => ThreadId -> TVar Bool -> TChan T.Event -> m a -> m a
+withInputProcessing mainThread interrupt events ma = do
   terminate  <- liftIO (newTVarIO False)
   terminated <- liftIO (newTVarIO False)
   bracket_
@@ -133,7 +131,8 @@ withInputProcessing mainThread interrupt chars events ma = do
 
     run :: TVar Bool -> IO ()
     run terminate = do
-      lastMouseButton <- newTVarIO T.LeftButton
+      latestCharacter   <- newTVarIO '\NUL'
+      latestMouseButton <- newTVarIO T.LeftButton
       fix $ \continue-> tryGetConsoleInputEvent >>= \case
         -- `tryGetConsoleInputEvent` is a blocking system call. It cannot be interrupted, but
         -- is guaranteed to return after at most 100ms. In this case it is checked whether
@@ -152,8 +151,9 @@ withInputProcessing mainThread interrupt chars events ma = do
             -- to reset the interrupt flag in the meantime. In this specific case
             -- an asynchronous `E.UserInterrupt` exception is thrown to the main thread
             -- and either terminates the application or at least the current computation.
-            | c == '\ESC' &&     d -> do 
+            | c == '\ETX' &&     d -> do 
                 unhandledInterrupt <- atomically $ do
+                  writeTVar latestCharacter '\ETX'
                   writeTChan events T.InterruptEvent
                   swapTVar interrupt True
                 when unhandledInterrupt (E.throwTo mainThread E.UserInterrupt)
@@ -161,28 +161,40 @@ withInputProcessing mainThread interrupt chars events ma = do
             -- char stream. The NUL character is a replacement for timing based
             -- escape sequence recognition and enables the escape sequence decoder
             -- to reliably distinguish real escape key presses and escape sequences
-            -- from another. 
-            | c == '\ESC' && not d -> atomically (writeTChan chars '\NUL')
-            | d -> case c of
-                '\t'    -> atomically $ writeTChan events (T.KeyEvent T.KeyTab    mods)
-                '\r'    -> atomically $ writeTChan events (T.KeyEvent T.KeyEnter  mods)
-                '\n'    -> atomically $ writeTChan events (T.KeyEvent T.KeyEnter  mods)
-                '\SP'   -> atomically $ writeTChan events (T.KeyEvent T.SpaceKey  mods)
-                '\DEL'  -> atomically $ writeTChan events (T.KeyEvent T.KeyErase  mods)
-                _       -> atomically $ writeTChan chars c
-            | otherwise            -> pure () -- All other key events shall be ignored.
-          MouseEvent newMouseEvent -> case newMouseEvent of
-                                        T.MouseButtonPressed _  btn -> atomically $ do
-                                            writeTChan events $ T.MouseEvent newMouseEvent
-                                            writeTVar lastMouseButton btn
-                                        T.MouseButtonReleased pos _ -> atomically $ do
-                                            btn <- readTVar lastMouseButton
-                                            writeTChan events $ T.MouseEvent $ T.MouseButtonReleased pos btn
-                                            writeTChan events $ T.MouseEvent $ T.MouseButtonClicked  pos btn
-                                        _ -> atomically $ 
-                                            writeTChan events $ T.MouseEvent newMouseEvent
-          WindowEvent wev          -> atomically $ writeTChan events $ T.WindowEvent wev
-          UnknownEvent x           -> atomically $ writeTChan events (T.OtherEvent $ "unknown console input event" ++ show x)
+            -- from another.
+            | c == '\ESC' && not d -> atomically $
+                writeTChan events (T.KeyEvent (T.KeyChar '\NUL') mempty)
+            -- When the character is ESC and the key is pressed down it might be
+            -- that the key is hold pressed. In this case a NUL has to be emitted
+            -- before emitting the ESC in order to signal that the previous ESC does
+            -- not introduce a sequence.
+            | c == '\ESC' &&     d -> atomically $ do
+                readTVar latestCharacter >>= \case
+                  '\ESC' -> writeTChan events (T.KeyEvent (T.KeyChar '\NUL') mempty)
+                  _      -> writeTVar  latestCharacter '\ESC'
+                writeTChan events (T.KeyEvent (T.KeyChar '\ESC') mempty)
+            | d -> atomically $ writeTVar latestCharacter c >> case c of
+                '\NUL'  -> pure ()
+                '\t'    -> writeTChan events (T.KeyEvent T.KeyTab      mods)
+                '\r'    -> writeTChan events (T.KeyEvent T.KeyEnter    mods)
+                '\n'    -> writeTChan events (T.KeyEvent T.KeyEnter    mods)
+                '\SP'   -> writeTChan events (T.KeyEvent T.SpaceKey    mods)
+                '\BS'   -> writeTChan events (T.KeyEvent T.KeyDelete   mods)
+                '\DEL'  -> writeTChan events (T.KeyEvent T.KeyErase    mods)
+                _       -> writeTChan events (T.KeyEvent (T.KeyChar c) mods)
+            | otherwise -> pure () -- All other key events shall be ignored.
+          MouseEvent mouseEvent -> case mouseEvent of
+            T.MouseButtonPressed _  btn -> atomically $ do
+              writeTChan events $ T.MouseEvent mouseEvent
+              writeTVar latestMouseButton btn
+            T.MouseButtonReleased pos _ -> atomically $ do
+              btn <- readTVar latestMouseButton
+              writeTChan events $ T.MouseEvent $ T.MouseButtonReleased pos btn
+              writeTChan events $ T.MouseEvent $ T.MouseButtonClicked  pos btn
+            _ -> atomically $ 
+              writeTChan events $ T.MouseEvent mouseEvent
+          WindowEvent wev -> atomically $ writeTChan events $ T.WindowEvent wev
+          UnknownEvent x  -> atomically $ writeTChan events (T.OtherEvent $ "Unknown console input event " ++ show x ++ ".")
 
     timeoutMillis :: CULong
     timeoutMillis = 100
