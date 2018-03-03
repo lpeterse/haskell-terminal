@@ -5,6 +5,7 @@ module Control.Monad.Repl
   , MonadQuit (..)
   , ReplT ()
   , runReplT
+  , readString
   ) where
 
 import           Control.Concurrent
@@ -33,12 +34,8 @@ class (Monad m) => MonadQuit m where
 
 class (MonadPrinter m, MonadQuit m) => MonadRepl m where
   type ReplState m
-  readString   :: Doc (Annotation m) -> m String
-  readText     :: Doc (Annotation m) -> m Text.Text
-  readText p    = Text.pack <$> readString p
-  --load         :: m (ReplState m)
-  --store        :: ReplState m -> m ()
-  print        :: Show a => a -> m ()
+  load         :: m (ReplState m)
+  store        :: ReplState m -> m ()
 
 newtype ReplT s m a = ReplT { unReplT ::  ( a -> s -> m s) -> s -> m s }
 
@@ -115,14 +112,11 @@ instance (Monad m) => MonadQuit (ReplT s m) where
 
 instance MonadTerminal m => MonadRepl (ReplT s m) where
   type ReplState (ReplT s m) = s
-  --setPrompt a = ReplT $ modify (\st-> st { replPrompt = a })
-  --load = ReplT $ replUserState <$> get
-  --store ust = ReplT $ modify (\st-> st { replUserState = ust })
-  print a = T.putStringLn (show a)
-  readString = getString
+  load = ReplT $ \cont s-> cont s s
+  store s = ReplT $ \cont _-> cont () s
 
-getString :: (MonadQuit m, MonadTerminal m) => Doc (Annotation m) -> m String
-getString p = do
+readString :: (MonadQuit m, MonadTerminal m) => Doc (Annotation m) -> m String
+readString p = do
   resetAnnotations
   putDoc p
   flush
@@ -134,7 +128,7 @@ getString p = do
       -- it several times when trying to interrupt a running computation.
       InterruptEvent -> do
         putLn
-        getString p
+        readString p
       -- On Ctrl-D the program is supposed to quit.
       T.KeyEvent (T.KeyChar 'D') mods
         | mods == T.ctrlKey -> do

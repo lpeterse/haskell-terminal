@@ -36,19 +36,20 @@ prompt  = annotate bold $ annotate (foreground $ bright Blue) "repl" <> "@termin
 
 repl :: (MonadTerminal m, MonadColorPrinter m) => ReplT Int m ()
 repl = readString prompt >>= \case
-    ""       -> pure ()
-    "quit"   -> quit
-    --"load"     -> R.load >>= R.print
-    --"inc"      -> R.load >>= R.store . succ
-    --"dec"      -> R.load >>= R.store . pred
-    "loop"   -> gnurp 100000
-    "cursor" -> getCursorPosition >>= \xy-> pprint xy
-    --"progress" -> void $ R.runWithProgressBar $ \update-> (`finally` threadDelay 3000000) $ forM_ [1..100] $ \i-> do
+    ""         -> pure ()
+    "quit"     -> quit
+    "load"     -> load >>= pprint
+    "inc"      -> load >>= store . succ
+    "dec"      -> load >>= store . pred
+    "loop"     -> gnurp 100000
+    "cursor"   -> getCursorPosition >>= \xy-> pprint xy
+    --"progress" -> void $ runWithProgressBar $ \update-> (`finally` threadDelay 3000000) $ forM_ [1..100] $ \i-> do
     --                threadDelay 100000
     --                update $ fromIntegral i / 100
-    "colors" -> undefined
-    line     -> putStringLn (show line)
+    "colors"   -> undefined
+    line       -> putStringLn (show line)
 
 gnurp :: MonadPrinter m => Int -> m ()
 gnurp i = putString (show [1..i])
 {-# NOINLINE gnurp #-}
+
