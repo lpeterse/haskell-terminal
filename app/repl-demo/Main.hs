@@ -17,7 +17,6 @@ import           Data.Function               (fix)
 import           Data.Monoid
 import qualified Data.Text                   as Text
 import qualified Data.Text.Prettyprint.Doc   as PP
-import           Prelude                     hiding (print, putChar)
 import           System.Environment
 
 import qualified Control.Monad.Repl          as R
@@ -51,7 +50,7 @@ repl = R.readString >>= \case
     line     -> R.print line
 
 printColors ::  (MonadColorPrinter m) => m ()
-printColors = do
+printColors =
   putDocLn doc
   where
     doc = PP.annotate (foreground $ bright Yellow) (" yellow " <> PP.annotate (foreground $ dull Red) " red " <> " yellow ")

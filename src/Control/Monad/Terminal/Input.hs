@@ -88,6 +88,7 @@ data Key
   | KeyDelete
   | KeyEscape
   | KeyTab
+  | SpaceKey
   | KLeft Int | KRight Int | KUp Int | KDown Int
   | KUpLeft | KUpRight | KDownLeft | KDownRight | KCenter
   | KFun Int | KPrtScr | KPause | KInsert

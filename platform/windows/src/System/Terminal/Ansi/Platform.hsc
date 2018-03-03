@@ -17,6 +17,7 @@ import           Control.Monad.STM             (STM, atomically, check, orElse)
 import           Control.Monad.Trans.Reader
 import           Control.Monad.Trans.State
 import           Data.Bits
+import           Data.Function                 (fix)
 import qualified Data.Text                     as Text
 import qualified Data.Text.IO                  as Text
 import           Foreign.C.Types
@@ -51,7 +52,6 @@ withTerminal action = do
         , T.ansiOutput         = putTMVar   output
         , T.ansiOutputFlush    = putTMVar   outputFlush ()
         , T.ansiScreenSize     = readTVar   screenSize
-        , T.ansiSpecialChars   = specialChars
         }
 
 withConsoleModes :: (MonadIO m, MonadMask m) => m a -> m a
@@ -124,85 +124,78 @@ withInputProcessing mainThread interrupt chars events ma = do
   terminate  <- liftIO (newTVarIO False)
   terminated <- liftIO (newTVarIO False)
   bracket_
-    (liftIO $ forkIO $ run terminate terminated)
+    (liftIO $ forkIO $ runUntilTermination terminate terminated)
     (liftIO (atomically (writeTVar terminate True) >> atomically (readTVar terminated >>= check))) ma
   where
-    run :: TVar Bool -> TVar Bool -> IO ()
-    run terminate terminated =
-      (loop T.LeftButton `E.catch` (\e-> E.throwTo mainThread (e:: E.SomeException))) `E.finally` atomically (writeTVar terminated True)
-      where
-        timeoutMillis :: CULong
-        timeoutMillis = 100
-        loop :: T.Button -> IO ()
-        loop lastMouseButton = tryGetConsoleInputEvent >>= \case
-          -- `tryGetConsoleInputEvent` is a blocking system call. It cannot be interrupted, but
-          -- is guaranteed to return after at most 100ms. In this case it is checked whether
-          -- this thread shall either terminate or is allowed to continue.
-          -- This is cooperative multitasking to circumvent the limitations of IO on Windows.
-          Nothing -> atomically (readTVar terminate) >>= \t-> unless t (loop lastMouseButton)
-          Just ev -> case ev of
-            KeyEvent { ceKeyChar = c, ceKeyDown = d }
-              | c == '\NUL'          -> do
-                                        loop lastMouseButton
-              | c == '\ESC' && not d -> do
-                                        atomically (writeTChan chars '\NUL')
-                                        loop lastMouseButton
-              | c == '\ETX' &&     d -> do 
-                                        unhandledInterrupt <- atomically $ do
-                                          writeTChan events T.InterruptEvent
-                                          swapTVar interrupt True
-                                        -- In virtual terminal mode, Windows actually sends Ctrl+C and there is no
-                                        -- way a non-responsive application can be killed from keyboard.
-                                        -- The solution is to catch this specific event and swap an STM interrupt flag.
-                                        -- If the old value is found to be True then it must at least be the second
-                                        -- time the user has pressed Ctrl+C _and_ the application was to busy to
-                                        -- to reset the interrupt flag in the meantime. In this specific case
-                                        -- an asynchronous `E.UserInterrupt` exception is thrown to the main thread
-                                        -- and either terminates the application or at least the current computation.
-                                        when unhandledInterrupt (E.throwTo mainThread E.UserInterrupt)
-                                        loop lastMouseButton
-              |                    d -> do
-                                        atomically (writeTChan chars c)
-                                        loop lastMouseButton
-              | otherwise            -> do -- Other key release events get swallowed.
-                                        loop lastMouseButton
-            MouseEvent newMouseEvent -> case newMouseEvent of
-                                          T.MouseButtonPressed _  btn -> do
-                                            atomically $ writeTChan events $ T.MouseEvent newMouseEvent
-                                            loop btn
-                                          T.MouseButtonReleased pos _ -> do
-                                            atomically $ do
-                                              writeTChan events $ T.MouseEvent $ T.MouseButtonReleased pos lastMouseButton
-                                              writeTChan events $ T.MouseEvent $ T.MouseButtonClicked  pos lastMouseButton
-                                            loop lastMouseButton
-                                          _ -> do
-                                            atomically $ writeTChan events $ T.MouseEvent newMouseEvent
-                                            loop lastMouseButton
-            WindowEvent wev          -> do
-                                        atomically $ writeTChan events $ T.WindowEvent wev
-                                        loop lastMouseButton
-            UnknownEvent x           -> do
-                                        atomically $ writeTChan events (T.OtherEvent $ "unknown console input event" ++ show x)
-                                        loop lastMouseButton
-        -- Wait at most `timeoutMillis` for the handle to signal readyness.
-        -- Then either read one console event or return `Nothing`.
-        tryGetConsoleInputEvent :: IO (Maybe ConsoleInputEvent)
-        tryGetConsoleInputEvent =
-          unsafeWaitConsoleInput timeoutMillis >>= \case
-            (#const WAIT_TIMEOUT)  -> pure Nothing    -- Timeout occured.
-            (#const WAIT_OBJECT_0) -> alloca $ \ptr-> -- Handle signaled readyness.
-                  unsafeReadConsoleInput ptr >>= \case
-                    0 -> Just <$> peek ptr
-                    _ -> E.throwIO (IO.userError "getConsoleInputEvent: error reading console events")
-            _ -> E.throwIO (IO.userError "getConsoleInputEvent: error waiting for console events")
+    runUntilTermination :: TVar Bool -> TVar Bool -> IO ()
+    runUntilTermination terminate terminated =
+      (run terminate `E.catch` (\e-> E.throwTo mainThread (e:: E.SomeException))) `E.finally` atomically (writeTVar terminated True)
 
-specialChars :: Char -> Maybe T.Event
-specialChars = \case
-  '\r'    -> Just $ T.KeyEvent T.KeyEnter  mempty
-  '\DEL'  -> Just $ T.KeyEvent T.KeyErase  mempty
-  '\ESC'  -> Just $ T.KeyEvent T.KeyEscape mempty
-  '\HT'   -> Just $ T.KeyEvent T.KeyTab    mempty
-  _       -> Nothing
+    run :: TVar Bool -> IO ()
+    run terminate = do
+      lastMouseButton <- newTVarIO T.LeftButton
+      fix $ \continue-> tryGetConsoleInputEvent >>= \case
+        -- `tryGetConsoleInputEvent` is a blocking system call. It cannot be interrupted, but
+        -- is guaranteed to return after at most 100ms. In this case it is checked whether
+        -- this thread shall either terminate or is allowed to continue.
+        -- This is cooperative multitasking to circumvent the limitations of IO on Windows.
+        Nothing -> do
+          shallTerminate <- atomically (readTVar terminate)
+          unless shallTerminate continue
+        Just ev -> (>> continue) $ case ev of
+          KeyEvent { ceKeyChar = c, ceKeyDown = d, ceKeyControlKeyState = st }
+            | c == '\NUL'          -> pure ()
+            | c == '\ESC' && not d -> atomically (writeTChan chars '\NUL')
+            | c == '\ETX' &&     d -> do 
+              -- In virtual terminal mode, Windows actually sends Ctrl+C and there is no
+              -- way a non-responsive application can be killed from keyboard.
+              -- The solution is to catch this specific event and swap an STM interrupt flag.
+              -- If the old value is found to be True then it must at least be the second
+              -- time the user has pressed Ctrl+C _and_ the application was to busy to
+              -- to reset the interrupt flag in the meantime. In this specific case
+              -- an asynchronous `E.UserInterrupt` exception is thrown to the main thread
+              -- and either terminates the application or at least the current computation.
+                unhandledInterrupt <- atomically $ do
+                  writeTChan events T.InterruptEvent
+                  swapTVar interrupt True
+                when unhandledInterrupt (E.throwTo mainThread E.UserInterrupt)
+            | d && noModifierKeys st -> case c of
+                '\t'    -> atomically $ writeTChan events (T.KeyEvent T.KeyTab    mempty)
+                '\r'    -> atomically $ writeTChan events (T.KeyEvent T.KeyEnter  mempty)
+                '\n'    -> atomically $ writeTChan events (T.KeyEvent T.KeyEnter  mempty)
+                '\SP'   -> atomically $ writeTChan events (T.KeyEvent T.SpaceKey  mempty)
+                '\DEL'  -> atomically $ writeTChan events (T.KeyEvent T.KeyErase  mempty)
+                '\ESC'  -> atomically $ writeTChan events (T.KeyEvent T.KeyEscape mempty)
+                _       -> atomically $ writeTChan chars c
+            | d                    -> atomically $ writeTChan chars c
+            | otherwise            -> pure () -- All other key shall get swallowed.
+          MouseEvent newMouseEvent -> case newMouseEvent of
+                                        T.MouseButtonPressed _  btn -> atomically $ do
+                                            writeTChan events $ T.MouseEvent newMouseEvent
+                                            writeTVar lastMouseButton btn
+                                        T.MouseButtonReleased pos _ -> atomically $ do
+                                            btn <- readTVar lastMouseButton
+                                            writeTChan events $ T.MouseEvent $ T.MouseButtonReleased pos btn
+                                            writeTChan events $ T.MouseEvent $ T.MouseButtonClicked  pos btn
+                                        _ -> atomically $ 
+                                            writeTChan events $ T.MouseEvent newMouseEvent
+          WindowEvent wev          -> atomically $ writeTChan events $ T.WindowEvent wev
+          UnknownEvent x           -> atomically $ writeTChan events (T.OtherEvent $ "unknown console input event" ++ show x)
+
+    timeoutMillis :: CULong
+    timeoutMillis = 100
+
+    -- Wait at most `timeoutMillis` for the handle to signal readyness.
+    -- Then either read one console event or return `Nothing`.
+    tryGetConsoleInputEvent :: IO (Maybe ConsoleInputEvent)
+    tryGetConsoleInputEvent =
+      unsafeWaitConsoleInput timeoutMillis >>= \case
+        (#const WAIT_TIMEOUT)  -> pure Nothing    -- Timeout occured.
+        (#const WAIT_OBJECT_0) -> alloca $ \ptr-> -- Handle signaled readyness.
+              unsafeReadConsoleInput ptr >>= \case
+                0 -> Just <$> peek ptr
+                _ -> E.throwIO (IO.userError "getConsoleInputEvent: error reading console events")
+        _ -> E.throwIO (IO.userError "getConsoleInputEvent: error waiting for console events")
 
 getScreenSize :: IO (Int,Int)
 getScreenSize =
@@ -218,11 +211,25 @@ data ConsoleInputEvent
   = KeyEvent
     { ceKeyDown            :: Bool
     , ceKeyChar            :: Char
+    , ceKeyControlKeyState :: ControlKeyState
     }
   | MouseEvent  T.MouseEvent
   | WindowEvent T.WindowEvent
   | UnknownEvent WORD
   deriving (Eq, Ord, Show)
+
+newtype ControlKeyState = ControlKeyState DWORD
+  deriving (Eq, Ord, Show)
+
+noModifierKeys :: ControlKeyState -> Bool
+noModifierKeys (ControlKeyState st) = st .&. bitMask == 0
+  where
+    bitMask = 
+      (#const LEFT_ALT_PRESSED)   .|.
+      (#const LEFT_CTRL_PRESSED)  .|.
+      (#const RIGHT_ALT_PRESSED)  .|.
+      (#const RIGHT_CTRL_PRESSED) .|.
+      (#const SHIFT_PRESSED)
 
 instance Storable ConsoleInputEvent where
   sizeOf    _ = (#size struct _INPUT_RECORD)
@@ -231,6 +238,7 @@ instance Storable ConsoleInputEvent where
     (#const KEY_EVENT) -> KeyEvent
       <$> (peek ptrKeyDown >>= \case { 0-> pure False; _-> pure True; })
       <*> (toEnum . fromIntegral <$> peek ptrKeyUnicodeChar)
+      <*> (ControlKeyState <$> peek ptrKeyControlKeyState)
     (#const MOUSE_EVENT) -> MouseEvent <$> do
       pos <- peek ptrMousePositionX >>= \x-> peek ptrMousePositionY >>= \y-> pure (fromIntegral x, fromIntegral y)
       btn <- peek ptrMouseButtonState
@@ -254,19 +262,20 @@ instance Storable ConsoleInputEvent where
       pure $ WindowEvent $ T.WindowSizeChanged (fromIntegral row, fromIntegral col)
     evt -> pure (UnknownEvent evt)
     where
-      peekEventType         = (#peek struct _INPUT_RECORD, EventType) ptr :: IO WORD
-      ptrEvent              = castPtr $ (#ptr struct _INPUT_RECORD, Event) ptr :: Ptr a
-      ptrKeyDown            = (#ptr struct _KEY_EVENT_RECORD, bKeyDown) ptrEvent :: Ptr BOOL
-      ptrKeyUnicodeChar     = (#ptr struct _KEY_EVENT_RECORD, uChar) ptrEvent :: Ptr CWchar
+      peekEventType         = (#peek struct _INPUT_RECORD, EventType) ptr                 :: IO WORD
+      ptrEvent              = castPtr $ (#ptr struct _INPUT_RECORD, Event) ptr            :: Ptr a
+      ptrKeyDown            = (#ptr struct _KEY_EVENT_RECORD, bKeyDown) ptrEvent          :: Ptr BOOL
+      ptrKeyUnicodeChar     = (#ptr struct _KEY_EVENT_RECORD, uChar) ptrEvent             :: Ptr CWchar
+      ptrKeyControlKeyState = (#ptr struct _KEY_EVENT_RECORD, dwControlKeyState) ptrEvent :: Ptr DWORD
       ptrMousePosition      = (#ptr struct _MOUSE_EVENT_RECORD, dwMousePosition) ptrEvent :: Ptr a
-      ptrMousePositionX     = (#ptr struct _COORD, X) ptrMousePosition :: Ptr SHORT
-      ptrMousePositionY     = (#ptr struct _COORD, Y) ptrMousePosition :: Ptr SHORT
-      ptrMouseEventFlags    = (#ptr struct _MOUSE_EVENT_RECORD, dwEventFlags)  ptrEvent :: Ptr DWORD
-      ptrMouseButtonState   = (#ptr struct _MOUSE_EVENT_RECORD, dwButtonState) ptrEvent :: Ptr DWORD
-      ptrWindowSize         = (#ptr struct _WINDOW_BUFFER_SIZE_RECORD, dwSize) ptrEvent :: Ptr a
-      ptrWindowSizeX        = (#ptr struct _COORD, X) ptrWindowSize :: Ptr SHORT
-      ptrWindowSizeY        = (#ptr struct _COORD, Y) ptrWindowSize :: Ptr SHORT
-      ptrFocus              = (#ptr struct _FOCUS_EVENT_RECORD, bSetFocus) ptrEvent :: Ptr BOOL
+      ptrMousePositionX     = (#ptr struct _COORD, X) ptrMousePosition                    :: Ptr SHORT
+      ptrMousePositionY     = (#ptr struct _COORD, Y) ptrMousePosition                    :: Ptr SHORT
+      ptrMouseEventFlags    = (#ptr struct _MOUSE_EVENT_RECORD, dwEventFlags)  ptrEvent   :: Ptr DWORD
+      ptrMouseButtonState   = (#ptr struct _MOUSE_EVENT_RECORD, dwButtonState) ptrEvent   :: Ptr DWORD
+      ptrWindowSize         = (#ptr struct _WINDOW_BUFFER_SIZE_RECORD, dwSize) ptrEvent   :: Ptr a
+      ptrWindowSizeX        = (#ptr struct _COORD, X) ptrWindowSize                       :: Ptr SHORT
+      ptrWindowSizeY        = (#ptr struct _COORD, Y) ptrWindowSize                       :: Ptr SHORT
+      ptrFocus              = (#ptr struct _FOCUS_EVENT_RECORD, bSetFocus) ptrEvent       :: Ptr BOOL
   poke = undefined
 
 foreign import ccall "hs_wait_console_input"
