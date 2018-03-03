@@ -131,7 +131,7 @@ putText text = do
     -- Windows expects Unicode encoded as UTF16LE.
     -- This _does not_ mean that every character is just 2 bytes long.
     -- Consider the character '\\x1d11e': Its encoded form is
-    -- 11011000 00110100 11011101 00011110.
+    -- 11011000 00110100 11011101 00011110 (4 bytes).
     -- The underlying `writeConsoleW` function reports the UTF-16 encoding
     -- units (2 bytes) written and not the bytes written.
     put bs ptrWritten
