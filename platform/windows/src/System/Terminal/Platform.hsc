@@ -18,8 +18,11 @@ import           Control.Monad.Trans.Reader
 import           Control.Monad.Trans.State
 import           Data.Bits
 import           Data.Function                 (fix)
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Unsafe as BS
 import qualified Data.Text                     as Text
 import qualified Data.Text.IO                  as Text
+import qualified Data.Text.Encoding            as Text
 import           Foreign.C.Types
 import           Foreign.Marshal.Alloc         (alloca)
 import           Foreign.Ptr                   (Ptr, plusPtr, castPtr)
@@ -115,7 +118,32 @@ withOutputProcessing mainThread output outputFlush ma = do
           case x of
             Nothing       -> pure ()
             Just Nothing  -> IO.hFlush IO.stdout >> loop
-            Just (Just t) -> Text.putStr t       >> loop
+            Just (Just t) -> putText t >> loop
+
+putText :: Text.Text -> IO ()
+putText text = do
+  -- First, flush everything that is in the regular output buffer.
+  -- Just in case the user uses the regular output opertions
+  -- it is desirable to interleave with it as little as possible.
+  IO.hFlush IO.stdout
+  alloca $ put (Text.encodeUtf16LE text)
+  where
+    -- Windows expects Unicode encoded as UTF16LE.
+    -- This _does not_ mean that every character is just 2 bytes long.
+    -- Consider the character '\\x1d11e': Its encoded form is
+    -- 11011000 00110100 11011101 00011110.
+    -- The underlying `writeConsoleW` function reports the UTF-16 encoding
+    -- units (2 bytes) written and not the bytes written.
+    put bs ptrWritten
+      | BS.null bs = pure ()
+      | otherwise  = do
+          (r,len) <- BS.unsafeUseAsCStringLen bs $ \(ptr,len2)-> do
+            let len = fromIntegral (len2 `div` 2)
+            r <- unsafeWriteConsole ptr len ptrWritten
+            pure (r,len)
+          when (r == 0) $ E.throwIO (IO.userError "putText: not a tty?")
+          written <- peek ptrWritten
+          when (written < len) (put (BS.drop (fromIntegral len * 2) bs) ptrWritten)
 
 withInputProcessing :: (MonadIO m, MonadMask m) => ThreadId -> TVar Bool -> TChan T.Event -> m a -> m a
 withInputProcessing mainThread interrupt events ma = do
@@ -308,6 +336,9 @@ foreign import ccall unsafe "hs_set_console_output_mode"
 
 foreign import ccall unsafe "hs_get_console_winsize"
   unsafeGetConsoleWindowSize :: Ptr SHORT -> Ptr SHORT -> IO BOOL
+
+foreign import ccall unsafe "hs_write_console"
+  unsafeWriteConsole         :: Ptr a -> DWORD -> Ptr DWORD -> IO BOOL
 
 -- See https://msdn.microsoft.com/en-us/library/windows/desktop/aa383751(v=vs.85).aspx
 -- for how Windows data types translate to stdint types.

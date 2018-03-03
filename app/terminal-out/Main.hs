@@ -22,6 +22,7 @@ foo = printer >> flush
 printer :: (MonadFormatPrinter m, MonadColorPrinter m) => m ()
 printer = putDoc $ annotate (foreground $ bright Blue) "This is blue!" <> line
                 <> annotate bold ("Just bold!" <+> otherDoc <+> "..just bold again")
+                <> doc
 
 doc :: (MonadFormatPrinter m, MonadColorPrinter m, Annotation m ~ ann) => Doc ann
 doc = mconcat
@@ -30,7 +31,9 @@ doc = mconcat
   , hang 10 $ "ssdfhsjdfhksjdhfkjsdhfks" <+> "hdfjkshdfkjshddh" <+> "fjksdhfkshdfkjshdfjks"
             <+> "hdfkjshdfjhskdjfhsjksdhfjshdfjshdkj" <+> "fhsdkjfhskjdfhjksdhfjksdhfjks"
             <+> "hdfkjshdfkh" <+> annotate bold "jdhfkjshdfkjshdfksjhdkfjhsdkjfhs" <+> "dkjfhskjdhfkjshdfkjshdfj"
-            <+> "kshdfkjshdfkjshf"
+            <+> "中國哲學書電子化計劃"
+            <+> "jfksdfjlksdfjls"
+            <+> "\x1d11e"
   , line
   , line
   , annotate (background $ dull Blue) "FOOBAR"

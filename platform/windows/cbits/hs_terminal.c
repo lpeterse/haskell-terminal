@@ -48,3 +48,8 @@ BOOL hs_get_console_winsize(SHORT *rows, SHORT *cols) {
     *cols = csbi.srWindow.Right - csbi.srWindow.Left + 1;
     return 0;
 }
+
+BOOL hs_write_console(const VOID *lpBuffer, DWORD nNumberOfCharsToWrite, DWORD *lpNumberOfCharsWritten) {
+    HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
+    return WriteConsoleW(h, lpBuffer, nNumberOfCharsToWrite, lpNumberOfCharsWritten, NULL);
+}
