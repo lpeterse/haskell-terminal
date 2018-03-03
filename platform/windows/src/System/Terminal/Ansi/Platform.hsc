@@ -143,32 +143,34 @@ withInputProcessing mainThread interrupt chars events ma = do
           shallTerminate <- atomically (readTVar terminate)
           unless shallTerminate continue
         Just ev -> (>> continue) $ case ev of
-          KeyEvent { ceKeyChar = c, ceKeyDown = d, ceKeyControlKeyState = st }
-            | c == '\NUL'          -> pure ()
-            | c == '\ESC' && not d -> atomically (writeTChan chars '\NUL')
-            | c == '\ETX' &&     d -> do 
-              -- In virtual terminal mode, Windows actually sends Ctrl+C and there is no
-              -- way a non-responsive application can be killed from keyboard.
-              -- The solution is to catch this specific event and swap an STM interrupt flag.
-              -- If the old value is found to be True then it must at least be the second
-              -- time the user has pressed Ctrl+C _and_ the application was to busy to
-              -- to reset the interrupt flag in the meantime. In this specific case
-              -- an asynchronous `E.UserInterrupt` exception is thrown to the main thread
-              -- and either terminates the application or at least the current computation.
+          KeyEvent { ceKeyChar = c, ceKeyDown = d, ceKeyModifiers = mods }
+            -- In virtual terminal mode, Windows actually sends Ctrl+C and there is no
+            -- way a non-responsive application can be killed from keyboard.
+            -- The solution is to catch this specific event and swap an STM interrupt flag.
+            -- If the old value is found to be True then it must at least be the second
+            -- time the user has pressed Ctrl+C _and_ the application was to busy to
+            -- to reset the interrupt flag in the meantime. In this specific case
+            -- an asynchronous `E.UserInterrupt` exception is thrown to the main thread
+            -- and either terminates the application or at least the current computation.
+            | c == '\ESC' &&     d -> do 
                 unhandledInterrupt <- atomically $ do
                   writeTChan events T.InterruptEvent
                   swapTVar interrupt True
                 when unhandledInterrupt (E.throwTo mainThread E.UserInterrupt)
-            | d && noModifierKeys st -> case c of
-                '\t'    -> atomically $ writeTChan events (T.KeyEvent T.KeyTab    mempty)
-                '\r'    -> atomically $ writeTChan events (T.KeyEvent T.KeyEnter  mempty)
-                '\n'    -> atomically $ writeTChan events (T.KeyEvent T.KeyEnter  mempty)
-                '\SP'   -> atomically $ writeTChan events (T.KeyEvent T.SpaceKey  mempty)
-                '\DEL'  -> atomically $ writeTChan events (T.KeyEvent T.KeyErase  mempty)
-                '\ESC'  -> atomically $ writeTChan events (T.KeyEvent T.KeyEscape mempty)
+            -- When the escape key is release, a NUL character is written to the
+            -- char stream. The NUL character is a replacement for timing based
+            -- escape sequence recognition and enables the escape sequence decoder
+            -- to reliably distinguish real escape key presses and escape sequences
+            -- from another. 
+            | c == '\ESC' && not d -> atomically (writeTChan chars '\NUL')
+            | d -> case c of
+                '\t'    -> atomically $ writeTChan events (T.KeyEvent T.KeyTab    mods)
+                '\r'    -> atomically $ writeTChan events (T.KeyEvent T.KeyEnter  mods)
+                '\n'    -> atomically $ writeTChan events (T.KeyEvent T.KeyEnter  mods)
+                '\SP'   -> atomically $ writeTChan events (T.KeyEvent T.SpaceKey  mods)
+                '\DEL'  -> atomically $ writeTChan events (T.KeyEvent T.KeyErase  mods)
                 _       -> atomically $ writeTChan chars c
-            | d                    -> atomically $ writeTChan chars c
-            | otherwise            -> pure () -- All other key shall get swallowed.
+            | otherwise            -> pure () -- All other key events shall be ignored.
           MouseEvent newMouseEvent -> case newMouseEvent of
                                         T.MouseButtonPressed _  btn -> atomically $ do
                                             writeTChan events $ T.MouseEvent newMouseEvent
@@ -211,25 +213,21 @@ data ConsoleInputEvent
   = KeyEvent
     { ceKeyDown            :: Bool
     , ceKeyChar            :: Char
-    , ceKeyControlKeyState :: ControlKeyState
+    , ceKeyModifiers       :: T.Modifiers
     }
   | MouseEvent  T.MouseEvent
   | WindowEvent T.WindowEvent
   | UnknownEvent WORD
   deriving (Eq, Ord, Show)
 
-newtype ControlKeyState = ControlKeyState DWORD
-  deriving (Eq, Ord, Show)
-
-noModifierKeys :: ControlKeyState -> Bool
-noModifierKeys (ControlKeyState st) = st .&. bitMask == 0
+modifiersFromControlKeyState :: DWORD -> T.Modifiers
+modifiersFromControlKeyState dw = a $ b $ c $ d $ e mempty
   where
-    bitMask = 
-      (#const LEFT_ALT_PRESSED)   .|.
-      (#const LEFT_CTRL_PRESSED)  .|.
-      (#const RIGHT_ALT_PRESSED)  .|.
-      (#const RIGHT_CTRL_PRESSED) .|.
-      (#const SHIFT_PRESSED)
+    a = if (#const LEFT_ALT_PRESSED)   .&. dw == 0 then id else mappend T.altKey
+    b = if (#const LEFT_CTRL_PRESSED)  .&. dw == 0 then id else mappend T.ctrlKey
+    c = if (#const RIGHT_ALT_PRESSED)  .&. dw == 0 then id else mappend T.altKey
+    d = if (#const RIGHT_CTRL_PRESSED) .&. dw == 0 then id else mappend T.ctrlKey
+    e = if (#const SHIFT_PRESSED)      .&. dw == 0 then id else mappend T.shiftKey
 
 instance Storable ConsoleInputEvent where
   sizeOf    _ = (#size struct _INPUT_RECORD)
@@ -238,12 +236,12 @@ instance Storable ConsoleInputEvent where
     (#const KEY_EVENT) -> KeyEvent
       <$> (peek ptrKeyDown >>= \case { 0-> pure False; _-> pure True; })
       <*> (toEnum . fromIntegral <$> peek ptrKeyUnicodeChar)
-      <*> (ControlKeyState <$> peek ptrKeyControlKeyState)
+      <*> (modifiersFromControlKeyState <$> peek ptrKeyControlKeyState)
     (#const MOUSE_EVENT) -> MouseEvent <$> do
       pos <- peek ptrMousePositionX >>= \x-> peek ptrMousePositionY >>= \y-> pure (fromIntegral x, fromIntegral y)
       btn <- peek ptrMouseButtonState
       peek ptrMouseEventFlags >>= \case
-        (#const MOUSE_MOVED)    -> pure $ T.MouseMoved pos
+        (#const MOUSE_MOVED)    -> pure (T.MouseMoved   pos)
         (#const MOUSE_WHEELED)  -> pure (T.MouseWheeled pos $ if btn .&. 0xff000000 > 0 then T.Down  else T.Up)
         (#const MOUSE_HWHEELED) -> pure (T.MouseWheeled pos $ if btn .&. 0xff000000 > 0 then T.Right else T.Left)
         _ -> case btn of
