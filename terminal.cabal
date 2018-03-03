@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 2bac06c4bb39c0c4e8e5e9f2f4870def9024b1262bd842ba587d1414c0a49dba
+-- hash: fcb58df4fd466bf3388c9946af4cfdf15d60a7443d73d3703126b550350d56b0
 
 name:           terminal
 version:        0.1.0.0
@@ -29,7 +29,7 @@ source-repository head
 library
   hs-source-dirs:
       src
-  ghc-options: -Werror -O0
+  ghc-options: -Werror -O2
   build-depends:
       async
     , base >=4.7 && <5

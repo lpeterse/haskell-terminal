@@ -31,8 +31,9 @@ decodeAnsi = decode1 =<< getNext
       -- The ESC character _might_ introduce an escape sequence
       -- and has to be treated specifically.
       -- All other characters are directly mapped to a KeyChar event.
-      | c == '\ESC' = decodeEscape
-      | otherwise   = pure $ T.KeyEvent (T.KeyChar c) mempty
+      | c == '\ESC'               = decodeEscape
+      | c >= '\SOH' && c <= '\US' = pure $ T.KeyEvent (T.KeyChar (toEnum $ (+64) $ fromEnum c)) T.ctrlKey
+      | otherwise                 = pure $ T.KeyEvent (T.KeyChar c) mempty
 
     decodeEscape :: MonadAnsiInput m => m T.Event
     decodeEscape = getNext >>= \case

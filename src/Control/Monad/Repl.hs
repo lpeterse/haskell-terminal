@@ -1,8 +1,5 @@
-{-# LANGUAGE DeriveFunctor              #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE LambdaCase                 #-}
-{-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE LambdaCase   #-}
+{-# LANGUAGE TypeFamilies #-}
 module Control.Monad.Repl
   ( MonadRepl (..)
   , ReplT ()
@@ -22,19 +19,19 @@ import           Control.Monad.Trans.State
 import           Data.Char
 import           Data.Function               (fix)
 import qualified Data.Text                   as Text
-import qualified Data.Text.Prettyprint.Doc   as PP
+import           Data.Text.Prettyprint.Doc
 import           Data.Typeable
+import           Prelude                     hiding (putChar)
 
+import           Control.Monad.Terminal
 import qualified Control.Monad.Terminal      as T
-
-import           Prelude                     hiding (read)
+import           Control.Monad.Terminal.Ansi
 
 class T.MonadPrinter m => MonadRepl m where
   type ReplState m
-  --setPrompt    :: m () -> m ()
-  readString   :: m (Maybe String)
-  readText     :: m (Maybe Text.Text)
-  readText      = (Text.pack <$>) <$> readString
+  readString   :: Doc (Annotation m) -> m String
+  readText     :: Doc (Annotation m) -> m Text.Text
+  readText p    = Text.pack <$> readString p
   --load         :: m (ReplState m)
   --store        :: ReplState m -> m ()
   print        :: Show a => a -> m ()
@@ -43,11 +40,11 @@ class T.MonadPrinter m => MonadRepl m where
 newtype ReplT s m a = ReplT { unReplT ::  ( a -> s -> m s) -> s -> m s }
 
 runReplT  :: (Monad m) => ReplT s m a -> s -> m s
-runReplT m = unReplT m (const pure)
+runReplT (ReplT m) = let foreverM = m (const foreverM) in foreverM
 
 instance (Monad m) => Functor (ReplT s m) where
   fmap f fa = ReplT $ \cont->
-    unReplT fa (\a1-> cont (f a1))
+    unReplT fa (cont . f)
 
 instance (Monad m) => Applicative (ReplT s m) where
   pure a = ReplT $ \cont s-> cont a s
@@ -78,7 +75,7 @@ instance (T.MonadPrinter m) => T.MonadPrinter (ReplT s m) where
 
 instance (T.MonadPrettyPrinter m) => T.MonadPrettyPrinter (ReplT s m) where
   data Annotation (ReplT s m) = Annotation' (T.Annotation m)
-  putDoc doc = lift $ T.putDoc (PP.reAnnotate (\(Annotation' ann)-> ann) doc)
+  putDoc doc = lift $ T.putDoc (reAnnotate (\(Annotation' ann)-> ann) doc)
   setAnnotation (Annotation' a) = lift (T.setAnnotation a)
   resetAnnotation (Annotation' a) = lift (T.resetAnnotation a)
   resetAnnotations = lift T.resetAnnotations
@@ -117,60 +114,67 @@ instance T.MonadTerminal m => MonadRepl (ReplT s m) where
   --load = ReplT $ replUserState <$> get
   --store ust = ReplT $ modify (\st-> st { replUserState = ust })
   print a = T.putStringLn (show a)
-  readString = do
-    lift $ T.resetAnnotations
-    lift $ T.flush
-    withStacks [] []
-    where
-      withStacks xss yss = T.waitEvent >>= \case
-        T.KeyEvent (T.KeyChar 'C') mods
-          | mods == T.ctrlKey -> do
-              lift $ T.putLn
-              lift $ T.flush
-              readString
-        T.KeyEvent (T.KeyChar 'D') mods
-          | mods == T.ctrlKey -> do
-              lift $ T.putLn
-              lift $ T.flush
-              pure Nothing
-        T.KeyEvent T.KeyEnter mods
-          | mods == mempty -> do
-              lift $ T.putLn
-              lift $ T.flush
-              pure $ Just $ reverse xss ++ yss
-        T.KeyEvent T.KeyErase mods
-          | mods == mempty -> case xss of
-              []     -> withStacks xss yss
-              (x:xs) -> do
-                lift $ T.cursorBackward 1
-                lift $ T.putString yss
-                lift $ T.putChar ' '
-                lift $ T.cursorBackward (length yss + 1)
-                lift $ T.flush
-                withStacks xs yss
-        T.KeyEvent (T.KLeft 1) mods
-          | mods == mempty -> case xss of
-              []     -> withStacks xss yss
-              (x:xs) -> do
-                lift $ T.cursorBackward 1
-                lift $ T.flush
-                withStacks xs (x:yss)
-        T.KeyEvent (T.KRight 1) mods
-          | mods == mempty -> case yss of
-              []     -> withStacks xss yss
-              (y:ys) -> do
-                lift $ T.cursorForward 1
-                lift $ T.flush
-                withStacks (y:xss) ys
-        T.KeyEvent (T.KeyChar c) mods
-          | mods == mempty && (isPrint c || isSpace c) -> do
-              lift $ T.putChar c
-              lift $ T.flush
-              withStacks (c:xss) yss
-          | otherwise -> do
+  readString = getString
+
+getString :: (MonadRepl m, MonadTerminal m) => Doc (Annotation m) -> m String
+getString p = do
+  resetAnnotations
+  putDoc p
+  flush
+  withStacks [] []
+  where
+    withStacks xss yss = T.waitEvent >>= \case
+      -- On Ctrl-C most shells just show a new prompt in the next line.
+      -- This is probably to not terminate the program after pressing
+      -- it several times when trying to interrupt a running computation.
+      InterruptEvent -> do
+        putLn
+        readString p
+      -- On Ctrl-D the program is supposed to be quit.
+      T.KeyEvent (T.KeyChar 'D') mods
+        | mods == T.ctrlKey -> do
+            putLn
+            flush
+            quit
+      -- On Enter this function returns the entered string to the caller.
+      T.KeyEvent T.KeyEnter mods
+        | mods == mempty -> do
+            putLn
+            flush
+            pure $ reverse xss ++ yss
+      T.KeyEvent T.KeyErase mods
+        | mods == mempty -> case xss of
+            []     -> withStacks xss yss
+            (x:xs) -> do
+              cursorBackward 1
+              putString yss
+              putChar ' '
+              cursorBackward (length yss + 1)
+              flush
+              withStacks xs yss
+      T.KeyEvent (T.KLeft 1) mods
+        | mods == mempty -> case xss of
+            []     -> withStacks xss yss
+            (x:xs) -> do
+              cursorBackward 1
+              flush
+              withStacks xs (x:yss)
+      T.KeyEvent (T.KRight 1) mods
+        | mods == mempty -> case yss of
+            []     -> withStacks xss yss
+            (y:ys) -> do
+              cursorForward 1
+              flush
+              withStacks (y:xss) ys
+      T.KeyEvent (T.KeyChar c) mods
+        | mods == mempty && (isPrint c || isSpace c) -> do
+            putChar c
+            flush
+            withStacks (c:xss) yss
+        | otherwise ->
             withStacks xss yss
-        ev -> do
-          --lift $ T.putStringLn (show ev)
-          lift $ T.flush
-          withStacks xss yss
+      ev -> do
+        --lift $ T.putStringLn (show ev)
+        flush
+        withStacks xss yss
 

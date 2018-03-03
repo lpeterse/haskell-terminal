@@ -141,6 +141,9 @@ class MonadPrinter m => MonadPrettyPrinter m where
   resetAnnotations  = pure ()
   {-# MINIMAL putDoc, setAnnotation, resetAnnotation, resetAnnotations #-}
 
+pprint :: (MonadPrettyPrinter m, Pretty a) => a -> m ()
+pprint  = putDocLn . pretty
+
 -- | This class offers abstract constructors for text formatting
 --   annotations.
 class MonadPrettyPrinter m => MonadFormatPrinter m where
