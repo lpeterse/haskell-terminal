@@ -2,6 +2,7 @@
 {-# LANGUAGE TypeFamilies #-}
 module Control.Monad.Repl
   ( MonadRepl (..)
+  , MonadQuit (..)
   , ReplT ()
   , runReplT
   ) where
@@ -27,7 +28,10 @@ import           Control.Monad.Terminal
 import qualified Control.Monad.Terminal      as T
 import           Control.Monad.Terminal.Ansi
 
-class T.MonadPrinter m => MonadRepl m where
+class (Monad m) => MonadQuit m where
+  quit :: m a
+
+class (MonadPrinter m, MonadQuit m) => MonadRepl m where
   type ReplState m
   readString   :: Doc (Annotation m) -> m String
   readText     :: Doc (Annotation m) -> m Text.Text
@@ -35,7 +39,6 @@ class T.MonadPrinter m => MonadRepl m where
   --load         :: m (ReplState m)
   --store        :: ReplState m -> m ()
   print        :: Show a => a -> m ()
-  quit         :: m a
 
 newtype ReplT s m a = ReplT { unReplT ::  ( a -> s -> m s) -> s -> m s }
 
@@ -107,16 +110,18 @@ instance (T.MonadInput m) => T.MonadInput (ReplT s m) where
 
 instance (T.MonadTerminal m, T.MonadPrettyPrinter m) => T.MonadTerminal (ReplT s m) where
 
-instance T.MonadTerminal m => MonadRepl (ReplT s m) where
-  type ReplState (ReplT s m) = s
+instance (Monad m) => MonadQuit (ReplT s m) where
   quit = ReplT $ \_ s-> pure s
+
+instance MonadTerminal m => MonadRepl (ReplT s m) where
+  type ReplState (ReplT s m) = s
   --setPrompt a = ReplT $ modify (\st-> st { replPrompt = a })
   --load = ReplT $ replUserState <$> get
   --store ust = ReplT $ modify (\st-> st { replUserState = ust })
   print a = T.putStringLn (show a)
   readString = getString
 
-getString :: (MonadRepl m, MonadTerminal m) => Doc (Annotation m) -> m String
+getString :: (MonadQuit m, MonadTerminal m) => Doc (Annotation m) -> m String
 getString p = do
   resetAnnotations
   putDoc p
@@ -129,8 +134,8 @@ getString p = do
       -- it several times when trying to interrupt a running computation.
       InterruptEvent -> do
         putLn
-        readString p
-      -- On Ctrl-D the program is supposed to be quit.
+        getString p
+      -- On Ctrl-D the program is supposed to quit.
       T.KeyEvent (T.KeyChar 'D') mods
         | mods == T.ctrlKey -> do
             putLn
@@ -178,3 +183,33 @@ getString p = do
         flush
         withStacks xss yss
 
+getPasswordString :: (MonadQuit m, MonadTerminal m) => Doc (Annotation m) -> m String
+getPasswordString p = do
+  resetAnnotations
+  putDoc p
+  flush
+  withStack []
+  where
+    withStack xs = waitEvent >>= \case
+      -- On Ctrl-C most shells just show a new prompt in the next line.
+      -- This is probably to not terminate the program after pressing
+      -- it several times when trying to interrupt a running computation.
+      InterruptEvent -> do
+        putLn
+        getPasswordString p
+      -- On Ctrl-D the program is supposed to quit.
+      KeyEvent (KeyChar 'D') mods | mods == ctrlKey -> do
+        putLn
+        flush
+        quit
+      -- On Enter this function returns the entered string to the caller.
+      KeyEvent KeyEnter _ -> do
+        putLn
+        flush
+        pure $ reverse xs
+      -- On Erase one character is removed from the right.
+      KeyEvent KeyErase _ ->
+        withStack $! drop 1 xs
+      KeyEvent (KeyChar x) mods | mods == mempty ->
+        withStack $! x:xs
+      _ -> withStack xs
