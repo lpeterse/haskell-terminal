@@ -22,7 +22,7 @@ import           System.Environment
 import qualified Control.Monad.Repl          as R
 import qualified Control.Monad.Repl.IO       as R
 import           Control.Monad.Terminal
-import           System.Terminal.Ansi
+import           System.Terminal
 
 type AnsiReplT s m = R.ReplT s (AnsiTerminalT m)
 

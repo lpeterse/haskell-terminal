@@ -7,7 +7,7 @@ import           Control.Monad.IO.Class
 import           Data.Function          (fix)
 
 import           Control.Monad.Terminal
-import           System.Terminal.Ansi
+import           System.Terminal
 
 main :: IO ()
 main = withTerminal $ runAnsiTerminalT $ fix $ \loop-> do

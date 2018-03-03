@@ -1,7 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
-module System.Terminal.Ansi.Platform
+module System.Terminal.Platform
   ( withTerminal
   ) where
 
@@ -28,11 +28,11 @@ import qualified System.IO                     as IO
 import qualified System.IO.Error               as IO
 
 import qualified Control.Monad.Terminal.Input as T
-import qualified Control.Monad.Terminal.Ansi.AnsiTerminal as T
+import qualified Control.Monad.Terminal.Terminal as T
 
 #include "hs_terminal.h"
 
-withTerminal :: (MonadIO m, MonadMask m) => (T.AnsiTerminal -> m a) -> m a
+withTerminal :: (MonadIO m, MonadMask m) => (T.Terminal -> m a) -> m a
 withTerminal action = do
   mainThread     <- liftIO myThreadId
   interrupt      <- liftIO (newTVarIO False)
@@ -43,13 +43,13 @@ withTerminal action = do
   withConsoleModes $
     withOutputProcessing mainThread output outputFlush $
       withInputProcessing mainThread interrupt events $ action $
-        T.AnsiTerminal {
-          T.ansiTermType       = "xterm"
-        , T.ansiInputEvents    = readTChan  events
-        , T.ansiInterrupt      = swapTVar   interrupt False >>= check
-        , T.ansiOutput         = putTMVar   output
-        , T.ansiOutputFlush    = putTMVar   outputFlush ()
-        , T.ansiScreenSize     = readTVar   screenSize
+        T.Terminal {
+          T.termType           = "xterm"
+        , T.termInputEvents    = readTChan  events
+        , T.termInterrupt      = swapTVar   interrupt False >>= check
+        , T.termOutput         = putTMVar   output
+        , T.termOutputFlush    = putTMVar   outputFlush ()
+        , T.termScreenSize     = readTVar   screenSize
         }
 
 withConsoleModes :: (MonadIO m, MonadMask m) => m a -> m a

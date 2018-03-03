@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 62c35525f6265daeeec618defb78b01ec6f4a19d8fc1c1b5476c8a9dc94023b9
+-- hash: 2bac06c4bb39c0c4e8e5e9f2f4870def9024b1262bd842ba587d1414c0a49dba
 
 name:           terminal
 version:        0.1.0.0
@@ -57,15 +57,15 @@ library
       Control.Monad.Repl
       Control.Monad.Repl.IO
       Control.Monad.Terminal
-      System.Terminal.Ansi
+      System.Terminal
   other-modules:
       Control.Monad.Terminal.Ansi
+      Control.Monad.Terminal.Ansi.Decoder
+      Control.Monad.Terminal.Ansi.AnsiTerminalT
       Control.Monad.Terminal.Input
       Control.Monad.Terminal.Printer
-      Control.Monad.Terminal.Ansi.Decoder
-      Control.Monad.Terminal.Ansi.AnsiTerminal
-      Control.Monad.Terminal.Ansi.AnsiTerminalT
-      System.Terminal.Ansi.Platform
+      Control.Monad.Terminal.Terminal
+      System.Terminal.Platform
   default-language: Haskell2010
 
 executable repl-demo

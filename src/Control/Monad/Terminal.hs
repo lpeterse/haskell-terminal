@@ -1,8 +1,8 @@
-{-# LANGUAGE LambdaCase   #-}
 {-# LANGUAGE TypeFamilies #-}
 module Control.Monad.Terminal
   (  -- * MonadTerminal
-     MonadTerminal (..)
+     Terminal (..)
+   , MonadTerminal (..)
     -- ** Getting started
     -- * Printing
     -- ** MonadPrinter
@@ -44,6 +44,7 @@ module Control.Monad.Terminal
 
 import           Control.Monad.Terminal.Input
 import           Control.Monad.Terminal.Printer
+import           Control.Monad.Terminal.Terminal
 
 class (MonadInput m, MonadPrettyPrinter m, MonadFormatPrinter m, MonadColorPrinter m, MonadScreen m) => MonadTerminal m where
 

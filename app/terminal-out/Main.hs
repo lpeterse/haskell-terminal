@@ -9,7 +9,7 @@ import           Control.Monad.IO.Class
 
 import           Control.Monad.Terminal
 import           Data.Text.Prettyprint.Doc
-import           System.Terminal.Ansi
+import           System.Terminal
 
 import           Prelude                   hiding ((<>))
 

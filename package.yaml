@@ -30,15 +30,15 @@ library:
     - Control.Monad.Repl
     - Control.Monad.Repl.IO
     - Control.Monad.Terminal
-    - System.Terminal.Ansi
+    - System.Terminal
   other-modules:
     - Control.Monad.Terminal.Ansi
+    - Control.Monad.Terminal.Ansi.Decoder
+    - Control.Monad.Terminal.Ansi.AnsiTerminalT
     - Control.Monad.Terminal.Input
     - Control.Monad.Terminal.Printer
-    - Control.Monad.Terminal.Ansi.Decoder
-    - Control.Monad.Terminal.Ansi.AnsiTerminal
-    - Control.Monad.Terminal.Ansi.AnsiTerminalT
-    - System.Terminal.Ansi.Platform
+    - Control.Monad.Terminal.Terminal
+    - System.Terminal.Platform
   source-dirs: src
   when:
     - condition: os(windows)
