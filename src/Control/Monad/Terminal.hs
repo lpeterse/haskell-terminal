@@ -30,9 +30,13 @@ module Control.Monad.Terminal
     -- ** Events
   , Event (..)
   , Key (..)
+  , Modifiers ()
+  , shiftKey
+  , ctrlKey
+  , altKey
+  , metaKey
   , MouseEvent (..)
   , WindowEvent (..)
-  , Modifier (..)
     -- * Screen Manipulation
     -- ** MonadScreen
   , MonadScreen (..)

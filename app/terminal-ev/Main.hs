@@ -14,5 +14,5 @@ main = withTerminal $ runAnsiTerminalT $ fix $ \loop-> do
   ev <- waitEvent
   putStringLn (show ev)
   flush
-  when (ev == EvKey (KChar 'C') [MCtrl]) (E.throwM UserInterrupt)
-  when (ev /= EvKey (KChar 'D') [MCtrl]) loop
+  when (ev == KeyEvent (KeyChar 'C') ctrlKey) (E.throwM UserInterrupt)
+  when (ev /= KeyEvent (KeyChar 'D') ctrlKey) loop

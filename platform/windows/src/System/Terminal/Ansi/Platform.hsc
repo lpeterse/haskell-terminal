@@ -182,7 +182,7 @@ withInputProcessing mainThread interrupt chars events ma = do
                                         atomically $ writeTChan events $ T.WindowEvent wev
                                         loop lastMouseButton
             UnknownEvent x           -> do
-                                        atomically $ writeTChan events (T.EvUnknownSequence $ "unknown console input event" ++ show x)
+                                        atomically $ writeTChan events (T.OtherEvent $ "unknown console input event" ++ show x)
                                         loop lastMouseButton
         -- Wait at most `timeoutMillis` for the handle to signal readyness.
         -- Then either read one console event or return `Nothing`.
@@ -198,10 +198,10 @@ withInputProcessing mainThread interrupt chars events ma = do
 
 specialChars :: Char -> Maybe T.Event
 specialChars = \case
-  '\r'    -> Just $ T.EvKey T.KEnter  []
-  '\DEL'  -> Just $ T.EvKey T.KErase  []
-  '\ESC'  -> Just $ T.EvKey T.KEscape []
-  '\HT'   -> Just $ T.EvKey T.KTab    []
+  '\r'    -> Just $ T.KeyEvent T.KeyEnter  mempty
+  '\DEL'  -> Just $ T.KeyEvent T.KeyErase  mempty
+  '\ESC'  -> Just $ T.KeyEvent T.KeyEscape mempty
+  '\HT'   -> Just $ T.KeyEvent T.KeyTab    mempty
   _       -> Nothing
 
 getScreenSize :: IO (Int,Int)

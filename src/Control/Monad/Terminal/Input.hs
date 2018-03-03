@@ -1,8 +1,11 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase                 #-}
 module Control.Monad.Terminal.Input where
 
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
+import           Data.Bits
+import           Data.List
 
 -- | This monad describes an environment that maintains a stream of `Event`s
 --   and offers out-of-band signaling for interrupts.
@@ -79,33 +82,49 @@ waitInterruptOrElse stma = waitMapInterruptAndEvents $ \intr evs->
       _                   -> dropTillInterruptEvent evs
 
 data Key
-  = KNull
-  | KChar Char
-  | KEnter
-  | KErase
-  | KDelete
-  | KEscape
-  | KTab
+  = KeyChar Char
+  | KeyEnter
+  | KeyErase
+  | KeyDelete
+  | KeyEscape
+  | KeyTab
   | KLeft Int | KRight Int | KUp Int | KDown Int
   | KUpLeft | KUpRight | KDownLeft | KDownRight | KCenter
   | KFun Int | KPrtScr | KPause | KInsert
   | KHome | KPageUp | KEnd | KPageDown | KBegin | KMenu
   deriving (Eq,Ord,Show)
 
--- | Modifier keys. Key codes are interpreted such that users are more
--- likely to have Meta than Alt; for instance on the PC Linux console,
--- 'MMeta' will generally correspond to the physical Alt key.
-data Modifier = MShift | MCtrl | MMeta | MAlt
-  deriving (Eq,Ord,Show)
+newtype Modifiers = Modifiers Int
+  deriving (Eq, Ord, Bits)
 
--- | Events.
+instance Monoid Modifiers where
+  mempty = Modifiers 0
+  mappend (Modifiers a) (Modifiers b) = Modifiers (a .|. b)
+
+instance Show Modifiers where
+  show (Modifiers 0) = "mempty"
+  show (Modifiers 1) = "shiftKey"
+  show (Modifiers 2) = "ctrlKey"
+  show (Modifiers 4) = "altKey"
+  show (Modifiers 8) = "metaKey"
+  show i = "(" ++ concat (intersperse " .|. " ls) ++ ")"
+    where
+      ls = foldl (\acc x-> if x .&. i /= mempty then (show x):acc else acc) []
+                 [metaKey, altKey, ctrlKey, shiftKey]
+
+shiftKey, ctrlKey, altKey, metaKey :: Modifiers
+shiftKey = Modifiers 1
+ctrlKey  = Modifiers 2
+altKey   = Modifiers 4
+metaKey  = Modifiers 8
+
 data Event
-  = EvKey Key [Modifier]
-  | MouseEvent  MouseEvent
+  = KeyEvent Key Modifiers
+  | MouseEvent MouseEvent
   | WindowEvent WindowEvent
   | EvCursorPosition (Int,Int)
-  | EvUnknownSequence String
   | InterruptEvent
+  | OtherEvent String
   deriving (Eq,Ord,Show)
 
 data MouseEvent

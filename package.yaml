@@ -24,7 +24,7 @@ dependencies:
 - prettyprinter
 
 library:
-  ghc-options: -Werror -O2
+  ghc-options: -Werror -O0
   #-fwarn-incomplete-patterns
   exposed-modules:
     - Control.Monad.Repl

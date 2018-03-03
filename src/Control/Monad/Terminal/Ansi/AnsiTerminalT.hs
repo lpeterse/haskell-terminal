@@ -53,11 +53,11 @@ runAnsiTerminalT (AnsiTerminalT action) ansi =
   runReaderT action ansi { T.ansiInputEvents = events }
   where
     events = (mapEvent <$> runReaderT T.decodeAnsi (T.ansiInputChars ansi)) `orElse` T.ansiInputEvents ansi
-    mapEvent ev@(T.EvKey (T.KChar c) [])
-      | c == '\NUL' = T.EvKey T.KNull []
-      | c  < ' '    = fromMaybe (T.EvKey (T.KChar $ toEnum $ 64 + fromEnum c) [T.MCtrl]) (T.ansiSpecialChars ansi c)
-      | otherwise   = fromMaybe ev (T.ansiSpecialChars ansi c)
-    mapEvent ev = ev
+    mapEvent ev@(T.KeyEvent (T.KeyChar c) mods)
+      | mods == mempty && c  < ' '= fromMaybe (T.KeyEvent (T.KeyChar $ toEnum $ 64 + fromEnum c) T.ctrlKey) (T.ansiSpecialChars ansi c)
+      | mods == mempty            = fromMaybe ev (T.ansiSpecialChars ansi c)
+      | otherwise                 = ev
+    mapEvent ev                   = ev
 
 instance MonadTrans AnsiTerminalT where
   lift = AnsiTerminalT . lift

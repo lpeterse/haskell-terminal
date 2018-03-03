@@ -123,41 +123,47 @@ instance T.MonadTerminal m => MonadRepl (ReplT s m) where
     withStacks [] []
     where
       withStacks xss yss = T.waitEvent >>= \case
-        T.EvKey (T.KChar 'C') [T.MCtrl] -> do
-          lift $ T.putLn
-          lift $ T.flush
-          readString
-        T.EvKey (T.KChar 'D') [T.MCtrl] -> do
-          lift $ T.putLn
-          lift $ T.flush
-          pure Nothing
-        T.EvKey T.KEnter [] -> do
-          lift $ T.putLn
-          lift $ T.flush
-          pure $ Just $ reverse xss ++ yss
-        T.EvKey T.KErase [] -> case xss of
-          []     -> withStacks xss yss
-          (x:xs) -> do
-            lift $ T.cursorBackward 1
-            lift $ T.putString yss
-            lift $ T.putChar ' '
-            lift $ T.cursorBackward (length yss + 1)
-            lift $ T.flush
-            withStacks xs yss
-        T.EvKey (T.KLeft 1) [] -> case xss of
-          []     -> withStacks xss yss
-          (x:xs) -> do
-            lift $ T.cursorBackward 1
-            lift $ T.flush
-            withStacks xs (x:yss)
-        T.EvKey (T.KRight 1) [] -> case yss of
-          []     -> withStacks xss yss
-          (y:ys) -> do
-            lift $ T.cursorForward 1
-            lift $ T.flush
-            withStacks (y:xss) ys
-        T.EvKey (T.KChar c) []
-          | isPrint c || isSpace c -> do
+        T.KeyEvent (T.KeyChar 'C') mods
+          | mods == T.ctrlKey -> do
+              lift $ T.putLn
+              lift $ T.flush
+              readString
+        T.KeyEvent (T.KeyChar 'D') mods
+          | mods == T.ctrlKey -> do
+              lift $ T.putLn
+              lift $ T.flush
+              pure Nothing
+        T.KeyEvent T.KeyEnter mods
+          | mods == mempty -> do
+              lift $ T.putLn
+              lift $ T.flush
+              pure $ Just $ reverse xss ++ yss
+        T.KeyEvent T.KeyErase mods
+          | mods == mempty -> case xss of
+              []     -> withStacks xss yss
+              (x:xs) -> do
+                lift $ T.cursorBackward 1
+                lift $ T.putString yss
+                lift $ T.putChar ' '
+                lift $ T.cursorBackward (length yss + 1)
+                lift $ T.flush
+                withStacks xs yss
+        T.KeyEvent (T.KLeft 1) mods
+          | mods == mempty -> case xss of
+              []     -> withStacks xss yss
+              (x:xs) -> do
+                lift $ T.cursorBackward 1
+                lift $ T.flush
+                withStacks xs (x:yss)
+        T.KeyEvent (T.KRight 1) mods
+          | mods == mempty -> case yss of
+              []     -> withStacks xss yss
+              (y:ys) -> do
+                lift $ T.cursorForward 1
+                lift $ T.flush
+                withStacks (y:xss) ys
+        T.KeyEvent (T.KeyChar c) mods
+          | mods == mempty && (isPrint c || isSpace c) -> do
               lift $ T.putChar c
               lift $ T.flush
               withStacks (c:xss) yss
