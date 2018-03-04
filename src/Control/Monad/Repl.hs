@@ -7,6 +7,7 @@ module Control.Monad.Repl (
     MonadQuit (..)
   , MonadStateful (..)
   , ReplT ()
+  , lift
   , runReplT
   , readString
   ) where
@@ -19,7 +20,6 @@ import           Control.Monad.Catch
 import           Control.Monad.Fail
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
-import           Control.Monad.Trans.Class
 import           Data.Char
 import           Data.Function               (fix)
 import           Data.Maybe
@@ -84,9 +84,11 @@ instance (Monad m) => Monad (ReplT s m) where
 instance (Monad m) => MonadFail (ReplT s m) where
   fail = Control.Monad.fail
 
-instance MonadTrans (ReplT s) where
-  lift ma = ReplT $ \cont econt s->
-    ma >>= \a-> cont a s
+lift :: (MonadCatch m) => m a -> ReplT s m a
+lift ma = ReplT $ \cont econt s->
+    try ma >>= \case
+      Left  e -> econt e s
+      Right a -> cont a s
 
 instance (MonadIO m) => MonadIO (ReplT s m) where
   liftIO ma = ReplT $ \cont econt s->
@@ -95,9 +97,10 @@ instance (MonadIO m) => MonadIO (ReplT s m) where
       Right a -> cont a s
 
 instance (MonadThrow m) => MonadThrow (ReplT s m) where
-  throwM = lift . throwM
+  throwM e = ReplT $ \cont econt->
+    econt (E.toException e)
 
-instance (T.MonadPrinter m) => T.MonadPrinter (ReplT s m) where
+instance (MonadCatch m, MonadPrinter m) => T.MonadPrinter (ReplT s m) where
   putLn = lift T.putLn
   putChar = lift . T.putChar
   putString = lift . T.putString
@@ -107,24 +110,24 @@ instance (T.MonadPrinter m) => T.MonadPrinter (ReplT s m) where
   flush = lift T.flush
   getLineWidth = lift T.getLineWidth
 
-instance (T.MonadPrettyPrinter m) => T.MonadPrettyPrinter (ReplT s m) where
+instance (MonadCatch m, MonadPrettyPrinter m) => MonadPrettyPrinter (ReplT s m) where
   data Annotation (ReplT s m) = Annotation' (T.Annotation m)
   putDoc doc = lift $ T.putDoc (reAnnotate (\(Annotation' ann)-> ann) doc)
   setAnnotation (Annotation' a) = lift (T.setAnnotation a)
   resetAnnotation (Annotation' a) = lift (T.resetAnnotation a)
   resetAnnotations = lift T.resetAnnotations
 
-instance (T.MonadPrettyPrinter m, T.MonadFormatPrinter m) => T.MonadFormatPrinter (ReplT s m) where
+instance (MonadCatch m, MonadPrettyPrinter m, MonadFormatPrinter m) => MonadFormatPrinter (ReplT s m) where
   bold       = Annotation' T.bold
   italic     = Annotation' T.italic
   underlined = Annotation' T.underlined
 
-instance (T.MonadPrettyPrinter m, T.MonadColorPrinter m) => T.MonadColorPrinter (ReplT s m) where
+instance (MonadCatch m, MonadPrettyPrinter m, T.MonadColorPrinter m) => T.MonadColorPrinter (ReplT s m) where
   inverted     = Annotation' T.inverted
   foreground c = Annotation' (T.foreground c)
   background c = Annotation' (T.background c)
 
-instance (T.MonadScreen m) => T.MonadScreen (ReplT s m) where
+instance (MonadCatch m, MonadScreen m) => T.MonadScreen (ReplT s m) where
   clear = lift T.clear
   putCr = lift T.putCr
   cursorUp = lift . T.cursorUp
@@ -136,10 +139,10 @@ instance (T.MonadScreen m) => T.MonadScreen (ReplT s m) where
   getScreenSize = lift T.getScreenSize
   getCursorPosition = lift T.getCursorPosition
 
-instance (T.MonadInput m) => T.MonadInput (ReplT s m) where
+instance (MonadCatch m, T.MonadInput m) => T.MonadInput (ReplT s m) where
   waitMapInterruptAndEvents = lift . T.waitMapInterruptAndEvents
 
-instance (T.MonadTerminal m, T.MonadPrettyPrinter m) => T.MonadTerminal (ReplT s m) where
+instance (MonadCatch m, T.MonadTerminal m, T.MonadPrettyPrinter m) => T.MonadTerminal (ReplT s m) where
 
 instance (Monad m) => MonadQuit (ReplT s m) where
   quit = ReplT $ \_ _ s-> pure s

@@ -11,7 +11,6 @@ import           Control.Monad
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
-import           Control.Monad.Trans.Class
 import           Data.Char
 import           Data.Function               (fix)
 import qualified Data.Text                   as Text
@@ -35,12 +34,14 @@ main = runAnsiReplT repl 0 >>= Prelude.print
 prompt :: (MonadFormatPrinter m, MonadColorPrinter m) => Doc (Annotation m)
 prompt  = annotate bold $ annotate (foreground $ bright Blue) "repl" <> "@terminal % "
 
-repl :: (MonadTerminal m, MonadColorPrinter m) => ReplT Int m ()
+repl :: (MonadTerminal m, MonadColorPrinter m, MonadCatch m) => ReplT Int m ()
 repl = readString prompt >>= \case
     ""         -> pure ()
     "quit"     -> quit
     "fail"     -> fail "abcdef"
     "failIO"   -> liftIO $ E.throwIO $ E.userError "Exception thrown in IO."
+    "throwM"   -> throwM $ E.userError "Exception thrown in ReplT."
+    "liftThrowM" -> lift $ throwM $ E.userError "Exception thrown within the monad transformer."
     "load"     -> load >>= pprint
     "inc"      -> load >>= store . succ
     "dec"      -> load >>= store . pred
