@@ -63,6 +63,9 @@ instance (MonadIO m) => MonadIO (ReplT s m) where
   liftIO ma = ReplT $ \cont s->
     liftIO ma >>= \a-> cont a s
 
+instance (MonadThrow m) => MonadThrow (ReplT s m) where
+  throwM = lift . throwM
+
 instance (T.MonadPrinter m) => T.MonadPrinter (ReplT s m) where
   putLn = lift T.putLn
   putChar = lift . T.putChar
