@@ -38,6 +38,7 @@ repl :: (MonadTerminal m, MonadColorPrinter m) => ReplT Int m ()
 repl = readString prompt >>= \case
     ""         -> pure ()
     "quit"     -> quit
+    "fail"     -> fail "abcdef"
     "load"     -> load >>= pprint
     "inc"      -> load >>= store . succ
     "dec"      -> load >>= store . pred

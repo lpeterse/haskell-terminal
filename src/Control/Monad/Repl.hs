@@ -1,8 +1,9 @@
-{-# LANGUAGE LambdaCase   #-}
-{-# LANGUAGE TypeFamilies #-}
-module Control.Monad.Repl
-  ( MonadRepl (..)
-  , MonadQuit (..)
+{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeFamilies      #-}
+module Control.Monad.Repl (
+    MonadQuit (..)
+  , MonadStateful (..)
   , ReplT ()
   , runReplT
   , readString
@@ -13,11 +14,10 @@ import           Control.Concurrent.STM.TVar
 import qualified Control.Exception           as E
 import           Control.Monad
 import           Control.Monad.Catch
+import           Control.Monad.Fail
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
 import           Control.Monad.Trans.Class
-import           Control.Monad.Trans.Reader
-import           Control.Monad.Trans.State
 import           Data.Char
 import           Data.Function               (fix)
 import qualified Data.Text                   as Text
@@ -32,35 +32,50 @@ import           Control.Monad.Terminal.Ansi
 class (Monad m) => MonadQuit m where
   quit :: m a
 
-class (MonadPrinter m, MonadQuit m) => MonadRepl m where
-  type ReplState m
-  load         :: m (ReplState m)
-  store        :: ReplState m -> m ()
+class (Monad m) => MonadStateful m where
+  type State m
+  load         :: m (State m)
+  store        :: State m -> m ()
 
-newtype ReplT s m a = ReplT { unReplT ::  ( a -> s -> m s) -> s -> m s }
+newtype ReplT s m a = ReplT { unReplT :: ( a -> s -> m s) -> (String -> s -> m s) -> s -> m s }
+--                                      -- continuation ----- error continuation --- result ---
 
-runReplT  :: (Monad m) => ReplT s m a -> s -> m s
-runReplT (ReplT m) = let foreverM = m (const foreverM) in foreverM
+runReplT  :: (MonadColorPrinter m) => ReplT s m a -> s -> m s
+runReplT (ReplT m) = let foreverM = m
+                           (\a s-> cont a s >>= foreverM)
+                           (\e s-> econt e s >>= foreverM)
+                     in  foreverM
+  where
+    cont _ = pure
+    econt e s = do
+      putLn
+      putDocLn $ annotate (foreground $ bright Red) $ "Failed: " <> pretty e
+      flush
+      pure s
 
 instance (Monad m) => Functor (ReplT s m) where
   fmap f fa = ReplT $ \cont->
     unReplT fa (cont . f)
 
 instance (Monad m) => Applicative (ReplT s m) where
-  pure a = ReplT $ \cont s-> cont a s
-  fab <*> fa = ReplT $ \cont->
-    unReplT fa (\a-> unReplT fab (\f-> cont (f a)))
+  pure a = ReplT $ \cont econt s-> cont a s
+  fab <*> fa = ReplT $ \cont econt->
+    unReplT fa (\a-> unReplT fab (\f-> cont (f a)) econt) econt
 
 instance (Monad m) => Monad (ReplT s m) where
-  ma >>= k = ReplT $ \cont->
-    unReplT ma (\a-> unReplT (k a) cont)
+  ma >>= k = ReplT $ \cont econt->
+    unReplT ma (\a-> unReplT (k a) cont econt) econt
+  fail e = ReplT $ \cont econt-> econt e
+
+instance (Monad m) => MonadFail (ReplT s m) where
+  fail = Control.Monad.fail
 
 instance MonadTrans (ReplT s) where
-  lift ma = ReplT $ \cont s->
+  lift ma = ReplT $ \cont econt s->
     ma >>= \a-> cont a s
 
 instance (MonadIO m) => MonadIO (ReplT s m) where
-  liftIO ma = ReplT $ \cont s->
+  liftIO ma = ReplT $ \cont econt s->
     liftIO ma >>= \a-> cont a s
 
 instance (MonadThrow m) => MonadThrow (ReplT s m) where
@@ -111,12 +126,12 @@ instance (T.MonadInput m) => T.MonadInput (ReplT s m) where
 instance (T.MonadTerminal m, T.MonadPrettyPrinter m) => T.MonadTerminal (ReplT s m) where
 
 instance (Monad m) => MonadQuit (ReplT s m) where
-  quit = ReplT $ \_ s-> pure s
+  quit = ReplT $ \_ _ s-> pure s
 
-instance MonadTerminal m => MonadRepl (ReplT s m) where
-  type ReplState (ReplT s m) = s
-  load = ReplT $ \cont s-> cont s s
-  store s = ReplT $ \cont _-> cont () s
+instance (Monad m) => MonadStateful (ReplT s m) where
+  type State (ReplT s m) = s
+  load = ReplT $ \cont _ s-> cont s s
+  store s = ReplT $ \cont _ _-> cont () s
 
 readString :: (MonadQuit m, MonadTerminal m) => Doc (Annotation m) -> m String
 readString p = do
