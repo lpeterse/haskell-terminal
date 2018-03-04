@@ -34,7 +34,7 @@ main = runAnsiReplT repl 0 >>= Prelude.print
 prompt :: (MonadFormatPrinter m, MonadColorPrinter m) => Doc (Annotation m)
 prompt  = annotate bold $ annotate (foreground $ bright Blue) "repl" <> "@terminal % "
 
-repl :: (MonadTerminal m, MonadColorPrinter m, MonadCatch m) => ReplT Int m ()
+repl :: (MonadTerminal m, MonadColorPrinter m, MonadMask m, MonadIO m) => ReplT Int m ()
 repl = readString prompt >>= \case
     ""         -> pure ()
     "quit"     -> quit
@@ -45,15 +45,11 @@ repl = readString prompt >>= \case
     "load"     -> load >>= pprint
     "inc"      -> load >>= store . succ
     "dec"      -> load >>= store . pred
-    "loop"     -> gnurp 100000
+    "loop"     -> forM_ [1..100000] $ \i-> store i >> putString (' ':show i)
+    "finally"  -> fail "I am failing, I am failing.." `finally` putStringLn "FINALLY"
     "cursor"   -> getCursorPosition >>= \xy-> pprint xy
-    --"progress" -> void $ runWithProgressBar $ \update-> (`finally` threadDelay 3000000) $ forM_ [1..100] $ \i-> do
-    --                threadDelay 100000
-    --                update $ fromIntegral i / 100
+    "progress" -> void $ runWithProgressBar $ \update-> (`finally` threadDelay 3000000) $ forM_ [1..100] $ \i-> do
+                    threadDelay 100000
+                    update $ fromIntegral i / 100
     "colors"   -> undefined
     line       -> putStringLn (show line)
-
-gnurp :: MonadPrinter m => Int -> m ()
-gnurp i = putString (show [1..i])
-{-# NOINLINE gnurp #-}
-

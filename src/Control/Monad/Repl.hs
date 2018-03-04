@@ -20,6 +20,7 @@ import           Control.Monad.IO.Class
 import           Control.Monad.STM
 import           Data.Char
 import           Data.Function               (fix)
+import           Data.IORef
 import           Data.Maybe
 import qualified Data.Text                   as Text
 import           Data.Text.Prettyprint.Doc
@@ -45,7 +46,7 @@ class (Monad m) => MonadStateful m where
   store        :: State m -> m ()
 
 newtype ReplT s m a = ReplT { unReplT :: (Either E.SomeException a -> s -> m s) -> s -> m s }
------------------------------------------- continuation ------- exception continuation ------ result ---
+---------------------------------------------------- continuation ---------------- result ---
 
 runReplT  :: (MonadColorPrinter m) => ReplT s m a -> s -> m s
 runReplT (ReplT m) = let foreverM = m
@@ -109,10 +110,40 @@ instance (MonadThrow m) => MonadCatch (ReplT s m) where
     unReplT ma $ \case
       Right a -> cont (Right a)
       Left se -> case E.fromException se of
+        Just  e -> unReplT (ema e) cont
         Nothing -> cont (Left se)
-        Just e  -> unReplT (ema e) $ \case
-          Right a' -> cont (Right a')
-          Left se' -> cont (Left se')
+
+-- | This instance uses a trick involving an IORef in order to
+--   intermediately terminate and evaluate the ReplT transformer
+--   and then eventually call the continuation or not.
+--   The only downside is a restriction on MonadIO, but it is
+--   unlikely that anyone will be using this in different context.
+instance (MonadIO m, MonadMask m) => MonadMask (ReplT s m) where
+  mask fma =
+    withInterruptedContinuation $ ReplT $ \cont s-> mask $ \unmask-> unReplT (fma $ q unmask) cont s
+    where
+      q unmask ma = withInterruptedContinuation $ ReplT (\cont s-> unmask $ unReplT ma cont s)
+  uninterruptibleMask fma =
+    withInterruptedContinuation $ ReplT $ \cont s-> uninterruptibleMask $ \unmask-> unReplT (fma $ q unmask) cont s
+    where
+      q unmask ma = withInterruptedContinuation $ ReplT (\cont s-> unmask $ unReplT ma cont s)
+
+-- | This causes the supplied computation to be called with
+--   a terminating fake continuation.
+--   The result is then evaluated and eventually the real continuation
+--   is called. This is useful for isolating the effect of background
+--   state like asynchronous exception masking state.
+--   Note: The threaded state is representing all modifications
+--   that happended within the supplied computation. This is essentially
+--   the most important point of all this effort.
+withInterruptedContinuation :: (MonadIO m) => ReplT s m a -> ReplT s m a
+withInterruptedContinuation (ReplT action) = ReplT $ \cont s-> do
+  ref <- liftIO $ newIORef Nothing
+  s'  <- action (\r s'-> liftIO (writeIORef ref (Just r)) >> pure s') s
+  liftIO (readIORef ref) >>= \case
+    Nothing -> pure s'
+    Just r  -> cont r s'
+{-# INLINE withInterruptedContinuation #-}
 
 instance (MonadCatch m, MonadPrinter m) => T.MonadPrinter (ReplT s m) where
   putLn = lift T.putLn
