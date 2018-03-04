@@ -82,17 +82,22 @@ waitInterruptOrElse stma = waitMapInterruptAndEvents $ \intr evs->
       _                   -> dropTillInterruptEvent evs
 
 data Key
-  = KeyChar Char
-  | KeyEnter
-  | KeyErase
-  | KeyDelete
-  | KeyEscape
-  | KeyTab
+  = CharKey Char
+  | TabKey
   | SpaceKey
-  | KLeft Int | KRight Int | KUp Int | KDown Int
-  | KUpLeft | KUpRight | KDownLeft | KDownRight | KCenter
-  | KFun Int | KPrtScr | KPause | KInsert
-  | KHome | KPageUp | KEnd | KPageDown | KBegin | KMenu
+  | EnterKey
+  | EraseKey
+  | InsertKey
+  | DeleteKey
+  | HomeKey      -- ^ Pos 1
+  | EndKey
+  | PageUpKey
+  | PageDownKey
+  | EscapeKey
+  | PrintKey
+  | PauseKey
+  | ArrowKey Direction
+  | FunctionKey Int
   deriving (Eq,Ord,Show)
 
 newtype Modifiers = Modifiers Int
@@ -143,10 +148,10 @@ data Button
   deriving (Eq,Ord,Show)
 
 data Direction
-  = Up
-  | Down
-  | Left
-  | Right
+  = Upwards
+  | Downwards
+  | Leftwards
+  | Rightwards
   deriving (Eq,Ord,Show)
 
 data WindowEvent

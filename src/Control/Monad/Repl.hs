@@ -212,18 +212,18 @@ readString p = do
         putLn
         readString p
       -- On Ctrl-D the program is supposed to quit.
-      T.KeyEvent (T.KeyChar 'D') mods
+      T.KeyEvent (T.CharKey 'D') mods
         | mods == T.ctrlKey -> do
             putLn
             flush
             quit
       -- On Enter this function returns the entered string to the caller.
-      T.KeyEvent T.KeyEnter mods
+      T.KeyEvent T.EnterKey mods
         | mods == mempty -> do
             putLn
             flush
             pure $ reverse xss ++ yss
-      T.KeyEvent T.KeyErase mods
+      T.KeyEvent T.EraseKey mods
         | mods == mempty -> case xss of
             []     -> withStacks xss yss
             (x:xs) -> do
@@ -233,21 +233,21 @@ readString p = do
               cursorBackward (length yss + 1)
               flush
               withStacks xs yss
-      T.KeyEvent (T.KLeft 1) mods
+      KeyEvent (ArrowKey Leftwards) mods
         | mods == mempty -> case xss of
             []     -> withStacks xss yss
             (x:xs) -> do
               cursorBackward 1
               flush
               withStacks xs (x:yss)
-      T.KeyEvent (T.KRight 1) mods
+      KeyEvent (ArrowKey Rightwards) mods
         | mods == mempty -> case yss of
             []     -> withStacks xss yss
             (y:ys) -> do
               cursorForward 1
               flush
               withStacks (y:xss) ys
-      T.KeyEvent (T.KeyChar c) mods
+      T.KeyEvent (T.CharKey c) mods
         | mods == mempty && (isPrint c || isSpace c) -> do
             putChar c
             flush
@@ -274,18 +274,18 @@ getPasswordString p = do
         putLn
         getPasswordString p
       -- On Ctrl-D the program is supposed to quit.
-      KeyEvent (KeyChar 'D') mods | mods == ctrlKey -> do
+      KeyEvent (CharKey 'D') mods | mods == ctrlKey -> do
         putLn
         flush
         quit
       -- On Enter this function returns the entered string to the caller.
-      KeyEvent KeyEnter _ -> do
+      KeyEvent EnterKey _ -> do
         putLn
         flush
         pure $ reverse xs
       -- On Erase one character is removed from the right.
-      KeyEvent KeyErase _ ->
+      KeyEvent EraseKey _ ->
         withStack $! drop 1 xs
-      KeyEvent (KeyChar x) mods | mods == mempty ->
+      KeyEvent (CharKey x) mods | mods == mempty ->
         withStack $! x:xs
       _ -> withStack xs

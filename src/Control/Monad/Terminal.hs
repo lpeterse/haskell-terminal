@@ -36,6 +36,7 @@ module Control.Monad.Terminal
   , ctrlKey
   , altKey
   , metaKey
+  , Direction (..)
   , MouseEvent (..)
   , WindowEvent (..)
     -- * Screen Manipulation

@@ -170,7 +170,7 @@ withInputProcessing mainThread interrupt events ma = do
           shallTerminate <- atomically (readTVar terminate)
           unless shallTerminate continue
         Just ev -> (>> continue) $ case ev of
-          KeyEvent { ceKeyChar = c, ceKeyDown = d, ceKeyModifiers = mods }
+          KeyEvent { ceCharKey = c, ceKeyDown = d, ceKeyModifiers = mods }
             -- In virtual terminal mode, Windows actually sends Ctrl+C and there is no
             -- way a non-responsive application can be killed from keyboard.
             -- The solution is to catch this specific event and swap an STM interrupt flag.
@@ -191,25 +191,25 @@ withInputProcessing mainThread interrupt events ma = do
             -- to reliably distinguish real escape key presses and escape sequences
             -- from another.
             | c == '\ESC' && not d -> atomically $
-                writeTChan events (T.KeyEvent (T.KeyChar '\NUL') mempty)
+                writeTChan events (T.KeyEvent (T.CharKey '\NUL') mempty)
             -- When the character is ESC and the key is pressed down it might be
             -- that the key is hold pressed. In this case a NUL has to be emitted
             -- before emitting the ESC in order to signal that the previous ESC does
             -- not introduce a sequence.
             | c == '\ESC' &&     d -> atomically $ do
                 readTVar latestCharacter >>= \case
-                  '\ESC' -> writeTChan events (T.KeyEvent (T.KeyChar '\NUL') mempty)
+                  '\ESC' -> writeTChan events (T.KeyEvent (T.CharKey '\NUL') mempty)
                   _      -> writeTVar  latestCharacter '\ESC'
-                writeTChan events (T.KeyEvent (T.KeyChar '\ESC') mempty)
+                writeTChan events (T.KeyEvent (T.CharKey '\ESC') mempty)
             | d -> atomically $ writeTVar latestCharacter c >> case c of
                 '\NUL'  -> pure ()
-                '\t'    -> writeTChan events (T.KeyEvent T.KeyTab      mods)
-                '\r'    -> writeTChan events (T.KeyEvent T.KeyEnter    mods)
-                '\n'    -> writeTChan events (T.KeyEvent T.KeyEnter    mods)
+                '\t'    -> writeTChan events (T.KeyEvent T.TabKey      mods)
+                '\r'    -> writeTChan events (T.KeyEvent T.EnterKey    mods)
+                '\n'    -> writeTChan events (T.KeyEvent T.EnterKey    mods)
                 '\SP'   -> writeTChan events (T.KeyEvent T.SpaceKey    mods)
-                '\BS'   -> writeTChan events (T.KeyEvent T.KeyDelete   mods)
-                '\DEL'  -> writeTChan events (T.KeyEvent T.KeyErase    mods)
-                _       -> writeTChan events (T.KeyEvent (T.KeyChar c) mods)
+                '\BS'   -> writeTChan events (T.KeyEvent T.DeleteKey   mods)
+                '\DEL'  -> writeTChan events (T.KeyEvent T.EraseKey    mods)
+                _       -> writeTChan events (T.KeyEvent (T.CharKey c) mods)
             | otherwise -> pure () -- All other key events shall be ignored.
           MouseEvent mouseEvent -> case mouseEvent of
             T.MouseButtonPressed _  btn -> atomically $ do
@@ -252,7 +252,7 @@ getScreenSize =
 data ConsoleInputEvent
   = KeyEvent
     { ceKeyDown            :: Bool
-    , ceKeyChar            :: Char
+    , ceCharKey            :: Char
     , ceKeyModifiers       :: T.Modifiers
     }
   | MouseEvent  T.MouseEvent
@@ -282,8 +282,8 @@ instance Storable ConsoleInputEvent where
       btn <- peek ptrMouseButtonState
       peek ptrMouseEventFlags >>= \case
         (#const MOUSE_MOVED)    -> pure (T.MouseMoved   pos)
-        (#const MOUSE_WHEELED)  -> pure (T.MouseWheeled pos $ if btn .&. 0xff000000 > 0 then T.Down  else T.Up)
-        (#const MOUSE_HWHEELED) -> pure (T.MouseWheeled pos $ if btn .&. 0xff000000 > 0 then T.Right else T.Left)
+        (#const MOUSE_WHEELED)  -> pure (T.MouseWheeled pos $ if btn .&. 0xff000000 > 0 then T.Downwards  else T.Upwards)
+        (#const MOUSE_HWHEELED) -> pure (T.MouseWheeled pos $ if btn .&. 0xff000000 > 0 then T.Rightwards else T.Leftwards)
         _ -> case btn of
           (#const FROM_LEFT_1ST_BUTTON_PRESSED) -> pure $ T.MouseButtonPressed  pos T.LeftButton
           (#const FROM_LEFT_2ND_BUTTON_PRESSED) -> pure $ T.MouseButtonPressed  pos T.OtherButton

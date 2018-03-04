@@ -57,7 +57,7 @@ runAnsiTerminalT (AnsiTerminalT action) ansi = do
       where
         getAnsiEvent  = runReaderT T.decodeAnsi (readTChan chars)
         getOtherEvent = getEvent >>= \case
-          T.KeyEvent (T.KeyChar c) mods
+          T.KeyEvent (T.CharKey c) mods
             | mods == mempty -> do
                 writeTChan chars c
                 pure $ T.OtherEvent $ "Pushed " ++ show c ++ "into ANSI decoder."
