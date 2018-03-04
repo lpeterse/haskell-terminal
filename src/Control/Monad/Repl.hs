@@ -1,5 +1,7 @@
+{-# LANGUAGE ExplicitForAll    #-}
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes        #-}
 {-# LANGUAGE TypeFamilies      #-}
 module Control.Monad.Repl (
     MonadQuit (..)
@@ -20,14 +22,21 @@ import           Control.Monad.STM
 import           Control.Monad.Trans.Class
 import           Data.Char
 import           Data.Function               (fix)
+import           Data.Maybe
 import qualified Data.Text                   as Text
 import           Data.Text.Prettyprint.Doc
 import           Data.Typeable
 import           Prelude                     hiding (putChar)
+import qualified System.IO.Error             as E
 
 import           Control.Monad.Terminal
 import qualified Control.Monad.Terminal      as T
 import           Control.Monad.Terminal.Ansi
+
+newtype Failure = Failure String
+  deriving (Eq, Ord, Show, Typeable)
+
+instance E.Exception Failure
 
 class (Monad m) => MonadQuit m where
   quit :: m a
@@ -37,8 +46,8 @@ class (Monad m) => MonadStateful m where
   load         :: m (State m)
   store        :: State m -> m ()
 
-newtype ReplT s m a = ReplT { unReplT :: ( a -> s -> m s) -> (String -> s -> m s) -> s -> m s }
---                                      -- continuation ----- error continuation --- result ---
+newtype ReplT s m a = ReplT { unReplT :: ( a -> s -> m s) -> (E.SomeException -> s -> m s) -> s -> m s }
+------------------------------------------ continuation --------exception continuation ------ result ---
 
 runReplT  :: (MonadColorPrinter m) => ReplT s m a -> s -> m s
 runReplT (ReplT m) = let foreverM = m
@@ -48,10 +57,15 @@ runReplT (ReplT m) = let foreverM = m
   where
     cont _ = pure
     econt e s = do
-      putLn
-      putDocLn $ annotate (foreground $ bright Red) $ "Failed: " <> pretty e
+      putDocLn $ fromMaybe renderOtherException tryRenderFailure
       flush
       pure s
+      where
+        tryRenderFailure = (\(Failure s)-> template "Failure" $ pretty s) <$> E.fromException e
+        renderOtherException = template "Exception" $ pretty (E.displayException e)
+        template x y =
+             annotate (foreground $ dull Red) $ "*** " <> x <> ": "
+          <> annotate (foreground $ bright Red) y
 
 instance (Monad m) => Functor (ReplT s m) where
   fmap f fa = ReplT $ \cont->
@@ -65,7 +79,7 @@ instance (Monad m) => Applicative (ReplT s m) where
 instance (Monad m) => Monad (ReplT s m) where
   ma >>= k = ReplT $ \cont econt->
     unReplT ma (\a-> unReplT (k a) cont econt) econt
-  fail e = ReplT $ \cont econt-> econt e
+  fail e = ReplT $ \cont econt-> econt (E.toException $ Failure e)
 
 instance (Monad m) => MonadFail (ReplT s m) where
   fail = Control.Monad.fail
@@ -76,7 +90,9 @@ instance MonadTrans (ReplT s) where
 
 instance (MonadIO m) => MonadIO (ReplT s m) where
   liftIO ma = ReplT $ \cont econt s->
-    liftIO ma >>= \a-> cont a s
+    liftIO (E.try ma) >>= \case
+      Left  e -> econt e s
+      Right a -> cont a s
 
 instance (MonadThrow m) => MonadThrow (ReplT s m) where
   throwM = lift . throwM

@@ -21,6 +21,7 @@ import           Control.Monad.Repl
 import           Control.Monad.Repl.IO
 import           Control.Monad.Terminal
 import           Data.Text.Prettyprint.Doc
+import qualified System.IO.Error             as E
 import           System.Terminal
 
 type AnsiReplT s m = ReplT s (AnsiTerminalT m)
@@ -39,6 +40,7 @@ repl = readString prompt >>= \case
     ""         -> pure ()
     "quit"     -> quit
     "fail"     -> fail "abcdef"
+    "failIO"   -> liftIO $ E.throwIO $ E.userError "Exception thrown in IO."
     "load"     -> load >>= pprint
     "inc"      -> load >>= store . succ
     "dec"      -> load >>= store . pred
