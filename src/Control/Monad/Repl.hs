@@ -1,7 +1,5 @@
-{-# LANGUAGE ExplicitForAll    #-}
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes        #-}
 {-# LANGUAGE TypeFamilies      #-}
 module Control.Monad.Repl (
     MonadQuit (..)
@@ -46,20 +44,18 @@ class (Monad m) => MonadStateful m where
   load         :: m (State m)
   store        :: State m -> m ()
 
-newtype ReplT s m a = ReplT { unReplT :: ( a -> s -> m s) -> (E.SomeException -> s -> m s) -> s -> m s }
------------------------------------------- continuation --------exception continuation ------ result ---
+newtype ReplT s m a = ReplT { unReplT :: (Either E.SomeException a -> s -> m s) -> s -> m s }
+------------------------------------------ continuation ------- exception continuation ------ result ---
 
 runReplT  :: (MonadColorPrinter m) => ReplT s m a -> s -> m s
 runReplT (ReplT m) = let foreverM = m
-                           (\a s-> cont a s >>= foreverM)
-                           (\e s-> econt e s >>= foreverM)
+                           (\r s-> handle r >> foreverM s)
                      in  foreverM
   where
-    cont _ = pure
-    econt e s = do
+    handle (Right _) = pure ()
+    handle (Left e) = do
       putDocLn $ fromMaybe renderOtherException tryRenderFailure
       flush
-      pure s
       where
         tryRenderFailure = (\(Failure s)-> template "Failure" $ pretty s) <$> E.fromException e
         renderOtherException = template "Exception" $ pretty (E.displayException e)
@@ -69,36 +65,54 @@ runReplT (ReplT m) = let foreverM = m
 
 instance (Monad m) => Functor (ReplT s m) where
   fmap f fa = ReplT $ \cont->
-    unReplT fa (cont . f)
+    unReplT fa $ \case
+      Left  e -> cont (Left e)
+      Right a -> cont (Right (f a))
 
 instance (Monad m) => Applicative (ReplT s m) where
-  pure a = ReplT $ \cont econt s-> cont a s
-  fab <*> fa = ReplT $ \cont econt->
-    unReplT fa (\a-> unReplT fab (\f-> cont (f a)) econt) econt
+  pure a = ReplT $ \cont-> cont (Right a)
+  fab <*> fa = ReplT $ \cont->
+    unReplT fa $ \case
+      Left  e -> cont (Left e)
+      Right a -> unReplT fab $ \case
+        Left e' -> cont (Left e')
+        Right f -> cont (Right (f a))
 
 instance (Monad m) => Monad (ReplT s m) where
-  ma >>= k = ReplT $ \cont econt->
-    unReplT ma (\a-> unReplT (k a) cont econt) econt
-  fail e = ReplT $ \cont econt-> econt (E.toException $ Failure e)
+  ma >>= k = ReplT $ \cont->
+    unReplT ma $ \case
+      Left  e -> cont (Left e)
+      Right a -> unReplT (k a) cont
+  fail e = ReplT $ \cont-> cont (Left $ E.toException $ Failure e)
 
 instance (Monad m) => MonadFail (ReplT s m) where
-  fail = Control.Monad.fail
+  fail e = ReplT $ \cont-> cont (Left $ E.toException $ Failure e)
 
 lift :: (MonadCatch m) => m a -> ReplT s m a
-lift ma = ReplT $ \cont econt s->
-    try ma >>= \case
-      Left  e -> econt e s
-      Right a -> cont a s
+lift ma = ReplT $ \cont s->
+  try ma >>= \case
+    Left  e -> cont (Left e) s
+    Right a -> cont (Right a) s
 
 instance (MonadIO m) => MonadIO (ReplT s m) where
-  liftIO ma = ReplT $ \cont econt s->
+  liftIO ma = ReplT $ \cont s->
     liftIO (E.try ma) >>= \case
-      Left  e -> econt e s
-      Right a -> cont a s
+      Left  e -> cont (Left e) s
+      Right a -> cont (Right a) s
 
 instance (MonadThrow m) => MonadThrow (ReplT s m) where
-  throwM e = ReplT $ \cont econt->
-    econt (E.toException e)
+  throwM e = ReplT $ \cont->
+    cont $ Left $ E.toException e
+
+instance (MonadThrow m) => MonadCatch (ReplT s m) where
+  catch ma ema = ReplT $ \cont->
+    unReplT ma $ \case
+      Right a -> cont (Right a)
+      Left se -> case E.fromException se of
+        Nothing -> cont (Left se)
+        Just e  -> unReplT (ema e) $ \case
+          Right a' -> cont (Right a')
+          Left se' -> cont (Left se')
 
 instance (MonadCatch m, MonadPrinter m) => T.MonadPrinter (ReplT s m) where
   putLn = lift T.putLn
@@ -145,12 +159,12 @@ instance (MonadCatch m, T.MonadInput m) => T.MonadInput (ReplT s m) where
 instance (MonadCatch m, T.MonadTerminal m, T.MonadPrettyPrinter m) => T.MonadTerminal (ReplT s m) where
 
 instance (Monad m) => MonadQuit (ReplT s m) where
-  quit = ReplT $ \_ _ s-> pure s
+  quit = ReplT $ \_ s-> pure s
 
 instance (Monad m) => MonadStateful (ReplT s m) where
   type State (ReplT s m) = s
-  load = ReplT $ \cont _ s-> cont s s
-  store s = ReplT $ \cont _ _-> cont () s
+  load = ReplT $ \cont s-> cont (Right s) s
+  store s = ReplT $ \cont _-> cont (Right ()) s
 
 readString :: (MonadQuit m, MonadTerminal m) => Doc (Annotation m) -> m String
 readString p = do
