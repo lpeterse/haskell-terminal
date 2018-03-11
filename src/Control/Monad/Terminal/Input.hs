@@ -90,6 +90,7 @@ data Key
   | InsertKey
   | DeleteKey
   | HomeKey      -- ^ Pos 1
+  | BeginKey
   | EndKey
   | PageUpKey
   | PageDownKey

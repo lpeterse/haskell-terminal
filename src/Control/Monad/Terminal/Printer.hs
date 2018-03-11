@@ -3,7 +3,6 @@ module Control.Monad.Terminal.Printer where
 
 import           Data.Text
 import           Data.Text.Prettyprint.Doc
-import           Data.Word
 
 import           Prelude                   hiding (putChar)
 
@@ -164,7 +163,7 @@ class MonadPrettyPrinter m => MonadColorPrinter m where
   inverted        :: Annotation m
   -- | This annotation sets the __foreground__ color (the text color).
   foreground      :: Color -> Annotation m
-  -- | This annotation set the __background__ color.
+  -- | This annotation sets the __background__ color.
   background      :: Color -> Annotation m
 
 data Color = Color ColorMode BasicColor

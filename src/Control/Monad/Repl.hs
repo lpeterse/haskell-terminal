@@ -8,29 +8,23 @@ module Control.Monad.Repl (
   , lift
   , runReplT
   , readString
+  , getPasswordString
   ) where
 
-import           Control.Concurrent
-import           Control.Concurrent.STM.TVar
-import qualified Control.Exception           as E
+import qualified Control.Exception         as E
 import           Control.Monad
 import           Control.Monad.Catch
 import           Control.Monad.Fail
 import           Control.Monad.IO.Class
-import           Control.Monad.STM
 import           Data.Char
-import           Data.Function               (fix)
 import           Data.IORef
 import           Data.Maybe
-import qualified Data.Text                   as Text
 import           Data.Text.Prettyprint.Doc
 import           Data.Typeable
-import           Prelude                     hiding (putChar)
-import qualified System.IO.Error             as E
+import           Prelude                   hiding (putChar)
 
 import           Control.Monad.Terminal
-import qualified Control.Monad.Terminal      as T
-import           Control.Monad.Terminal.Ansi
+import qualified Control.Monad.Terminal    as T
 
 newtype Failure = Failure String
   deriving (Eq, Ord, Show, Typeable)
@@ -49,12 +43,11 @@ newtype ReplT s m a = ReplT { unReplT :: (Either E.SomeException a -> s -> m s) 
 ---------------------------------------------------- continuation ---------------- result ---
 
 runReplT  :: (MonadColorPrinter m) => ReplT s m a -> s -> m s
-runReplT (ReplT m) = let foreverM = m
-                           (\r s-> handle r >> foreverM s)
+runReplT (ReplT m) = let foreverM = m (\r s-> processResult r >> foreverM s)
                      in  foreverM
   where
-    handle (Right _) = pure ()
-    handle (Left e) = do
+    processResult (Right _) = pure ()
+    processResult (Left e) = do
       putDocLn $ fromMaybe renderOtherException tryRenderFailure
       flush
       where
@@ -173,19 +166,22 @@ instance (MonadCatch m, MonadPrettyPrinter m, T.MonadColorPrinter m) => T.MonadC
   background c = Annotation' (T.background c)
 
 instance (MonadCatch m, MonadScreen m) => T.MonadScreen (ReplT s m) where
-  clear = lift T.clear
-  putCr = lift T.putCr
-  cursorUp = lift . T.cursorUp
-  cursorDown = lift . T.cursorDown
-  cursorForward = lift . T.cursorForward
-  cursorBackward = lift . T.cursorBackward
-  cursorPosition x y = lift $ T.cursorPosition x y
-  cursorVisible = lift . T.cursorVisible
-  getScreenSize = lift T.getScreenSize
-  getCursorPosition = lift T.getCursorPosition
+  moveCursorUp                = lift . moveCursorUp
+  moveCursorDown              = lift . moveCursorDown
+  moveCursorForward           = lift . moveCursorForward
+  moveCursorBackward          = lift . moveCursorBackward
+  getCursorPosition           = lift   getCursorPosition
+  setCursorPosition           = lift . setCursorPosition
+  setVerticalCursorPosition   = lift . setVerticalCursorPosition
+  setHorizontalCursorPosition = lift . setHorizontalCursorPosition
+  saveCursorPosition          = lift   saveCursorPosition
+  restoreCursorPosition       = lift   restoreCursorPosition
+  showCursor                  = lift   showCursor
+  hideCursor                  = lift   hideCursor
+  getScreenSize               = lift   getScreenSize
 
 instance (MonadCatch m, T.MonadInput m) => T.MonadInput (ReplT s m) where
-  waitMapInterruptAndEvents = lift . T.waitMapInterruptAndEvents
+  waitMapInterruptAndEvents = lift . waitMapInterruptAndEvents
 
 instance (MonadCatch m, T.MonadTerminal m, T.MonadPrettyPrinter m) => T.MonadTerminal (ReplT s m) where
 
@@ -227,24 +223,24 @@ readString p = do
         | mods == mempty -> case xss of
             []     -> withStacks xss yss
             (x:xs) -> do
-              cursorBackward 1
+              moveCursorBackward 1
               putString yss
               putChar ' '
-              cursorBackward (length yss + 1)
+              moveCursorBackward (length yss + 1)
               flush
               withStacks xs yss
       KeyEvent (ArrowKey Leftwards) mods
         | mods == mempty -> case xss of
             []     -> withStacks xss yss
             (x:xs) -> do
-              cursorBackward 1
+              moveCursorBackward 1
               flush
               withStacks xs (x:yss)
       KeyEvent (ArrowKey Rightwards) mods
         | mods == mempty -> case yss of
             []     -> withStacks xss yss
             (y:ys) -> do
-              cursorForward 1
+              moveCursorForward 1
               flush
               withStacks (y:xss) ys
       T.KeyEvent (T.CharKey c) mods

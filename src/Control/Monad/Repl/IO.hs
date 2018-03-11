@@ -2,10 +2,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Control.Monad.Repl.IO where
 
-import           Control.Concurrent
 import           Control.Concurrent.Async
 import           Control.Concurrent.STM.TVar
-import qualified Control.Exception           as E
 import           Control.Monad
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
@@ -14,7 +12,7 @@ import           Data.Function               (fix)
 import           Data.Monoid
 import qualified Data.Text                   as Text
 import qualified Data.Text.Prettyprint.Doc   as PP
-import           Prelude                     hiding (print, putChar)
+import           Prelude                     hiding (putChar)
 
 import           Control.Monad.Terminal
 
@@ -40,7 +38,7 @@ runWithProgressBar action = do
             | x3 <   10 = "  " ++ show x3
             | x3 <  100 = " " ++ show x3
             | otherwise = "100"
-      putCr
+      setHorizontalCursorPosition 0
       putString (padded ++ " % [")
       putText (Text.replicate x1 "=")
       when (p /= 1) (putChar '>')
@@ -49,7 +47,7 @@ runWithProgressBar action = do
       flush
     render color msg = do
       width <- getLineWidth
-      putCr
+      setHorizontalCursorPosition 0
       putDoc $ PP.annotate (foreground $ bright color)
              $ PP.pretty $ msg <> Text.replicate (width - Text.length msg) " "
       flush

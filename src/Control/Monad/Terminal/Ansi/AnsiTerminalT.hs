@@ -3,46 +3,27 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
-{-# OPTIONS_GHC -ddump-deriv #-}
 module Control.Monad.Terminal.Ansi.AnsiTerminalT
   ( AnsiTerminalT ()
   , runAnsiTerminalT
   )
 where
 
-import           Control.Concurrent
 import           Control.Concurrent.STM.TChan
-import           Control.Concurrent.STM.TMVar
 import           Control.Concurrent.STM.TVar
-import qualified Control.Exception                   as E
-import           Control.Monad                       (forever, void, when)
+import           Control.Monad                       (when)
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
 import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Reader
-import           Control.Monad.Trans.State
-import           Data.Bits
-import qualified Data.ByteString                     as BS
-import           Data.Char
 import           Data.Foldable                       (forM_)
-import           Data.Function                       (fix)
-import           Data.List.NonEmpty                  (NonEmpty ((:|)))
-import qualified Data.List.NonEmpty                  as N
-import           Data.Maybe
 import           Data.Monoid
 import qualified Data.Text                           as Text
-import qualified Data.Text.IO                        as Text
 import qualified Data.Text.Prettyprint.Doc           as PP
-import           Data.Word
-import           System.Environment
-import qualified System.IO                           as IO
 
 import qualified Control.Monad.Terminal              as T
 import qualified Control.Monad.Terminal.Ansi.Decoder as T
-import qualified Control.Monad.Terminal.Input        as T
-import qualified Control.Monad.Terminal.Printer      as T
-import qualified Control.Monad.Terminal.Terminal     as T
 
 newtype AnsiTerminalT m a
   = AnsiTerminalT (ReaderT T.Terminal m a)
@@ -50,18 +31,36 @@ newtype AnsiTerminalT m a
 
 runAnsiTerminalT :: (MonadIO m, MonadMask m) => AnsiTerminalT m a -> T.Terminal -> m a
 runAnsiTerminalT (AnsiTerminalT action) ansi = do
-  chars <- liftIO newTChanIO
-  runReaderT action ansi { T.termInputEvents = getNextEvent (T.termInputEvents ansi) chars }
+  eventsChan <- liftIO newTChanIO
+  decoderVar <- liftIO (newTVarIO T.ansiDecoder)
+  runReaderT action ansi { T.termInputEvents = nextEvent eventsChan decoderVar }
   where
-    getNextEvent getEvent chars = getAnsiEvent `orElse` getOtherEvent
+    -- This function transforms the incoming raw event stream and sends
+    -- parts of it (all plain characters) through the ANSI decoder.
+    -- It does this in a transactional way whereas it is important that
+    -- each input event creates _at least one_ immediate output event.
+    -- This means: When feeding input characters to the decoder it
+    -- is necessary to emit one intermediate event after each character that
+    -- has been fed into the decoder. Otherwise the transaction
+    -- will fail and the actual modification to the decoder won't happen.
+    nextEvent eventsChan decoderVar = do
+      processRawEvent `orElse` pure () -- Even without a new raw event there might be events pending.
+      readTChan eventsChan
       where
-        getAnsiEvent  = runReaderT T.decodeAnsi (readTChan chars)
-        getOtherEvent = getEvent >>= \case
-          T.KeyEvent (T.CharKey c) mods
-            | mods == mempty -> do
-                writeTChan chars c
-                pure $ T.OtherEvent $ "Pushed " ++ show c ++ "into ANSI decoder."
-          event -> pure event
+        processRawEvent = T.termInputEvents ansi >>= \case
+            T.KeyEvent (T.CharKey c) mods
+              | mods == mempty -> do
+                  -- NB: This event is essential as it guarantees the whole transaction
+                  -- to succeed by having at least one event in the `events` channel.
+                  -- This information is also quite nice for debbuging.
+                  writeTChan eventsChan (T.OtherEvent $ "ANSI decoder: Feeding character " ++ show c ++ ".")
+                  -- Feed the decoder, save its new state and write its output to the
+                  -- events chan (if any).
+                  decoder <- readTVar decoderVar
+                  let (ansiEvents, decoder') = T.feedDecoder decoder c
+                  writeTVar decoderVar decoder'
+                  forM_ ansiEvents (writeTChan eventsChan)
+            event -> writeTChan eventsChan event
 
 instance MonadTrans AnsiTerminalT where
   lift = AnsiTerminalT . lift
@@ -113,12 +112,12 @@ instance (MonadIO m) => T.MonadPrettyPrinter (AnsiTerminalT m) where
     where
       options w   = PP.defaultLayoutOptions { PP.layoutPageWidth = PP.AvailablePerLine w 1.0 }
       sdoc w      = PP.layoutSmart (options w) doc
-      oldFG []                = Nothing
-      oldFG (Foreground c:xs) = Just c
-      oldFG (_:xs)            = oldFG xs
-      oldBG []                = Nothing
-      oldBG (Background c:xs) = Just c
-      oldBG (_:xs)            = oldBG xs
+      oldFG []               = Nothing
+      oldFG (Foreground c:_) = Just c
+      oldFG (_:xs)           = oldFG xs
+      oldBG []               = Nothing
+      oldBG (Background c:_) = Just c
+      oldBG (_:xs)           = oldBG xs
       render anns = \case
         PP.SFail           -> pure ()
         PP.SEmpty          -> pure ()
@@ -202,17 +201,21 @@ instance (MonadIO m) => T.MonadColorPrinter (AnsiTerminalT m) where
   background = Background
 
 instance (MonadIO m) => T.MonadScreen (AnsiTerminalT m) where
-  clear                                           = write "\ESC[H"
-  putCr                                           = write "\r"
-  cursorUp i                                      = write $ "\ESC[" <> Text.pack (show i) <> "A"
-  cursorDown i                                    = write $ "\ESC[" <> Text.pack (show i) <> "B"
-  cursorForward i                                 = write $ "\ESC[" <> Text.pack (show i) <> "C"
-  cursorBackward i                                = write $ "\ESC[" <> Text.pack (show i) <> "D"
-  cursorPosition x y                              = write $ "\ESC[" <> Text.pack (show x) <> ";" <> Text.pack (show y) <> "H"
-  cursorVisible                             False = write "\ESC[?25l"
-  cursorVisible                              True = write "\ESC[?25h"
-  --askCursorPosition                               = write "\ESC[6n"
-  getCursorPosition                               = pure (0,0)
+  moveCursorUp i                         = write $ "\ESC[" <> Text.pack (show i) <> "A"
+  moveCursorDown i                       = write $ "\ESC[" <> Text.pack (show i) <> "B"
+  moveCursorForward i                    = write $ "\ESC[" <> Text.pack (show i) <> "C"
+  moveCursorBackward i                   = write $ "\ESC[" <> Text.pack (show i) <> "D"
+  getCursorPosition = do
+    write "\ESC[6n"
+    undefined
+  setCursorPosition (x,y)                = write $ "\ESC[" <> Text.pack (show x) <> ";" <> Text.pack (show y) <> "H"
+  setVerticalCursorPosition i            = write $ "\ESC[" <> Text.pack (show i) <> "d"
+  setHorizontalCursorPosition i          = write $ "\ESC[" <> Text.pack (show i) <> "G"
+  saveCursorPosition                     = write "\ESC7"
+  restoreCursorPosition                  = write "\ESC8"
+  showCursor                             = write "\ESC[?25h"
+  hideCursor                             = write "\ESC[?25l"
+
   getScreenSize = AnsiTerminalT $ do
     ansi <- ask
     liftIO $ atomically $ T.termScreenSize ansi
@@ -222,7 +225,7 @@ safeChar :: Char -> Bool
 safeChar c
   | c == '\n'   = True  -- Newline
   | c == '\t'   = True  -- Horizontal tab
-  | c  < ' '    = False -- All other C0 control characters.
+  | c  < '\SP'  = False -- All other C0 control characters.
   | c  < '\DEL' = True  -- Printable remainder of ASCII. Start of C1.
   | c  < '\xa0' = False -- C1 up to start of Latin-1.
   | otherwise   = True

@@ -1,267 +1,218 @@
-{-# LANGUAGE BinaryLiterals             #-}
-{-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiWayIf #-}
 module Control.Monad.Terminal.Ansi.Decoder where
 
-import           Control.Monad                (forever, when)
 import           Control.Monad.STM
 import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Reader
-import           Data.Char
-import           Data.Maybe
-import           Data.Word
+import           Data.Monoid                  ((<>))
 
-import qualified Control.Monad.Terminal.Input as T
+import           Control.Monad.Terminal.Input
 
-class Monad m => MonadAnsiInput m where
-  getNext         :: m Char
-  getNextNonBlock :: m (Maybe Char)
+-- | The type `Decoder` represents a finite state transducer.
+--
+--   Values of this type can only be constructed by tying the knot
+--   which causes the resulting transducer to have one entry point
+--   but no exits. Intermediate state can be passed as closures.
+--   See below for an example.
+newtype Decoder = Decoder { feedDecoder :: Char -> ([Event], Decoder) }
 
-instance MonadAnsiInput (ReaderT (STM Char) STM) where
-  getNext = ask >>= lift
-  getNextNonBlock = ask >>= \mc-> lift ((Just <$> mc) `orElse` pure Nothing)
-
-decodeAnsi :: MonadAnsiInput m => m T.Event
-decodeAnsi = decode1 =<< getNext
+ansiDecoder :: Decoder
+ansiDecoder  = defaultMode
   where
-    decode1 :: MonadAnsiInput m => Char -> m T.Event
-    decode1 c
-      -- The first 31 values are control codes.
-      -- The ESC character _might_ introduce an escape sequence
-      -- and has to be treated specifically.
-      -- All other characters are directly mapped to a CharKey event.
-      | c == '\ESC'               = decodeEscape
-      | c >= '\SOH' && c <= '\US' = pure $ T.KeyEvent (T.CharKey (toEnum $ (+64) $ fromEnum c)) T.ctrlKey
-      | otherwise                 = pure $ T.KeyEvent (T.CharKey c) mempty
+    -- Make a production and return to `defaultMode`.
+    produce   :: [Event] -> ([Event], Decoder)
+    produce es = (es, defaultMode)
+    -- Continue processing with the given decoder.
+    -- Shall be used for state/mode change.
+    continue  :: Decoder -> ([Event], Decoder)
+    continue d = ([], d)
 
-    decodeEscape :: MonadAnsiInput m => m T.Event
-    decodeEscape = getNext >>= \case
-      '\NUL' -> pure $ T.KeyEvent (T.CharKey '\ESC') mempty -- a single escape is always followed by a filling NUL character (instead of timing)
-      x      -> decodeEscapeSequence x
+    -- The default mode is the decoder's entry point and is returned to
+    -- after each successful sequence decoding or as fail safe mode after
+    -- occurences of illegal state (this decoder shall skip errors and will
+    -- probably resynchronise on the input stream after a few characters).
+    defaultMode :: Decoder
+    defaultMode  = Decoder $ \c-> if
+        -- In normal mode a NUL is interpreted as a fill character and skipped.
+        | c == '\NUL' -> produce []
+        -- ESC might or might not introduce an escape sequence.
+        | c == '\ESC' -> continue escapeMode
+        -- All other C0 control codes are mapped to their corresponding ASCII character + CTRL modifier.
+        | c <= '\US'  -> produce [KeyEvent (CharKey (toEnum $ (+64) $ fromEnum c)) ctrlKey]
+        -- All remaning characters of the Latin-1 block are returned as is.
+        | c <  '\DEL' -> produce [KeyEvent (CharKey c) mempty]
+        -- DEL is a very delicate case. Its complicated mapping to either Backspace or Delete
+        -- shall have been done at a different layer at this point. This decoder
+        -- only reflects the ^? interpretation of this code.
+        | c == '\DEL' -> produce [KeyEvent (CharKey '?') ctrlKey]
+        -- Skip all other C1 control codes.
+        | c <  '\xA0' -> produce []
+        -- All other Unicode characters are returned as is.
+        | otherwise   -> produce [KeyEvent (CharKey c) mempty]
 
-    decodeEscapeSequence :: (MonadAnsiInput m) => Char -> m T.Event
-    decodeEscapeSequence x
-      | x >= '\SOH' && x <= '\EM' = pure $ T.KeyEvent (T.CharKey $ toEnum $ 64 + fromEnum x) (T.ctrlKey `mappend` T.altKey) -- urxvt
-      | x == '\ESC' = getNext >>= \case
-          '\NUL' -> pure $ T.OtherEvent "FNORD"
-          '0' -> getNext >>= \case -- seems to just add MAlt to all sequences
-            'a' -> pure $ T.KeyEvent (T.ArrowKey T.Upwards)    (T.ctrlKey `mappend` T.altKey) -- urxvt
-            'b' -> pure $ T.KeyEvent (T.ArrowKey T.Downwards)  (T.ctrlKey `mappend` T.altKey) -- urxvt
-            'c' -> pure $ T.KeyEvent (T.ArrowKey T.Rightwards) (T.ctrlKey `mappend` T.altKey) -- urxvt
-            'd' -> pure $ T.KeyEvent (T.ArrowKey T.Leftwards)  (T.ctrlKey `mappend` T.altKey) -- urxvt
-            y   -> pure $ T.OtherEvent ['\ESC', '\ESC', '0', y]
-          '[' -> getNext >>= \y-> decodeCSI y >>= \case
-            T.KeyEvent k ms -> pure $ T.KeyEvent k (T.altKey `mappend` ms) -- urxvt
-            ev           -> pure ev
-      | x == '\US' = pure $ T.KeyEvent (T.CharKey '-') (T.altKey `mappend` T.shiftKey) -- urxvt
-      | x == ' '   = pure $ T.KeyEvent (T.CharKey '1') (T.altKey `mappend` T.shiftKey) -- urxvt, gnome-terminal
-      | x == '!'   = pure $ T.KeyEvent (T.CharKey '3') (T.altKey `mappend` T.shiftKey) -- urxvt, gnome-terminal
-      | x == '\\'  = pure $ T.KeyEvent (T.CharKey '4') (T.altKey `mappend` T.shiftKey) -- urxvt, gnome-terminal
-      | x == '"'   = pure $ T.KeyEvent (T.CharKey '5') (T.altKey `mappend` T.shiftKey) -- urxvt, gnome-terminal
-      | x == '#'   = pure $ T.KeyEvent (T.CharKey '7') (T.altKey `mappend` T.shiftKey) -- urxvt, gnome-terminal
-      | x == '$'   = pure $ T.KeyEvent (T.CharKey '\'') T.altKey -- urxvt, gnome-terminal
-      | x == '%'   = pure $ T.KeyEvent (T.CharKey '9') (T.altKey `mappend` T.shiftKey) -- urxvt, gnome-terminal
-      | x == '&'   = pure $ T.KeyEvent (T.CharKey '0') (T.altKey `mappend` T.shiftKey) -- urxvt, gnome-terminal
-      | x == '\''  = pure $ T.KeyEvent (T.CharKey '8') (T.altKey `mappend` T.shiftKey) -- urxvt, gnome-terminal
-      | x == '+'   = pure $ T.KeyEvent (T.CharKey '=') (T.altKey `mappend` T.shiftKey) -- urxvt, gnome-terminal
-      | x == ','   = pure $ T.KeyEvent (T.CharKey ',') T.altKey -- urxvt, gnome-terminal
-      | x == '-'   = pure $ T.KeyEvent (T.CharKey '-') T.altKey
-      | x == '.'   = pure $ T.KeyEvent (T.CharKey '.') T.altKey -- urxvt, gnome-terminal
-      | x == '/'   = pure $ T.KeyEvent (T.CharKey '/') T.altKey -- urxvt, gnome-terminal
-      | x == '0'   = pure $ T.KeyEvent (T.CharKey '0') T.altKey
-      | x == '1'   = pure $ T.KeyEvent (T.CharKey '1') T.altKey
-      | x == '2'   = pure $ T.KeyEvent (T.CharKey '2') T.altKey
-      | x == '3'   = pure $ T.KeyEvent (T.CharKey '3') T.altKey
-      | x == '4'   = pure $ T.KeyEvent (T.CharKey '4') T.altKey
-      | x == '5'   = pure $ T.KeyEvent (T.CharKey '5') T.altKey
-      | x == '6'   = pure $ T.KeyEvent (T.CharKey '6') T.altKey
-      | x == '7'   = pure $ T.KeyEvent (T.CharKey '7') T.altKey
-      | x == '8'   = pure $ T.KeyEvent (T.CharKey '8') T.altKey
-      | x == '9'   = pure $ T.KeyEvent (T.CharKey '9') T.altKey
-      | x == ';'   = pure $ T.KeyEvent (T.CharKey ';') T.altKey
-      | x == '<'   = pure $ T.KeyEvent (T.CharKey '<') T.altKey
-      | x == '='   = pure $ T.KeyEvent (T.CharKey '=') T.altKey
-      | x == '>'   = pure $ T.KeyEvent (T.CharKey '>') (T.altKey `mappend` T.shiftKey)
-      | x == '?'   = pure $ T.KeyEvent (T.CharKey '2') (T.altKey `mappend` T.shiftKey)
-      | x == '@'   = pure $ T.KeyEvent (T.CharKey 'A') (T.altKey `mappend` T.shiftKey)
-      | x == 'O'   = getNext >>= \case
-                        'P' -> pure $ T.KeyEvent (T.FunctionKey   1) mempty -- gnome-terminal (?)
-                        'Q' -> pure $ T.KeyEvent (T.FunctionKey   2) mempty -- gnome-terminal
-                        'R' -> pure $ T.KeyEvent (T.FunctionKey   3) mempty -- gnome-terminal
-                        'S' -> pure $ T.KeyEvent (T.FunctionKey   4) mempty -- gnome-terminal
-                        'a' -> pure $ T.KeyEvent (T.ArrowKey T.Upwards)    T.ctrlKey -- urxvt
-                        'b' -> pure $ T.KeyEvent (T.ArrowKey T.Downwards)  T.ctrlKey -- urxvt
-                        'c' -> pure $ T.KeyEvent (T.ArrowKey T.Rightwards) T.ctrlKey -- urxvt
-                        'd' -> pure $ T.KeyEvent (T.ArrowKey T.Leftwards)  T.ctrlKey -- urxvt
-                        xs  -> error (show xs)
-      | x == '['   = getNext >>= \case
-                        '\NUL' -> pure $ T.KeyEvent (T.CharKey '[') T.altKey -- urxvt, gnome-terminal
-                        y      -> decodeCSI y
-      | x == '\\'   = pure $ T.KeyEvent (T.CharKey '\\') T.altKey -- urxvt, gnome-terminal
-      | x == ']'    = pure $ T.KeyEvent (T.CharKey ']')  T.altKey -- urxvt, gnome-terminal
-      | x == '^'    = pure $ T.KeyEvent (T.CharKey '6')  (T.altKey `mappend` T.shiftKey) -- urxvt, gnome-terminal
-      | x == '_'    = pure $ T.KeyEvent (T.CharKey '_')  (T.altKey `mappend` T.shiftKey) -- urxvt, gnome-terminal
-      | x == '`'    = pure $ T.KeyEvent (T.CharKey '`')  T.altKey -- urxvt, gnome-terminal
-      | x == '~'    = pure $ T.KeyEvent (T.CharKey '`')  (T.altKey `mappend` T.shiftKey) -- urxvt, gnome-terminal
-      | x == '\DEL' = pure $ T.KeyEvent T.DeleteKey mempty
-      | x >= 'a' && x <= 'z' = pure $ T.KeyEvent (T.CharKey x) T.altKey
-      | otherwise   = error $ show x
+    -- This function shall be called if an ESC has been read in default mode
+    -- and it is stil unclear whether this is the beginning of an escape sequence or not.
+    -- NOTE: This function is total and consumes at least one more character of input.
+    escapeMode :: Decoder
+    escapeMode  = Decoder $ \c-> if
+      -- Single escape key press is always followed by a NUL fill character
+      -- by design (instead of timing). This makes reasoning and testing much easier
+      -- and reliable.
+      | c == '\NUL' -> produce [KeyEvent (CharKey '[') ctrlKey]
+      | otherwise   -> continue (escapeSequenceMode c)
 
-    decodeCSI :: (MonadAnsiInput m) => Char -> m T.Event
-    decodeCSI y = withParams1 y $ \ps-> \case
-      '\ESC'     -> pure $ T.KeyEvent (T.CharKey '[') T.altKey             -- urxvt
-      '$'        -> pure $ T.KeyEvent T.DeleteKey (T.altKey `mappend` T.shiftKey)       -- urxvt, gnome-terminal
-      '@'        -> undefined -- withN 1 ps $ \n-> pure $ T.KeyEvent (T.KSpace  n) mempty -- in urxvt shift+ctrl+pageup/down causes n==5/6
-      'A'        -> decodeArrowKey ps (T.ArrowKey T.Upwards)
-      'B'        -> decodeArrowKey ps (T.ArrowKey T.Downwards)
-      'C'        -> decodeArrowKey ps (T.ArrowKey T.Rightwards)
-      'D'        -> decodeArrowKey ps (T.ArrowKey T.Leftwards)
-      'E'        -> undefined
-      'F'        -> pure $ T.KeyEvent T.EndKey mempty
-      'G'        -> undefined
-      'H'        -> pure $ T.KeyEvent T.HomeKey mempty
-      'I'        -> withN 1 ps $ \n-> pure $ T.KeyEvent T.TabKey mempty
-      'J'        -> undefined
-      'K'        -> undefined
-      'L'        -> undefined
-      'M'        -> undefined
-      'N'        -> undefined
-      'O'        -> undefined
-      'P'        -> undefined
-      'Q'        -> undefined
-      'R'        -> withNM 0 0 ps $ \n m-> pure $ T.EvCursorPosition (n,m)
-      'S'        -> undefined
-      'T'        -> undefined
-      'U'        -> undefined
-      'V'        -> undefined
-      'W'        -> undefined
-      'X'        -> undefined
-      'Y'        -> undefined
-      'Z'        -> withN 1 ps $ \n-> pure $ T.KeyEvent T.TabKey T.shiftKey
-      '^'        -> case ps of
-                      [    '2'] -> pure $ T.KeyEvent T.InsertKey   T.ctrlKey
-                      [    '3'] -> pure $ T.KeyEvent T.DeleteKey T.ctrlKey
-                      [    '4'] -> pure $ T.KeyEvent T.PageUpKey   T.ctrlKey
-                      [    '7'] -> pure $ T.KeyEvent T.PageDownKey T.ctrlKey
-                      [    '5'] -> pure $ T.KeyEvent T.HomeKey     T.ctrlKey
-                      [    '6'] -> pure $ T.KeyEvent T.EndKey      T.ctrlKey
-                      ['1','1'] -> pure $ T.KeyEvent (T.FunctionKey  1) T.ctrlKey
-                      ['1','2'] -> pure $ T.KeyEvent (T.FunctionKey  2) T.ctrlKey
-                      ['1','3'] -> pure $ T.KeyEvent (T.FunctionKey  3) T.ctrlKey
-                      ['1','4'] -> pure $ T.KeyEvent (T.FunctionKey  4) T.ctrlKey
-                      ['1','5'] -> pure $ T.KeyEvent (T.FunctionKey  5) T.ctrlKey
-                      ['1','7'] -> pure $ T.KeyEvent (T.FunctionKey  6) T.ctrlKey
-                      ['1','8'] -> pure $ T.KeyEvent (T.FunctionKey  7) T.ctrlKey
-                      ['1','9'] -> pure $ T.KeyEvent (T.FunctionKey  8) T.ctrlKey
-                      ['2','0'] -> pure $ T.KeyEvent (T.FunctionKey  9) T.ctrlKey
-                      ['2','1'] -> pure $ T.KeyEvent (T.FunctionKey 10) T.ctrlKey
-                      ['2','2'] -> pure $ T.KeyEvent (T.FunctionKey 11) T.ctrlKey
-                      ['2','3'] -> pure $ T.KeyEvent (T.FunctionKey 12) T.ctrlKey
-                      ['2','4'] -> pure $ T.KeyEvent (T.FunctionKey 13) T.ctrlKey
-                      ['2','5'] -> pure $ T.KeyEvent (T.FunctionKey 14) T.ctrlKey
-                      ['2','7'] -> pure $ T.KeyEvent (T.FunctionKey 15) T.ctrlKey
-                      ['2','8'] -> pure $ T.KeyEvent (T.FunctionKey 16) T.ctrlKey
-                      ['3','1'] -> pure $ T.KeyEvent (T.FunctionKey 17) T.ctrlKey
-                      ['3','2'] -> pure $ T.KeyEvent (T.FunctionKey 18) T.ctrlKey
-                      ['3','4'] -> pure $ T.KeyEvent (T.FunctionKey 19) T.ctrlKey
-                      ['3','5'] -> pure $ T.KeyEvent (T.FunctionKey 20) T.ctrlKey
-                      _         -> error ("FOOB" ++ show ps)
-      'f' -> undefined
-      'i' -> pure $ T.KeyEvent T.PrintKey mempty
-      'm' -> undefined -- SGR
-      '~' -> case ps of
-        "2"    -> pure $ T.KeyEvent T.InsertKey mempty
-        "3"    -> pure $ T.KeyEvent T.DeleteKey mempty
-        "5"    -> pure $ T.KeyEvent T.PageUpKey mempty
-        "6"    -> pure $ T.KeyEvent T.PageDownKey mempty
-        "9"    -> pure $ T.KeyEvent T.HomeKey mempty
-        "10"   -> pure $ T.KeyEvent T.EndKey mempty
-        "11"   -> pure $ T.KeyEvent (T.FunctionKey 1) mempty
-        "12"   -> pure $ T.KeyEvent (T.FunctionKey 2) mempty
-        "13"   -> pure $ T.KeyEvent (T.FunctionKey 3) mempty
-        "14"   -> pure $ T.KeyEvent (T.FunctionKey 4) mempty
-        "15"   -> pure $ T.KeyEvent (T.FunctionKey 5) mempty
-        "17"   -> pure $ T.KeyEvent (T.FunctionKey 6) mempty
-        "18"   -> pure $ T.KeyEvent (T.FunctionKey 7) mempty
-        "19"   -> pure $ T.KeyEvent (T.FunctionKey 8) mempty
-        "20"   -> pure $ T.KeyEvent (T.FunctionKey 9) mempty
-        "21"   -> pure $ T.KeyEvent (T.FunctionKey 10) mempty
-        "22"   -> pure $ T.KeyEvent (T.FunctionKey 11) mempty
-        "23"   -> pure $ T.KeyEvent (T.FunctionKey 12) mempty
-        "24"   -> pure $ T.KeyEvent (T.FunctionKey 13) mempty
-        "25"   -> pure $ T.KeyEvent (T.FunctionKey 14) mempty
-        "27"   -> pure $ T.KeyEvent (T.FunctionKey 15) mempty
-        "28"   -> pure $ T.KeyEvent (T.FunctionKey 16) mempty
-        "31"   -> pure $ T.KeyEvent (T.FunctionKey 17) mempty
-        "32"   -> pure $ T.KeyEvent (T.FunctionKey 18) mempty
-        "33"   -> pure $ T.KeyEvent (T.FunctionKey 19) mempty
-        "34"   -> pure $ T.KeyEvent (T.FunctionKey 20) mempty
-        "15;5" -> pure $ T.KeyEvent (T.FunctionKey  5) T.ctrlKey         -- gnome-terminal
-        "17;5" -> pure $ T.KeyEvent (T.FunctionKey  6) T.ctrlKey         -- gnome-terminal
-        "18;5" -> pure $ T.KeyEvent (T.FunctionKey  7) T.ctrlKey         -- gnome-terminal
-        "19;5" -> pure $ T.KeyEvent (T.FunctionKey  8) T.ctrlKey         -- gnome-terminal
-        "20;5" -> pure $ T.KeyEvent (T.FunctionKey  9) T.ctrlKey         -- gnome-terminal
-        "21;5" -> pure $ T.KeyEvent (T.FunctionKey 10) T.ctrlKey         -- gnome-terminal
-        "22;5" -> pure $ T.KeyEvent (T.FunctionKey 11) T.ctrlKey         -- gnome-terminal
-        "23;5" -> pure $ T.KeyEvent (T.FunctionKey 12) T.ctrlKey         -- gnome-terminal
-        "2;3"  -> pure $ T.KeyEvent T.InsertKey T.altKey            -- gnome-terminal
-        "3;5"  -> pure $ T.KeyEvent T.DeleteKey T.ctrlKey           -- xterm
-        "3;3"  -> pure $ T.KeyEvent T.DeleteKey T.altKey            -- gnome-terminal
-        "5;4"  -> pure $ T.KeyEvent T.PageUpKey T.ctrlKey           -- gnome-terminal
-        "5;5"  -> pure $ T.KeyEvent T.PageDownKey T.ctrlKey         -- gnome-terminal
-        "5;3"  -> pure $ T.KeyEvent T.PageUpKey T.altKey            -- gnome-terminal
-        "6;3"  -> pure $ T.KeyEvent T.PageDownKey T.altKey          -- gnome-terminal
-        "5;7"  -> pure $ T.KeyEvent T.PageUpKey (T.ctrlKey `mappend` T.altKey)   -- gnome-terminal
-        "6;7"  -> pure $ T.KeyEvent T.PageDownKey (T.ctrlKey `mappend` T.altKey) -- gnome-terminal
-        _      -> error $ show ps
-      x   -> error $ "HERE" ++ show x
+    -- This function shall be called with the escape sequence introducer.
+    -- It needs to look at next character to decide whether this is
+    -- a CSI sequence or an ALT-modified key or illegal state.
+    escapeSequenceMode :: Char -> Decoder
+    escapeSequenceMode c = Decoder $ \case
+      '\NUL' | c >= ' ' && c <= '~'  -> produce [KeyEvent (CharKey c) altKey]
+             | c >= '\xa0'           -> produce [KeyEvent (CharKey c) altKey]
+      d      | c == '['              -> csiMode d
+             | otherwise             -> produce []
+
+    -- ESC[ is followed by any number (including none) of parameter chars in the
+    -- range 0–9:;<=>?, then by any number of intermediate chars
+    -- in the range space and !"#$%&'()*+,-./, then finally by a single char in
+    -- the range @A–Z[\]^_`a–z{|}~.
+    -- For security reasons (untrusted input and denial of service) this parser
+    -- only accepts a very limited number of characters for both parameter and
+    -- intermediate chars.
+    -- Unknown (not illegal) sequences are dropped, but it is guaranteed that
+    -- they will be consumed completely and it is safe for the parser to
+    -- return to normal mode afterwards. Illegal sequences cause the parser
+    -- to consume the input up to the first violating character and then reject.
+    -- The parser might be out of sync afterwards, but this is a protocol
+    -- violation anyway. The parser's only job here is not to loop (consume
+    -- and drop the illegal input!) and then to stop and fail reliably.
+    csiMode :: Char -> ([Event], Decoder)
+    csiMode c
+      | c >= '0' && c <= '?' = continue $ f (charLimit - 1) [c]
+      | c >= '!' && c <= '/' = continue $ g (charLimit - 1) [] [c]
+      | c >= '@' && c <= '~' = produce $ interpretCSI [] [] c
+      | otherwise            = produce [] -- Illegal state. Return to default mode.
       where
-        decodeArrowKey ps key = withNumbers ps $ \case
-          []    -> pure $ T.KeyEvent key mempty
-          [_]   -> pure $ T.KeyEvent key mempty
-          [1,3] -> pure $ T.KeyEvent key T.altKey          -- gnome-terminal
-          [1,5] -> pure $ T.KeyEvent key T.ctrlKey         -- gnome-terminal
-          [1,7] -> pure $ T.KeyEvent key (T.ctrlKey `mappend` T.altKey) -- gnome-terminal
-          xs    -> error (show xs)
+        charLimit :: Int
+        charLimit  = 16
+        -- Note: The following functions use recursion, but recursion is
+        -- guaranteed to terminate and maximum recursion depth is only
+        -- dependant on the constant `charLimit`. In case of errors the decoder
+        -- will therefore recover to default mode after at most 32 characters.
+        f :: Int -> String -> Decoder
+        f 0 _  = defaultMode
+        f i ps = Decoder $ \c-> if
+          | c >= '0' && c <= '?' -> continue $ f (i - 1) (c:ps)  -- More parameters.
+          | c >= '!' && c <= '/' -> continue $ g charLimit ps [] -- Start of intermediates.
+          | c >= '@' && c <= '~' -> produce $ interpretCSI (reverse ps) [] c
+          | otherwise            -> produce [] -- Illegal state. Return to default mode.
+        g :: Int -> String -> String -> Decoder
+        g 0 _  _  = defaultMode
+        g i ps is = Decoder $ \c-> if
+          | c >= '!' && c <= '/' -> continue $ g (i - 1) ps (c:is) -- More intermediates.
+          | c >= '@' && c <= '~' -> produce $ interpretCSI (reverse ps) (reverse is) c
+          | otherwise            -> produce [] -- Illegal state. Return to default mode.
 
-withParams1 :: MonadAnsiInput m => Char -> ([Char] -> Char -> m a) -> m a
-withParams1 x f
-  | x >= '0' && x <= '?' = withParameters 256 [x]
-  | otherwise            = f [] x
+interpretCSI :: String -> String -> Char -> [Event]
+interpretCSI params intermediates = \case
+  '$'        -> [KeyEvent DeleteKey (altKey `mappend` shiftKey)]  -- urxvt, gnome-terminal
+  '@'        -> []
+  'A'        -> modified $ ArrowKey Upwards
+  'B'        -> modified $ ArrowKey Downwards
+  'C'        -> modified $ ArrowKey Rightwards
+  'D'        -> modified $ ArrowKey Leftwards
+  'E'        -> modified   BeginKey
+  'F'        -> modified   EndKey
+  'G'        -> []
+  'H'        -> modified   HomeKey
+  'I'        -> modified   TabKey
+  'J'        -> []
+  'K'        -> []
+  'L'        -> []
+  'M'        -> []
+  'N'        -> []
+  'O'        -> []
+  'P'        -> modified (FunctionKey  1)
+  'Q'        -> modified (FunctionKey  2)
+  'R'        -> modified (FunctionKey  3)
+  'S'        -> modified (FunctionKey  4)
+  'T'        -> []
+  'U'        -> []
+  'V'        -> []
+  'W'        -> []
+  'X'        -> []
+  'Y'        -> []
+  'Z'        -> [KeyEvent TabKey shiftKey]
+  '^'        -> case params of
+    "2"  -> [KeyEvent InsertKey        ctrlKey]
+    "3"  -> [KeyEvent DeleteKey        ctrlKey]
+    "4"  -> [KeyEvent PageUpKey        ctrlKey]
+    "7"  -> [KeyEvent PageDownKey      ctrlKey]
+    "5"  -> [KeyEvent HomeKey          ctrlKey]
+    "6"  -> [KeyEvent EndKey           ctrlKey]
+    "11" -> [KeyEvent (FunctionKey  1) ctrlKey]
+    "12" -> [KeyEvent (FunctionKey  2) ctrlKey]
+    "13" -> [KeyEvent (FunctionKey  3) ctrlKey]
+    "14" -> [KeyEvent (FunctionKey  4) ctrlKey]
+    "15" -> [KeyEvent (FunctionKey  5) ctrlKey]
+    "17" -> [KeyEvent (FunctionKey  6) ctrlKey]
+    "18" -> [KeyEvent (FunctionKey  7) ctrlKey]
+    "19" -> [KeyEvent (FunctionKey  8) ctrlKey]
+    "20" -> [KeyEvent (FunctionKey  9) ctrlKey]
+    "21" -> [KeyEvent (FunctionKey 10) ctrlKey]
+    "22" -> [KeyEvent (FunctionKey 11) ctrlKey]
+    "23" -> [KeyEvent (FunctionKey 12) ctrlKey]
+    "24" -> [KeyEvent (FunctionKey 13) ctrlKey]
+    "25" -> [KeyEvent (FunctionKey 14) ctrlKey]
+    "27" -> [KeyEvent (FunctionKey 15) ctrlKey]
+    "28" -> [KeyEvent (FunctionKey 16) ctrlKey]
+    "31" -> [KeyEvent (FunctionKey 17) ctrlKey]
+    "32" -> [KeyEvent (FunctionKey 18) ctrlKey]
+    "34" -> [KeyEvent (FunctionKey 19) ctrlKey]
+    "35" -> [KeyEvent (FunctionKey 20) ctrlKey]
+    _    -> []
+  'f' -> []
+  'i' -> [KeyEvent PrintKey mempty]
+  'm' -> []
+  '~' -> case fstParam of
+    "2"  -> modified InsertKey
+    "3"  -> modified DeleteKey
+    "5"  -> modified PageUpKey
+    "6"  -> modified PageDownKey
+    "9"  -> modified HomeKey
+    "10" -> modified EndKey
+    "11" -> modified (FunctionKey 1)
+    "12" -> modified (FunctionKey 2)
+    "13" -> modified (FunctionKey 3)
+    "14" -> modified (FunctionKey 4)
+    "15" -> modified (FunctionKey 5)
+    "17" -> modified (FunctionKey 6)
+    "18" -> modified (FunctionKey 7)
+    "19" -> modified (FunctionKey 8)
+    "20" -> modified (FunctionKey 9)
+    "21" -> modified (FunctionKey 10)
+    "22" -> modified (FunctionKey 11)
+    "23" -> modified (FunctionKey 12)
+    "24" -> modified (FunctionKey 13)
+    "25" -> modified (FunctionKey 14)
+    "27" -> modified (FunctionKey 15)
+    "28" -> modified (FunctionKey 16)
+    "31" -> modified (FunctionKey 17)
+    "32" -> modified (FunctionKey 18)
+    "33" -> modified (FunctionKey 19)
+    "34" -> modified (FunctionKey 20)
+    _    -> []
+  _ -> []
   where
-    withParameters 0 _            = fail "CSI: LENGTH LIMIT EXCEEDED"
-    withParameters limit ps       = getNext >>= \case
-      y | y >= '0' && y <= '9' -> withParameters (limit - 1) $! y:ps
-        | otherwise            -> f (reverse ps) y
-
-withN :: Monad m => Int -> [Char] -> (Int -> m a) -> m a
-withN defN [] f               = f defN
-withN _    ps f               = g ps 0
-  where
-    g [] i                    = f i
-    g (x:xs) i
-      | x >= '0' && x <= '9'  = g xs $! i * 10 - 48 + fromEnum x
-      | otherwise             = error $ "CSI: INVALID NUMBER " ++ show x
-
-withNM :: Monad m => Int -> Int -> [Char] -> (Int -> Int -> m a) -> m a
-withNM defN defM []       f  = f defN defM
-withNM defN defM [';']    f  = f defN defM
-withNM defN defM (';':ps) f  = withN defM ps (f defN)
-withNM defN defM      ps  f  = g ps 0
-  where
-    g [] i                   = fail "CSI: INVALID NUMBER"
-    g (x:xs) i
-      | x == ';'             = withN defM xs (f i)
-      | x >= '0' && x <= '9' = g xs $! i * 10 - 48 + fromEnum x
-      | otherwise            = fail "CSI: INVALID NUMBER"
-
-withNumbers :: (Monad m) => [Char] -> ([Int] -> m a) -> m a
-withNumbers xs f = numbers' xs 0 >>= f
-  where
-    numbers' [] i
-      = pure [i]
-    numbers' (x:xs) i
-      | x >= '0' && x <= '9' = numbers' xs (i * 10 - 48 + fromEnum x)
-      | x == ';'             = (i:) <$> numbers' xs 0
-      | otherwise            = fail ""
+    fstParam = takeWhile (/= ';') params
+    sndParam = takeWhile (/= ';') $ drop 1 $ dropWhile (/= ';') params
+    modified key = case sndParam of
+      ""  -> [KeyEvent key   mempty                       ]
+      "2" -> [KeyEvent key   shiftKey                     ]
+      "3" -> [KeyEvent key               altKey           ]
+      "4" -> [KeyEvent key $ shiftKey <> altKey           ]
+      "5" -> [KeyEvent key                         ctrlKey]
+      "6" -> [KeyEvent key $ shiftKey <>           ctrlKey]
+      "7" -> [KeyEvent key $             altKey <> ctrlKey]
+      "8" -> [KeyEvent key $ shiftKey <> altKey <> ctrlKey]
+      _   -> []
