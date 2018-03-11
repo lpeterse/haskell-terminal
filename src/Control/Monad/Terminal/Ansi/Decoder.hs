@@ -5,6 +5,7 @@ module Control.Monad.Terminal.Ansi.Decoder where
 import           Control.Monad.STM
 import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Reader
+import           Data.Char
 import           Data.Monoid                  ((<>))
 
 import           Control.Monad.Terminal.Input
@@ -134,7 +135,11 @@ interpretCSI params intermediates = \case
   'O'        -> []
   'P'        -> modified (FunctionKey  1)
   'Q'        -> modified (FunctionKey  2)
-  'R'        -> modified (FunctionKey  3)
+  -- This sequence is ambiguous. xterm and derivatives use this to encode a modified F3 key as
+  -- well as a cursor position report. There is no real solution to disambiguate these two
+  -- other than context of expectation (cursor position report has probably been requested).
+  -- This decoder shall simply emit both events and the user shall ignore unexpected events.
+  'R'        -> modified (FunctionKey  3) ++ [DeviceEvent $ CursorPositionReport (fstNumber 0, sndNumber 0)]
   'S'        -> modified (FunctionKey  4)
   'T'        -> []
   'U'        -> []
@@ -204,8 +209,18 @@ interpretCSI params intermediates = \case
     _    -> []
   _ -> []
   where
+    fstParam :: String
     fstParam = takeWhile (/= ';') params
+    sndParam :: String
     sndParam = takeWhile (/= ';') $ drop 1 $ dropWhile (/= ';') params
+    fstNumber :: Int -> Int
+    fstNumber i
+      | not (null fstParam) && all isDigit fstParam = read fstParam
+      | otherwise                                   = i
+    sndNumber :: Int -> Int
+    sndNumber i
+      | not (null sndParam) && all isDigit sndParam = read sndParam
+      | otherwise                                   = i
     modified key = case sndParam of
       ""  -> [KeyEvent key   mempty                       ]
       "2" -> [KeyEvent key   shiftKey                     ]

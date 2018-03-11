@@ -65,8 +65,6 @@ runAnsiTerminalT (AnsiTerminalT action) ansi = do
 instance MonadTrans AnsiTerminalT where
   lift = AnsiTerminalT . lift
 
-instance (MonadIO m) => T.MonadTerminal (AnsiTerminalT m) where
-
 instance (MonadIO m) => T.MonadInput (AnsiTerminalT m) where
   waitMapInterruptAndEvents f = AnsiTerminalT $ do
     ansi <- ask
@@ -200,14 +198,18 @@ instance (MonadIO m) => T.MonadColorPrinter (AnsiTerminalT m) where
   foreground = Foreground
   background = Background
 
-instance (MonadIO m) => T.MonadScreen (AnsiTerminalT m) where
+instance (MonadIO m) => T.MonadTerminal (AnsiTerminalT m) where
   moveCursorUp i                         = write $ "\ESC[" <> Text.pack (show i) <> "A"
   moveCursorDown i                       = write $ "\ESC[" <> Text.pack (show i) <> "B"
   moveCursorForward i                    = write $ "\ESC[" <> Text.pack (show i) <> "C"
   moveCursorBackward i                   = write $ "\ESC[" <> Text.pack (show i) <> "D"
   getCursorPosition = do
     write "\ESC[6n"
-    undefined
+    waitForCursorPositionReport
+    where
+      waitForCursorPositionReport = T.waitEvent >>= \case
+        T.DeviceEvent (T.CursorPositionReport pos) -> pure pos
+        _ -> waitForCursorPositionReport
   setCursorPosition (x,y)                = write $ "\ESC[" <> Text.pack (show x) <> ";" <> Text.pack (show y) <> "H"
   setVerticalCursorPosition i            = write $ "\ESC[" <> Text.pack (show i) <> "d"
   setHorizontalCursorPosition i          = write $ "\ESC[" <> Text.pack (show i) <> "G"

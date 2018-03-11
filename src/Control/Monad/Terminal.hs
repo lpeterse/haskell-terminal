@@ -2,7 +2,7 @@
 module Control.Monad.Terminal
   (  -- * MonadTerminal
      Terminal (..)
-   , MonadTerminal
+   , MonadTerminal (..)
     -- ** Getting started
     -- * Printing
     -- ** MonadPrinter
@@ -38,19 +38,15 @@ module Control.Monad.Terminal
   , metaKey
   , Direction (..)
   , MouseEvent (..)
+  , DeviceEvent (..)
   , WindowEvent (..)
-    -- * Screen Manipulation
-    -- ** MonadScreen
-  , MonadScreen (..)
   ) where
 
 import           Control.Monad.Terminal.Input
 import           Control.Monad.Terminal.Printer
 import           Control.Monad.Terminal.Terminal
 
-class (MonadInput m, MonadPrettyPrinter m, MonadFormatPrinter m, MonadColorPrinter m, MonadScreen m) => MonadTerminal m where
-
-class MonadPrinter m => MonadScreen m where
+class (MonadInput m, MonadPrettyPrinter m, MonadFormatPrinter m, MonadColorPrinter m) => MonadTerminal m where
   -- | Moves the cursor up `n` lines. Does not change column.
   moveCursorUp                :: Int -> m ()
   -- | Moves the cursor down `n` lines. Does not change column.
@@ -76,4 +72,3 @@ class MonadPrinter m => MonadScreen m where
   -- | Hides the cursor.
   hideCursor                  :: m ()
   getScreenSize               :: m (Int,Int)
-

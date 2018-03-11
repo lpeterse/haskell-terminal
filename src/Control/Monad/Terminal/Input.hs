@@ -129,7 +129,7 @@ data Event
   = KeyEvent Key Modifiers
   | MouseEvent MouseEvent
   | WindowEvent WindowEvent
-  | EvCursorPosition (Int,Int)
+  | DeviceEvent DeviceEvent
   | InterruptEvent
   | OtherEvent String
   deriving (Eq,Ord,Show)
@@ -159,4 +159,9 @@ data WindowEvent
   = WindowLostFocus
   | WindowGainedFocus
   | WindowSizeChanged (Int,Int)
+  deriving (Eq, Ord, Show)
+
+data DeviceEvent
+  = DeviceAttributesReport String
+  | CursorPositionReport (Int,Int)
   deriving (Eq, Ord, Show)

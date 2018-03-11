@@ -168,7 +168,18 @@ withInputProcessing mainThread interrupt events ma = do
         -- This is cooperative multitasking to circumvent the limitations of IO on Windows.
         Nothing -> do
           shallTerminate <- atomically (readTVar terminate)
-          unless shallTerminate continue
+          unless shallTerminate $ do
+            -- When the escape key is release, a NUL character is written to the
+            -- char stream. The NUL character is a replacement for timing based
+            -- escape sequence recognition and enables the escape sequence decoder
+            -- to reliably distinguish real escape key presses and escape sequences
+            -- from another.
+            atomically $ do
+              latest <- readTVar latestCharacter
+              when (latest /= '\NUL') $ do
+                writeTVar latestCharacter '\NUL'
+                writeTChan events (T.KeyEvent (T.CharKey '\NUL') mempty)
+            continue
         Just ev -> (>> continue) $ case ev of
           KeyEvent { ceCharKey = c, ceKeyDown = d, ceKeyModifiers = mods }
             -- In virtual terminal mode, Windows actually sends Ctrl+C and there is no
@@ -185,13 +196,6 @@ withInputProcessing mainThread interrupt events ma = do
                   writeTChan events T.InterruptEvent
                   swapTVar interrupt True
                 when unhandledInterrupt (E.throwTo mainThread E.UserInterrupt)
-            -- When the escape key is release, a NUL character is written to the
-            -- char stream. The NUL character is a replacement for timing based
-            -- escape sequence recognition and enables the escape sequence decoder
-            -- to reliably distinguish real escape key presses and escape sequences
-            -- from another.
-            | c == '\ESC' && not d -> atomically $
-                writeTChan events (T.KeyEvent (T.CharKey '\NUL') mempty)
             -- When the character is ESC and the key is pressed down it might be
             -- that the key is hold pressed. In this case a NUL has to be emitted
             -- before emitting the ESC in order to signal that the previous ESC does
@@ -202,7 +206,6 @@ withInputProcessing mainThread interrupt events ma = do
                   _      -> writeTVar  latestCharacter '\ESC'
                 writeTChan events (T.KeyEvent (T.CharKey '\ESC') mempty)
             | d -> atomically $ writeTVar latestCharacter c >> case c of
-                '\NUL'  -> pure ()
                 '\t'    -> writeTChan events (T.KeyEvent T.TabKey      mods)
                 '\r'    -> writeTChan events (T.KeyEvent T.EnterKey    mods)
                 '\n'    -> writeTChan events (T.KeyEvent T.EnterKey    mods)
@@ -277,7 +280,7 @@ instance Storable ConsoleInputEvent where
       <*> (toEnum . fromIntegral <$> peek ptrKeyUnicodeChar)
       <*> (modifiersFromControlKeyState <$> peek ptrKeyControlKeyState)
     (#const MOUSE_EVENT) -> MouseEvent <$> do
-      pos <- peek ptrMousePositionX >>= \x-> peek ptrMousePositionY >>= \y-> pure (fromIntegral x, fromIntegral y)
+      pos <- peek ptrMousePositionX >>= \x-> peek ptrMousePositionY >>= \y-> pure (fromIntegral y, fromIntegral x)
       btn <- peek ptrMouseButtonState
       peek ptrMouseEventFlags >>= \case
         (#const MOUSE_MOVED)    -> pure (T.MouseMoved   pos)

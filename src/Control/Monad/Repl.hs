@@ -165,7 +165,7 @@ instance (MonadCatch m, MonadPrettyPrinter m, T.MonadColorPrinter m) => T.MonadC
   foreground c = Annotation' (T.foreground c)
   background c = Annotation' (T.background c)
 
-instance (MonadCatch m, MonadScreen m) => T.MonadScreen (ReplT s m) where
+instance (MonadCatch m, MonadTerminal m) => T.MonadTerminal (ReplT s m) where
   moveCursorUp                = lift . moveCursorUp
   moveCursorDown              = lift . moveCursorDown
   moveCursorForward           = lift . moveCursorForward
@@ -182,8 +182,6 @@ instance (MonadCatch m, MonadScreen m) => T.MonadScreen (ReplT s m) where
 
 instance (MonadCatch m, T.MonadInput m) => T.MonadInput (ReplT s m) where
   waitMapInterruptAndEvents = lift . waitMapInterruptAndEvents
-
-instance (MonadCatch m, T.MonadTerminal m, T.MonadPrettyPrinter m) => T.MonadTerminal (ReplT s m) where
 
 instance (Monad m) => MonadQuit (ReplT s m) where
   quit = ReplT $ \_ s-> pure s
@@ -251,7 +249,7 @@ readString p = do
         | otherwise ->
             withStacks xss yss
       ev -> do
-        --lift $ T.putStringLn (show ev)
+        --putStringLn (show ev)
         flush
         withStacks xss yss
 
