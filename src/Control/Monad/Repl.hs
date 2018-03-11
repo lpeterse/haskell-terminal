@@ -219,7 +219,7 @@ readString p = do
             putLn
             flush
             pure $ reverse xss ++ yss
-      T.KeyEvent T.EraseKey mods
+      T.KeyEvent T.BackspaceKey mods
         | mods == mempty -> case xss of
             []     -> withStacks xss yss
             (x:xs) -> do
@@ -280,7 +280,7 @@ getPasswordString p = do
         flush
         pure $ reverse xs
       -- On Erase one character is removed from the right.
-      KeyEvent EraseKey _ ->
+      KeyEvent BackspaceKey _ ->
         withStack $! drop 1 xs
       KeyEvent (CharKey x) mods | mods == mempty ->
         withStack $! x:xs

@@ -207,8 +207,7 @@ withInputProcessing mainThread interrupt events ma = do
                 '\r'    -> writeTChan events (T.KeyEvent T.EnterKey    mods)
                 '\n'    -> writeTChan events (T.KeyEvent T.EnterKey    mods)
                 '\SP'   -> writeTChan events (T.KeyEvent T.SpaceKey    mods)
-                '\BS'   -> writeTChan events (T.KeyEvent T.DeleteKey   mods)
-                '\DEL'  -> writeTChan events (T.KeyEvent T.EraseKey    mods)
+                '\DEL'  -> writeTChan events (T.KeyEvent T.BackspaceKey    mods)
                 _       -> writeTChan events (T.KeyEvent (T.CharKey c) mods)
             | otherwise -> pure () -- All other key events shall be ignored.
           MouseEvent mouseEvent -> case mouseEvent of

@@ -85,8 +85,8 @@ data Key
   = CharKey Char
   | TabKey
   | SpaceKey
+  | BackspaceKey
   | EnterKey
-  | EraseKey
   | InsertKey
   | DeleteKey
   | HomeKey      -- ^ Pos 1
@@ -114,7 +114,7 @@ instance Show Modifiers where
   show (Modifiers 2) = "ctrlKey"
   show (Modifiers 4) = "altKey"
   show (Modifiers 8) = "metaKey"
-  show i = "(" ++ intercalate " .|. " ls ++ ")"
+  show i = "(" ++ intercalate " <> " ls ++ ")"
     where
       ls = foldl (\acc x-> if x .&. i /= mempty then show x:acc else acc) []
                  [metaKey, altKey, ctrlKey, shiftKey]

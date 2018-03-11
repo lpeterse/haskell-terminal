@@ -101,7 +101,7 @@ withInputProcessing mainThread interrupt events = bracket
       forever $ do 
         IO.hGetChar handle >>= \case
           c | c == termiosVINTR  termios -> handleInterrupt c
-            | c == termiosVERASE termios -> atomically $ writeChar c >> writeKey T.EraseKey
+            | c == termiosVERASE termios -> atomically $ writeChar c >> writeKey T.BackspaceKey
             | otherwise                  -> atomically $ writeChar c
         writeFillCharacterAfterTimeout
 
