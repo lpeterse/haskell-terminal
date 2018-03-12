@@ -41,6 +41,6 @@ DWORD hs_wait_console_input(DWORD);
 BOOL  hs_read_console_input(INPUT_RECORD*);
 BOOL  hs_write_console(VOID*, DWORD, DWORD*);
 
-BOOL  hs_get_console_winsize(SHORT*, SHORT*);
+BOOL  hs_get_console_screen_buffer_info(CONSOLE_SCREEN_BUFFER_INFO*);
 
 #endif

@@ -11,6 +11,7 @@ where
 
 import           Control.Concurrent.STM.TChan
 import           Control.Concurrent.STM.TVar
+import qualified Control.Exception                   as E
 import           Control.Monad                       (when)
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
@@ -33,7 +34,7 @@ runAnsiTerminalT :: (MonadIO m, MonadMask m) => AnsiTerminalT m a -> T.Terminal 
 runAnsiTerminalT (AnsiTerminalT action) ansi = do
   eventsChan <- liftIO newTChanIO
   decoderVar <- liftIO (newTVarIO T.ansiDecoder)
-  runReaderT action ansi { T.termInputEvents = nextEvent eventsChan decoderVar }
+  runReaderT action ansi { T.termInput = nextEvent eventsChan decoderVar }
   where
     -- This function transforms the incoming raw event stream and sends
     -- parts of it (all plain characters) through the ANSI decoder.
@@ -47,7 +48,7 @@ runAnsiTerminalT (AnsiTerminalT action) ansi = do
       processRawEvent `orElse` pure () -- Even without a new raw event there might be events pending.
       readTChan eventsChan
       where
-        processRawEvent = T.termInputEvents ansi >>= \case
+        processRawEvent = T.termInput ansi >>= \case
             T.KeyEvent (T.CharKey c) mods
               | mods == mempty -> do
                   -- NB: This event is essential as it guarantees the whole transaction
@@ -68,9 +69,9 @@ instance MonadTrans AnsiTerminalT where
 instance (MonadIO m) => T.MonadInput (AnsiTerminalT m) where
   waitMapInterruptAndEvents f = AnsiTerminalT $ do
     ansi <- ask
-    liftIO $ atomically $ f (T.termInterrupt ansi) (T.termInputEvents ansi)
+    liftIO $ atomically $ f (T.termInterrupt ansi) (T.termInput ansi)
 
-instance (MonadIO m) => T.MonadPrinter (AnsiTerminalT m) where
+instance (MonadIO m, MonadThrow m) => T.MonadPrinter (AnsiTerminalT m) where
   putChar c = AnsiTerminalT $ do
     ansi <- ask
     when (safeChar c) $
@@ -89,10 +90,10 @@ instance (MonadIO m) => T.MonadPrinter (AnsiTerminalT m) where
                          in  out t1 >> loop out t2
   flush = AnsiTerminalT $ do
     ansi <- ask
-    liftIO  $ atomically $ T.termOutputFlush ansi
+    liftIO  $ atomically $ T.termFlush ansi
   getLineWidth = snd <$> T.getScreenSize
 
-instance (MonadIO m) => T.MonadPrettyPrinter (AnsiTerminalT m) where
+instance (MonadIO m, MonadThrow m) => T.MonadPrettyPrinter (AnsiTerminalT m) where
   data Annotation (AnsiTerminalT m)
     = Bold
     | Italic
@@ -188,17 +189,17 @@ instance (MonadIO m) => T.MonadPrettyPrinter (AnsiTerminalT m) where
   resetAnnotation (Background _) = write "\ESC[49m"
   resetAnnotations               = write "\ESC[m"
 
-instance (MonadIO m) => T.MonadFormatPrinter (AnsiTerminalT m) where
+instance (MonadIO m, MonadThrow m) => T.MonadFormatPrinter (AnsiTerminalT m) where
   bold       = Bold
   italic     = Italic
   underlined = Underlined
 
-instance (MonadIO m) => T.MonadColorPrinter (AnsiTerminalT m) where
+instance (MonadIO m, MonadThrow m) => T.MonadColorPrinter (AnsiTerminalT m) where
   inverted   = Inverted
   foreground = Foreground
   background = Background
 
-instance (MonadIO m) => T.MonadTerminal (AnsiTerminalT m) where
+instance (MonadIO m, MonadThrow m) => T.MonadTerminal (AnsiTerminalT m) where
   moveCursorUp i                         = write $ "\ESC[" <> Text.pack (show i) <> "A"
   moveCursorDown i                       = write $ "\ESC[" <> Text.pack (show i) <> "B"
   moveCursorForward i                    = write $ "\ESC[" <> Text.pack (show i) <> "C"
@@ -207,7 +208,11 @@ instance (MonadIO m) => T.MonadTerminal (AnsiTerminalT m) where
     write "\ESC[6n"
     waitForCursorPositionReport
     where
+      -- Swallow all incoming events until either a cursor position report
+      -- arrives or an Interrupt event occurs.
+      -- An interrupt event will cause an `E.UserInterrupt` exception to be thrown.
       waitForCursorPositionReport = T.waitEvent >>= \case
+        T.InterruptEvent                           -> throwM E.UserInterrupt
         T.DeviceEvent (T.CursorPositionReport pos) -> pure pos
         _ -> waitForCursorPositionReport
   setCursorPosition (x,y)                = write $ "\ESC[" <> Text.pack (show x) <> ";" <> Text.pack (show y) <> "H"

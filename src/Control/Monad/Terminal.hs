@@ -1,8 +1,7 @@
 {-# LANGUAGE TypeFamilies #-}
 module Control.Monad.Terminal
   (  -- * MonadTerminal
-     Terminal (..)
-   , MonadTerminal (..)
+    MonadTerminal (..)
     -- ** Getting started
     -- * Printing
     -- ** MonadPrinter
@@ -19,27 +18,34 @@ module Control.Monad.Terminal
   , BasicColor (..)
   , Color (..)
   , ColorMode (..)
-    -- * Input Processing
-    -- ** waitEvent
-    , waitEvent
-    -- ** waitEventOrElse
-    , waitEventOrElse
-    -- ** waitInterruptOrElse
-    , waitInterruptOrElse
+    -- * Event Processing
     -- ** MonadInput
   , MonadInput (..)
+    -- *** waitEvent
+  , waitEvent
+    -- *** waitEventOrElse
+  , waitEventOrElse
+    -- *** waitInterruptOrElse
+  , waitInterruptOrElse
     -- ** Events
   , Event (..)
+    -- *** Keys & Modifiers
   , Key (..)
+  , Direction (..)
   , Modifiers ()
   , shiftKey
   , ctrlKey
   , altKey
   , metaKey
-  , Direction (..)
+    -- *** Mouse Events
   , MouseEvent (..)
-  , DeviceEvent (..)
+    -- *** Window Events
   , WindowEvent (..)
+    -- *** Device Events
+  , DeviceEvent (..)
+  -- * Low-Level
+  -- ** Terminal
+  , Terminal (..)
   ) where
 
 import           Control.Monad.Terminal.Input

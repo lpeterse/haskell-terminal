@@ -47,7 +47,7 @@ repl = readString prompt >>= \case
     "dec"      -> load >>= store . pred
     "loop"     -> forM_ [1..100000] $ \i-> store i >> putString (' ':show i)
     "finally"  -> fail "I am failing, I am failing.." `finally` putStringLn "FINALLY"
-    "cursor"   -> getCursorPosition >>= \xy-> pprint xy
+    "cursor"   -> getCursorPosition >>= \(r,c)-> setCursorPosition (r - 3, c + 25)
     "progress" -> void $ runWithProgressBar $ \update-> (`finally` threadDelay 3000000) $ forM_ [1..100] $ \i-> do
                     threadDelay 100000
                     update $ fromIntegral i / 100

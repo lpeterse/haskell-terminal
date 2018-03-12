@@ -42,16 +42,16 @@ withTerminal action = do
   events         <- liftIO newTChanIO
   output         <- liftIO newEmptyTMVarIO
   outputFlush    <- liftIO newEmptyTMVarIO
-  screenSize     <- liftIO (newTVarIO =<< getScreenSize)
+  screenSize     <- liftIO (newTVarIO =<< getConsoleScreenSize)
   withConsoleModes $
     withOutputProcessing mainThread output outputFlush $
-      withInputProcessing mainThread interrupt events $ action $
+      withInputProcessing mainThread interrupt events screenSize $ action $
         T.Terminal {
           T.termType           = "xterm"
-        , T.termInputEvents    = readTChan  events
-        , T.termInterrupt      = swapTVar   interrupt False >>= check
+        , T.termInput          = readTChan  events
         , T.termOutput         = putTMVar   output
-        , T.termOutputFlush    = putTMVar   outputFlush ()
+        , T.termInterrupt      = swapTVar   interrupt False >>= check
+        , T.termFlush          = putTMVar   outputFlush ()
         , T.termScreenSize     = readTVar   screenSize
         }
 
@@ -145,8 +145,8 @@ putText text = do
           written <- peek ptrWritten
           when (written < len) (put (BS.drop (fromIntegral len * 2) bs) ptrWritten)
 
-withInputProcessing :: (MonadIO m, MonadMask m) => ThreadId -> TVar Bool -> TChan T.Event -> m a -> m a
-withInputProcessing mainThread interrupt events ma = do
+withInputProcessing :: (MonadIO m, MonadMask m) => ThreadId -> TVar Bool -> TChan T.Event -> TVar (Int,Int) -> m a -> m a
+withInputProcessing mainThread interrupt events screenSize ma = do
   terminate  <- liftIO (newTVarIO False)
   terminated <- liftIO (newTVarIO False)
   bracket_
@@ -159,8 +159,9 @@ withInputProcessing mainThread interrupt events ma = do
 
     run :: TVar Bool -> IO ()
     run terminate = do
-      latestCharacter   <- newTVarIO '\NUL'
-      latestMouseButton <- newTVarIO T.LeftButton
+      latestScreenBufferInfo <- newTVarIO =<< getConsoleScreenBufferInfo
+      latestCharacter        <- newTVarIO '\NUL'
+      latestMouseButton      <- newTVarIO T.LeftButton
       fix $ \continue-> tryGetConsoleInputEvent >>= \case
         -- `tryGetConsoleInputEvent` is a blocking system call. It cannot be interrupted, but
         -- is guaranteed to return after at most 100ms. In this case it is checked whether
@@ -169,11 +170,11 @@ withInputProcessing mainThread interrupt events ma = do
         Nothing -> do
           shallTerminate <- atomically (readTVar terminate)
           unless shallTerminate $ do
-            -- When the escape key is release, a NUL character is written to the
-            -- char stream. The NUL character is a replacement for timing based
+            -- The NUL character is a replacement for timing based
             -- escape sequence recognition and enables the escape sequence decoder
             -- to reliably distinguish real escape key presses and escape sequences
-            -- from another.
+            -- from another. A NUL is added after each timeout potentially
+            -- terminating any ambiguous (escape) sequences.
             atomically $ do
               latest <- readTVar latestCharacter
               when (latest /= '\NUL') $ do
@@ -214,16 +215,32 @@ withInputProcessing mainThread interrupt events ma = do
                 _       -> writeTChan events (T.KeyEvent (T.CharKey c) mods)
             | otherwise -> pure () -- All other key events shall be ignored.
           MouseEvent mouseEvent -> case mouseEvent of
-            T.MouseButtonPressed _  btn -> atomically $ do
-              writeTChan events $ T.MouseEvent mouseEvent
+            T.MouseButtonPressed (r,c) btn -> atomically $ do
+              csbi <- readTVar latestScreenBufferInfo
+              writeTChan events $ T.MouseEvent $ T.MouseButtonPressed (r - srWindowTop csbi, c - srWindowLeft csbi) btn
               writeTVar latestMouseButton btn
-            T.MouseButtonReleased pos _ -> atomically $ do
+            T.MouseButtonReleased (r,c) _ -> atomically $ do
+              csbi <- readTVar latestScreenBufferInfo
               btn <- readTVar latestMouseButton
-              writeTChan events $ T.MouseEvent $ T.MouseButtonReleased pos btn
-              writeTChan events $ T.MouseEvent $ T.MouseButtonClicked  pos btn
-            _ -> atomically $ 
-              writeTChan events $ T.MouseEvent mouseEvent
-          WindowEvent wev -> atomically $ writeTChan events $ T.WindowEvent wev
+              writeTChan events $ T.MouseEvent $ T.MouseButtonReleased (r - srWindowTop csbi, c - srWindowLeft csbi) btn
+              writeTChan events $ T.MouseEvent $ T.MouseButtonClicked  (r - srWindowTop csbi, c - srWindowLeft csbi) btn
+            T.MouseWheeled (r,c) dir -> atomically $ do
+              csbi <- readTVar latestScreenBufferInfo
+              writeTChan events $ T.MouseEvent $ T.MouseWheeled (r - srWindowTop csbi, c - srWindowLeft csbi) dir
+            T.MouseMoved (r,c) -> atomically $ do
+              csbi <- readTVar latestScreenBufferInfo
+              writeTChan events $ T.MouseEvent $ T.MouseMoved (r - srWindowTop csbi, c - srWindowLeft csbi)
+          WindowEvent wev -> case wev of
+            T.WindowSizeChanged _ -> do
+              csbi <- getConsoleScreenBufferInfo
+              atomically $ do
+                writeTVar latestScreenBufferInfo csbi
+                let sz = (srWindowBottom csbi - srWindowTop csbi, srWindowRight csbi - srWindowLeft csbi)
+                sz' <- swapTVar screenSize sz
+                -- Observation: Not every event is an actual change to the screen size.
+                -- Only real changes shall be passed.
+                when (sz /= sz') (writeTChan events $ T.WindowEvent $ T.WindowSizeChanged sz)
+            _ -> atomically $ writeTChan events $ T.WindowEvent wev
           UnknownEvent x  -> atomically $ writeTChan events (T.OtherEvent $ "Unknown console input event " ++ show x ++ ".")
 
     timeoutMillis :: CULong
@@ -241,15 +258,16 @@ withInputProcessing mainThread interrupt events ma = do
                 _ -> E.throwIO (IO.userError "getConsoleInputEvent: error reading console events")
         _ -> E.throwIO (IO.userError "getConsoleInputEvent: error waiting for console events")
 
-getScreenSize :: IO (Int,Int)
-getScreenSize =
-  alloca $ \rowsPtr-> alloca $ \colsPtr->
-    unsafeGetConsoleWindowSize rowsPtr colsPtr >>= \case
-      0 -> do
-        rows <- fromIntegral <$> peek rowsPtr
-        cols <- fromIntegral <$> peek colsPtr
-        pure (rows, cols)
-      i -> pure (0,0)
+getConsoleScreenBufferInfo :: IO ConsoleScreenBufferInfo
+getConsoleScreenBufferInfo = alloca $ \ptr->
+  unsafeGetConsoleScreenBufferInfo ptr >>= \case
+    0 -> E.throwIO (IO.userError "getConsoleScreenBufferInfo: not a tty?")
+    _ -> peek ptr
+
+getConsoleScreenSize :: IO (Int, Int)
+getConsoleScreenSize = do
+  csbi <- getConsoleScreenBufferInfo
+  pure (srWindowBottom csbi - srWindowTop csbi, srWindowRight csbi - srWindowLeft csbi)
 
 data ConsoleInputEvent
   = KeyEvent
@@ -260,6 +278,15 @@ data ConsoleInputEvent
   | MouseEvent  T.MouseEvent
   | WindowEvent T.WindowEvent
   | UnknownEvent WORD
+  deriving (Eq, Ord, Show)
+
+data ConsoleScreenBufferInfo
+  = ConsoleScreenBufferInfo
+  { srWindowLeft   :: Int
+  , srWindowTop    :: Int
+  , srWindowRight  :: Int
+  , srWindowBottom :: Int
+  }
   deriving (Eq, Ord, Show)
 
 modifiersFromControlKeyState :: DWORD -> T.Modifiers
@@ -296,10 +323,8 @@ instance Storable ConsoleInputEvent where
     (#const FOCUS_EVENT) -> peek ptrFocus >>= \case
       0 -> pure $ WindowEvent T.WindowLostFocus
       _ -> pure $ WindowEvent T.WindowGainedFocus
-    (#const WINDOW_BUFFER_SIZE_EVENT) -> do
-      row <- peek ptrWindowSizeX
-      col <- peek ptrWindowSizeY
-      pure $ WindowEvent $ T.WindowSizeChanged (fromIntegral row, fromIntegral col)
+    (#const WINDOW_BUFFER_SIZE_EVENT) ->
+      pure $ WindowEvent $ T.WindowSizeChanged (0,0)
     evt -> pure (UnknownEvent evt)
     where
       peekEventType         = (#peek struct _INPUT_RECORD, EventType) ptr                 :: IO WORD
@@ -312,10 +337,24 @@ instance Storable ConsoleInputEvent where
       ptrMousePositionY     = (#ptr struct _COORD, Y) ptrMousePosition                    :: Ptr SHORT
       ptrMouseEventFlags    = (#ptr struct _MOUSE_EVENT_RECORD, dwEventFlags)  ptrEvent   :: Ptr DWORD
       ptrMouseButtonState   = (#ptr struct _MOUSE_EVENT_RECORD, dwButtonState) ptrEvent   :: Ptr DWORD
-      ptrWindowSize         = (#ptr struct _WINDOW_BUFFER_SIZE_RECORD, dwSize) ptrEvent   :: Ptr a
-      ptrWindowSizeX        = (#ptr struct _COORD, X) ptrWindowSize                       :: Ptr SHORT
-      ptrWindowSizeY        = (#ptr struct _COORD, Y) ptrWindowSize                       :: Ptr SHORT
       ptrFocus              = (#ptr struct _FOCUS_EVENT_RECORD, bSetFocus) ptrEvent       :: Ptr BOOL
+  poke = undefined
+
+instance Storable ConsoleScreenBufferInfo where
+  sizeOf    _ = (#size struct _CONSOLE_SCREEN_BUFFER_INFO)
+  alignment _ = (#alignment struct _CONSOLE_SCREEN_BUFFER_INFO)
+  peek ptr    = ConsoleScreenBufferInfo
+    <$> peek' ptrSrWindowLeft
+    <*> peek' ptrSrWindowTop
+    <*> peek' ptrSrWindowRight
+    <*> peek' ptrSrWindowBottom
+    where
+      peek' x           = fromIntegral <$> peek x
+      ptrSrWindow       = (#ptr struct _CONSOLE_SCREEN_BUFFER_INFO, srWindow) ptr :: Ptr a
+      ptrSrWindowLeft   = (#ptr struct _SMALL_RECT, Left)   ptrSrWindow           :: Ptr SHORT
+      ptrSrWindowTop    = (#ptr struct _SMALL_RECT, Top)    ptrSrWindow           :: Ptr SHORT
+      ptrSrWindowRight  = (#ptr struct _SMALL_RECT, Right)  ptrSrWindow           :: Ptr SHORT
+      ptrSrWindowBottom = (#ptr struct _SMALL_RECT, Bottom) ptrSrWindow           :: Ptr SHORT
   poke = undefined
 
 foreign import ccall "hs_wait_console_input"
@@ -336,8 +375,8 @@ foreign import ccall unsafe "hs_get_console_output_mode"
 foreign import ccall unsafe "hs_set_console_output_mode"
   unsafeSetConsoleOutputMode :: DWORD -> IO BOOL
 
-foreign import ccall unsafe "hs_get_console_winsize"
-  unsafeGetConsoleWindowSize :: Ptr SHORT -> Ptr SHORT -> IO BOOL
+foreign import ccall unsafe "hs_get_console_screen_buffer_info"
+  unsafeGetConsoleScreenBufferInfo :: Ptr ConsoleScreenBufferInfo -> IO BOOL
 
 foreign import ccall unsafe "hs_write_console"
   unsafeWriteConsole         :: Ptr a -> DWORD -> Ptr DWORD -> IO BOOL

@@ -39,17 +39,12 @@ DWORD hs_wait_console_input(DWORD timeoutMillis) {
     return WaitForSingleObject(h, timeoutMillis);
 }
 
-BOOL hs_get_console_winsize(SHORT *rows, SHORT *cols) {
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    if (!GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi)) {
-        return -1;
-    }
-    *rows = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
-    *cols = csbi.srWindow.Right - csbi.srWindow.Left + 1;
-    return 0;
+BOOL hs_get_console_screen_buffer_info(CONSOLE_SCREEN_BUFFER_INFO *csbi) {
+    HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
+    return GetConsoleScreenBufferInfo(h, csbi);
 }
 
-BOOL hs_write_console(const VOID *lpBuffer, DWORD nNumberOfCharsToWrite, DWORD *lpNumberOfCharsWritten) {
+BOOL hs_write_console(VOID *lpBuffer, DWORD nNumberOfCharsToWrite, DWORD *lpNumberOfCharsWritten) {
     HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
     return WriteConsoleW(h, lpBuffer, nNumberOfCharsToWrite, lpNumberOfCharsWritten, NULL);
 }
