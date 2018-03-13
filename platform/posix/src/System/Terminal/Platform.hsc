@@ -54,10 +54,10 @@ withTerminal action = do
     withInputProcessing mainThread interrupt events $ 
     withOutputProcessing output outputFlush $ action $ T.Terminal {
         T.termType           = termType
-      , T.termInputEvents    = readTChan events
+      , T.termInput          = readTChan events
       , T.termInterrupt      = swapTVar interrupt False >>= check
       , T.termOutput         = putTMVar output
-      , T.termOutputFlush    = putTMVar outputFlush ()
+      , T.termFlush          = putTMVar outputFlush ()
       , T.termScreenSize     = readTVar screenSize
       }
 

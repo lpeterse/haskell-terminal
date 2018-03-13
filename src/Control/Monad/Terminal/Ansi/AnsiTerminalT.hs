@@ -222,6 +222,7 @@ instance (MonadIO m, MonadThrow m) => T.MonadTerminal (AnsiTerminalT m) where
   restoreCursorPosition                  = write "\ESC8"
   showCursor                             = write "\ESC[?25h"
   hideCursor                             = write "\ESC[?25l"
+  clearLine                              = write "\ESC[2K"
 
   getScreenSize = AnsiTerminalT $ do
     ansi <- ask

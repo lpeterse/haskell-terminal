@@ -78,3 +78,4 @@ class (MonadInput m, MonadPrettyPrinter m, MonadFormatPrinter m, MonadColorPrint
   -- | Hides the cursor.
   hideCursor                  :: m ()
   getScreenSize               :: m (Int,Int)
+  clearLine                   :: m ()

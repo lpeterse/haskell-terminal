@@ -39,6 +39,7 @@ ansiDecoder  = defaultMode
         | c == '\NUL' -> produce []
         -- ESC might or might not introduce an escape sequence.
         | c == '\ESC' -> continue escapeMode
+        | c == '\n'   -> produce [KeyEvent (CharKey (toEnum $ (+64) $ fromEnum c)) ctrlKey, KeyEvent EnterKey mempty]
         -- All other C0 control codes are mapped to their corresponding ASCII character + CTRL modifier.
         | c <= '\US'  -> produce [KeyEvent (CharKey (toEnum $ (+64) $ fromEnum c)) ctrlKey]
         -- All remaning characters of the Latin-1 block are returned as is.

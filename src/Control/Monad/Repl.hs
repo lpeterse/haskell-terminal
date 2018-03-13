@@ -178,6 +178,7 @@ instance (MonadCatch m, MonadTerminal m) => T.MonadTerminal (ReplT s m) where
   restoreCursorPosition       = lift   restoreCursorPosition
   showCursor                  = lift   showCursor
   hideCursor                  = lift   hideCursor
+  clearLine                   = lift   clearLine
   getScreenSize               = lift   getScreenSize
 
 instance (MonadCatch m, T.MonadInput m) => T.MonadInput (ReplT s m) where
