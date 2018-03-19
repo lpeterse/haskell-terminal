@@ -2,9 +2,6 @@
 {-# LANGUAGE MultiWayIf #-}
 module Control.Monad.Terminal.Ansi.Decoder where
 
-import           Control.Monad.STM
-import           Control.Monad.Trans.Class
-import           Control.Monad.Trans.Reader
 import           Data.Char
 import           Data.Monoid                  ((<>))
 
@@ -44,21 +41,21 @@ ansiDecoder specialChars = defaultMode
         | c <= '\US'  -> produce $ KeyEvent (CharKey (toEnum $ (+64) $ fromEnum c)) (mods <> ctrlKey) : specialKey mods c
         -- Space shall be interpreted as control code and translated to `SpaceKey` to be
         -- consistent with the handling of `TabKey` and other whitespaces.
-        | c == '\SP'  -> produce [KeyEvent SpaceKey mempty]
+        | c == '\SP'  -> produce [KeyEvent SpaceKey mods]
         -- All remaning characters of the Latin-1 block are returned as is.
-        | c <  '\DEL' -> produce [KeyEvent (CharKey c) mempty]
+        | c <  '\DEL' -> produce [KeyEvent (CharKey c) mods]
         -- DEL is a very delicate case. It might be `KeyBackspace` or `KeyDelete`.
-        | c == '\DEL' -> produce $ KeyEvent (CharKey '?') ctrlKey : specialKey mods c
+        | c == '\DEL' -> produce $ KeyEvent (CharKey '?') (mods <> ctrlKey) : specialKey mods c
         -- Skip all other C1 control codes excpect if they are special characters.
         | c <  '\xA0' -> produce $ specialKey mods c
         -- All other Unicode characters are returned as is.
-        | otherwise   -> produce $ KeyEvent (CharKey c) mempty : specialKey mods c
+        | otherwise   -> produce $ KeyEvent (CharKey c) mods : specialKey mods c
         where
           specialKey mods c = case specialChars c of
             Nothing -> []
             Just ev -> case ev of
               KeyEvent key m -> [KeyEvent key (mods <> m)]
-              ev             -> [ev]
+              _              -> [ev]
 
     -- This function shall be called if an ESC has been read in default mode
     -- and it is stil unclear whether this is the beginning of an escape sequence or not.
@@ -76,8 +73,13 @@ ansiDecoder specialChars = defaultMode
     -- a CSI sequence or an ALT-modified key or illegal state.
     escapeSequenceMode :: Char -> Decoder
     escapeSequenceMode c = Decoder $ \mods d-> if
-      | d == '\NUL' && c >= ' ' && c <= '~'  -> produce [KeyEvent (CharKey c) (mods <> altKey)]
+      | d == '\NUL' && c > '\SP' && c <= '~' -> produce [KeyEvent (CharKey c) (mods <> altKey)]
       | d == '\NUL' && c >= '\xa0'           -> produce [KeyEvent (CharKey c) (mods <> altKey)]
+      | d == '\NUL'                          -> produce $ case specialChars c of
+                                                  Nothing -> []
+                                                  Just ev -> case ev of
+                                                    KeyEvent key m -> [KeyEvent key (mods <> m <> altKey)]
+                                                    _              -> [ev]
       | c == 'O'                             -> produce (ss3Mode mods d)
       | c == '['                             -> csiMode d
       | otherwise                            -> produce []

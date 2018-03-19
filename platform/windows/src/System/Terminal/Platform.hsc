@@ -47,7 +47,7 @@ withTerminal action = do
     withOutputProcessing mainThread output outputFlush $
       withInputProcessing mainThread interrupt events screenSize $ action $
         T.Terminal {
-          T.termType           = "xterm"
+          T.termType           = "xterm" -- They claim it behaves like xterm although this is certainly a bit ambituous.
         , T.termInput          = readTChan  events
         , T.termOutput         = putTMVar   output
         , T.termInterrupt      = swapTVar   interrupt False >>= check
@@ -57,6 +57,7 @@ withTerminal action = do
             '\r'   -> Just $ T.KeyEvent T.EnterKey mempty
             '\t'   -> Just $ T.KeyEvent T.TabKey mempty
             '\SP'  -> Just $ T.KeyEvent T.SpaceKey mempty
+            '\b'   -> Just $ T.KeyEvent T.BackspaceKey mempty
             '\DEL' -> Just $ T.KeyEvent T.BackspaceKey mempty
             _      -> Nothing
         }
