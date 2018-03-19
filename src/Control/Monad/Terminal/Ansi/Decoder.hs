@@ -16,7 +16,7 @@ import           Control.Monad.Terminal.Input
 --   which causes the resulting transducer to have one entry point
 --   but no exits. Intermediate state can be passed as closures.
 --   See below for an example.
-newtype Decoder = Decoder { feedDecoder :: Char -> ([Event], Decoder) }
+newtype Decoder = Decoder { feedDecoder :: Modifiers -> Char -> ([Event], Decoder) }
 
 ansiDecoder :: (Char -> Maybe Event) -> Decoder
 ansiDecoder specialChars = defaultMode
@@ -34,64 +34,65 @@ ansiDecoder specialChars = defaultMode
     -- occurences of illegal state (this decoder shall skip errors and will
     -- probably resynchronise on the input stream after a few characters).
     defaultMode :: Decoder
-    defaultMode  = Decoder $ \c-> if
+    defaultMode  = Decoder $ \mods c-> if
         -- In normal mode a NUL is interpreted as a fill character and skipped.
         | c == '\NUL' -> produce []
         -- ESC might or might not introduce an escape sequence.
         | c == '\ESC' -> continue escapeMode
-        | c == '\n'   -> produce [KeyEvent (CharKey (toEnum $ (+64) $ fromEnum c)) ctrlKey, KeyEvent EnterKey mempty]
         -- All other C0 control codes are mapped to their corresponding ASCII character + CTRL modifier.
         -- If the character is a special character, then two events are produced.
-        | c <= '\US'  -> produce $ KeyEvent (CharKey (toEnum $ (+64) $ fromEnum c)) ctrlKey : case specialChars c of
-                          Nothing -> []
-                          Just ev -> [ev]
+        | c <= '\US'  -> produce $ KeyEvent (CharKey (toEnum $ (+64) $ fromEnum c)) (mods <> ctrlKey) : specialKey mods c
         -- Space shall be interpreted as control code and translated to `SpaceKey` to be
         -- consistent with the handling of `TabKey` and other whitespaces.
         | c == '\SP'  -> produce [KeyEvent SpaceKey mempty]
         -- All remaning characters of the Latin-1 block are returned as is.
         | c <  '\DEL' -> produce [KeyEvent (CharKey c) mempty]
         -- DEL is a very delicate case. It might be `KeyBackspace` or `KeyDelete`.
-        | c == '\DEL' -> produce $ KeyEvent (CharKey '?') ctrlKey : case specialChars c of
-                          Nothing -> []
-                          Just ev -> [ev]
-        -- Skip all other C1 control codes.
-        | c <  '\xA0' -> produce []
+        | c == '\DEL' -> produce $ KeyEvent (CharKey '?') ctrlKey : specialKey mods c
+        -- Skip all other C1 control codes excpect if they are special characters.
+        | c <  '\xA0' -> produce $ specialKey mods c
         -- All other Unicode characters are returned as is.
-        | otherwise   -> produce [KeyEvent (CharKey c) mempty]
+        | otherwise   -> produce $ KeyEvent (CharKey c) mempty : specialKey mods c
+        where
+          specialKey mods c = case specialChars c of
+            Nothing -> []
+            Just ev -> case ev of
+              KeyEvent key m -> [KeyEvent key (mods <> m)]
+              ev             -> [ev]
 
     -- This function shall be called if an ESC has been read in default mode
     -- and it is stil unclear whether this is the beginning of an escape sequence or not.
     -- NOTE: This function is total and consumes at least one more character of input.
     escapeMode :: Decoder
-    escapeMode  = Decoder $ \c-> if
+    escapeMode  = Decoder $ \mods c-> if
       -- Single escape key press is always followed by a NUL fill character
       -- by design (instead of timing). This makes reasoning and testing much easier
       -- and reliable.
-      | c == '\NUL' -> produce [KeyEvent (CharKey '[') ctrlKey, KeyEvent EscapeKey mempty]
+      | c == '\NUL' -> produce [KeyEvent (CharKey '[') (mods <> ctrlKey), KeyEvent EscapeKey mods]
       | otherwise   -> continue (escapeSequenceMode c)
 
     -- This function shall be called with the escape sequence introducer.
     -- It needs to look at next character to decide whether this is
     -- a CSI sequence or an ALT-modified key or illegal state.
     escapeSequenceMode :: Char -> Decoder
-    escapeSequenceMode c = Decoder $ \case
-      '\NUL' | c >= ' ' && c <= '~'  -> produce [KeyEvent (CharKey c) altKey]
-             | c >= '\xa0'           -> produce [KeyEvent (CharKey c) altKey]
-      d      | c == 'O'              -> produce (ss3Mode d)
-             | c == '['              -> csiMode d
-             | otherwise             -> produce []
+    escapeSequenceMode c = Decoder $ \mods d-> if
+      | d == '\NUL' && c >= ' ' && c <= '~'  -> produce [KeyEvent (CharKey c) (mods <> altKey)]
+      | d == '\NUL' && c >= '\xa0'           -> produce [KeyEvent (CharKey c) (mods <> altKey)]
+      | c == 'O'                             -> produce (ss3Mode mods d)
+      | c == '['                             -> csiMode d
+      | otherwise                            -> produce []
 
     -- SS3 mode is another less well-known escape sequence mode.
     -- It is introduced by `\\ESCO`. Some terminal emulators use it for
     -- compatibility with veeery old terminals. SS3 mode only allows one
     -- subsequent character. Interpretation has been determined empirically
     -- and with reference to http://rtfm.etla.org/xterm/ctlseq.html
-    ss3Mode :: Char -> [Event]
-    ss3Mode = \case
-      'P' -> [KeyEvent (FunctionKey  1) mempty]
-      'Q' -> [KeyEvent (FunctionKey  2) mempty]
-      'R' -> [KeyEvent (FunctionKey  3) mempty]
-      'S' -> [KeyEvent (FunctionKey  4) mempty]
+    ss3Mode :: Modifiers -> Char -> [Event]
+    ss3Mode mods = \case
+      'P' -> [KeyEvent (FunctionKey  1) mods]
+      'Q' -> [KeyEvent (FunctionKey  2) mods]
+      'R' -> [KeyEvent (FunctionKey  3) mods]
+      'S' -> [KeyEvent (FunctionKey  4) mods]
       _   -> []
 
     -- ESC[ is followed by any number (including none) of parameter chars in the
@@ -123,14 +124,14 @@ ansiDecoder specialChars = defaultMode
         -- will therefore recover to default mode after at most 32 characters.
         f :: Int -> String -> Decoder
         f 0 _  = defaultMode
-        f i ps = Decoder $ \c-> if
+        f i ps = Decoder $ const $ \c-> if
           | c >= '0' && c <= '?' -> continue $ f (i - 1) (c:ps)  -- More parameters.
           | c >= '!' && c <= '/' -> continue $ g charLimit ps [] -- Start of intermediates.
           | c >= '@' && c <= '~' -> produce $ interpretCSI (reverse ps) [] c
           | otherwise            -> produce [] -- Illegal state. Return to default mode.
         g :: Int -> String -> String -> Decoder
         g 0 _  _  = defaultMode
-        g i ps is = Decoder $ \c-> if
+        g i ps is = Decoder $ const $ \c-> if
           | c >= '!' && c <= '/' -> continue $ g (i - 1) ps (c:is) -- More intermediates.
           | c >= '@' && c <= '~' -> produce $ interpretCSI (reverse ps) (reverse is) c
           | otherwise            -> produce [] -- Illegal state. Return to default mode.

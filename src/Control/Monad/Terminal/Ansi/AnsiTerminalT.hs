@@ -49,18 +49,17 @@ runAnsiTerminalT (AnsiTerminalT action) ansi = do
       readTChan eventsChan
       where
         processRawEvent = T.termInput ansi >>= \case
-            T.KeyEvent (T.CharKey c) mods
-              | mods == mempty -> do
-                  -- NB: This event is essential as it guarantees the whole transaction
-                  -- to succeed by having at least one event in the `events` channel.
-                  -- This information is also quite nice for debbuging.
-                  writeTChan eventsChan (T.OtherEvent $ "ANSI decoder: Feeding character " ++ show c ++ ".")
-                  -- Feed the decoder, save its new state and write its output to the
-                  -- events chan (if any).
-                  decoder <- readTVar decoderVar
-                  let (ansiEvents, decoder') = T.feedDecoder decoder c
-                  writeTVar decoderVar decoder'
-                  forM_ ansiEvents (writeTChan eventsChan)
+            T.KeyEvent (T.CharKey c) mods -> do
+              -- NB: This event is essential as it guarantees the whole transaction
+              -- to succeed by having at least one event in the `events` channel.
+              -- This information is also quite nice for debbuging.
+              writeTChan eventsChan (T.OtherEvent $ "ANSI decoder: Feeding character " ++ show c ++ ", modifiers " ++ show mods ++ ".")
+              -- Feed the decoder, save its new state and write its output to the
+              -- events chan (if any).
+              decoder <- readTVar decoderVar
+              let (ansiEvents, decoder') = T.feedDecoder decoder mods c
+              writeTVar decoderVar decoder'
+              forM_ ansiEvents (writeTChan eventsChan)
             event -> writeTChan eventsChan event
 
 instance MonadTrans AnsiTerminalT where

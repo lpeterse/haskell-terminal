@@ -212,13 +212,9 @@ withInputProcessing mainThread interrupt events screenSize ma = do
                   '\ESC' -> writeTChan events (T.KeyEvent (T.CharKey '\NUL') mempty)
                   _      -> writeTVar  latestCharacter '\ESC'
                 writeTChan events (T.KeyEvent (T.CharKey '\ESC') mempty)
-            | d -> atomically $ writeTVar latestCharacter c >> case c of
-                -- '\t'    -> writeTChan events (T.KeyEvent T.TabKey      mods)
-                -- '\r'    -> writeTChan events (T.KeyEvent T.EnterKey    mods)
-                -- '\n'    -> writeTChan events (T.KeyEvent T.EnterKey    mods)
-                -- '\SP'   -> writeTChan events (T.KeyEvent T.SpaceKey    mods)
-                -- '\DEL'  -> writeTChan events (T.KeyEvent T.BackspaceKey    mods)
-                _       -> writeTChan events (T.KeyEvent (T.CharKey c) mods)
+            | d -> atomically $ do
+                writeTVar latestCharacter c
+                writeTChan events (T.KeyEvent (T.CharKey c) mods)
             | otherwise -> pure () -- All other key events shall be ignored.
           MouseEvent mouseEvent -> case mouseEvent of
             T.MouseButtonPressed (r,c) btn -> atomically $ do
