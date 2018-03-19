@@ -33,7 +33,7 @@ library:
     - System.Terminal
   other-modules:
     - Control.Monad.Terminal.Ansi
-    - Control.Monad.Terminal.Ansi.Decoder
+    - Control.Monad.Terminal.Decoder
     - Control.Monad.Terminal.Ansi.AnsiTerminalT
     - Control.Monad.Terminal.Input
     - Control.Monad.Terminal.Printer

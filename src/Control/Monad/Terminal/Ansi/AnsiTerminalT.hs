@@ -11,20 +11,20 @@ where
 
 import           Control.Concurrent.STM.TChan
 import           Control.Concurrent.STM.TVar
-import qualified Control.Exception                   as E
-import           Control.Monad                       (when)
+import qualified Control.Exception              as E
+import           Control.Monad                  (when)
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
 import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Reader
-import           Data.Foldable                       (forM_)
+import           Data.Foldable                  (forM_)
 import           Data.Monoid
-import qualified Data.Text                           as Text
-import qualified Data.Text.Prettyprint.Doc           as PP
+import qualified Data.Text                      as Text
+import qualified Data.Text.Prettyprint.Doc      as PP
 
-import qualified Control.Monad.Terminal              as T
-import qualified Control.Monad.Terminal.Ansi.Decoder as T
+import qualified Control.Monad.Terminal         as T
+import qualified Control.Monad.Terminal.Decoder as T
 
 newtype AnsiTerminalT m a
   = AnsiTerminalT (ReaderT T.Terminal m a)

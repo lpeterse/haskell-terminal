@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiWayIf #-}
-module Control.Monad.Terminal.Ansi.Decoder where
+module Control.Monad.Terminal.Decoder where
 
 import           Data.Char
 import           Data.Monoid                  ((<>))

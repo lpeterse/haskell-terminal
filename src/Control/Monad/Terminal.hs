@@ -51,7 +51,7 @@ module Control.Monad.Terminal
   , ansiDecoder
   ) where
 
-import           Control.Monad.Terminal.Ansi.Decoder
+import           Control.Monad.Terminal.Decoder
 import           Control.Monad.Terminal.Input
 import           Control.Monad.Terminal.Printer
 import           Control.Monad.Terminal.Terminal
