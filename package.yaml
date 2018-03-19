@@ -24,20 +24,19 @@ dependencies:
 - prettyprinter
 
 library:
-  ghc-options: -Werror -O2
-  #-fwarn-incomplete-patterns
+  ghc-options: -Werror -O2 -fwarn-incomplete-patterns
   exposed-modules:
     - Control.Monad.Repl
     - Control.Monad.Repl.IO
     - Control.Monad.Terminal
     - System.Terminal
   other-modules:
-    - Control.Monad.Terminal.Ansi
     - Control.Monad.Terminal.Decoder
-    - Control.Monad.Terminal.Ansi.AnsiTerminalT
     - Control.Monad.Terminal.Input
+    - Control.Monad.Terminal.Monad
     - Control.Monad.Terminal.Printer
     - Control.Monad.Terminal.Terminal
+    - Control.Monad.Terminal.TerminalT
     - System.Terminal.Platform
   source-dirs: src
   when:

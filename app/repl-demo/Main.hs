@@ -23,13 +23,8 @@ import           Data.Text.Prettyprint.Doc
 import qualified System.IO.Error             as E
 import           System.Terminal
 
-type AnsiReplT s m = ReplT s (AnsiTerminalT m)
-
-runAnsiReplT :: AnsiReplT s IO () -> s -> IO s
-runAnsiReplT ma s = withTerminal $ runAnsiTerminalT (runReplT ma s)
-
 main :: IO ()
-main = runAnsiReplT repl 0 >>= Prelude.print
+main = withTerminal (runTerminalT $ runReplT repl 0) >>= Prelude.print
 
 prompt :: (MonadFormatPrinter m, MonadColorPrinter m) => Doc (Annotation m)
 prompt  = annotate bold $ annotate (foreground $ bright Blue) "repl" <> "@terminal % "

@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 632b5d1fb691c24fa83249d53fb4540d7b0da9345d9993eb16e3d3eac9e8fe12
+-- hash: ca578c978d404ffac168f7744c05172616f1d2f3921ffa8bd18c78fae4b32844
 
 name:           terminal
 version:        0.1.0.0
@@ -29,7 +29,7 @@ source-repository head
 library
   hs-source-dirs:
       src
-  ghc-options: -Werror -O2
+  ghc-options: -Werror -O2 -fwarn-incomplete-patterns
   build-depends:
       async
     , base >=4.7 && <5
@@ -59,12 +59,12 @@ library
       Control.Monad.Terminal
       System.Terminal
   other-modules:
-      Control.Monad.Terminal.Ansi
       Control.Monad.Terminal.Decoder
-      Control.Monad.Terminal.Ansi.AnsiTerminalT
       Control.Monad.Terminal.Input
+      Control.Monad.Terminal.Monad
       Control.Monad.Terminal.Printer
       Control.Monad.Terminal.Terminal
+      Control.Monad.Terminal.TerminalT
       System.Terminal.Platform
   default-language: Haskell2010
 

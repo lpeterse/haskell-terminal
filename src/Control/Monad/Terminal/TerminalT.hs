@@ -3,35 +3,38 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
-module Control.Monad.Terminal.Ansi.AnsiTerminalT
-  ( AnsiTerminalT ()
-  , runAnsiTerminalT
+module Control.Monad.Terminal.TerminalT
+  ( TerminalT ()
+  , runTerminalT
   )
 where
 
 import           Control.Concurrent.STM.TChan
 import           Control.Concurrent.STM.TVar
-import qualified Control.Exception              as E
-import           Control.Monad                  (when)
+import qualified Control.Exception               as E
+import           Control.Monad                   (when)
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
 import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Reader
-import           Data.Foldable                  (forM_)
+import           Data.Foldable                   (forM_)
 import           Data.Monoid
-import qualified Data.Text                      as Text
-import qualified Data.Text.Prettyprint.Doc      as PP
+import qualified Data.Text                       as Text
+import qualified Data.Text.Prettyprint.Doc       as PP
 
-import qualified Control.Monad.Terminal         as T
-import qualified Control.Monad.Terminal.Decoder as T
+import qualified Control.Monad.Terminal.Decoder  as T
+import qualified Control.Monad.Terminal.Input    as T
+import qualified Control.Monad.Terminal.Monad    as T
+import qualified Control.Monad.Terminal.Printer  as T
+import qualified Control.Monad.Terminal.Terminal as T
 
-newtype AnsiTerminalT m a
-  = AnsiTerminalT (ReaderT T.Terminal m a)
+newtype TerminalT m a
+  = TerminalT (ReaderT T.Terminal m a)
   deriving (Functor, Applicative, Monad, MonadIO, MonadThrow, MonadCatch, MonadMask)
 
-runAnsiTerminalT :: (MonadIO m, MonadMask m) => AnsiTerminalT m a -> T.Terminal -> m a
-runAnsiTerminalT (AnsiTerminalT action) ansi = do
+runTerminalT :: (MonadIO m, MonadMask m) => TerminalT m a -> T.Terminal -> m a
+runTerminalT (TerminalT action) ansi = do
   eventsChan <- liftIO newTChanIO
   decoderVar <- liftIO $ newTVarIO $ T.ansiDecoder $ T.termSpecialCharacters ansi
   runReaderT action ansi { T.termInput = nextEvent eventsChan decoderVar }
@@ -62,24 +65,24 @@ runAnsiTerminalT (AnsiTerminalT action) ansi = do
               forM_ ansiEvents (writeTChan eventsChan)
             event -> writeTChan eventsChan event
 
-instance MonadTrans AnsiTerminalT where
-  lift = AnsiTerminalT . lift
+instance MonadTrans TerminalT where
+  lift = TerminalT . lift
 
-instance (MonadIO m) => T.MonadInput (AnsiTerminalT m) where
-  waitMapInterruptAndEvents f = AnsiTerminalT $ do
+instance (MonadIO m) => T.MonadInput (TerminalT m) where
+  waitMapInterruptAndEvents f = TerminalT $ do
     ansi <- ask
     liftIO $ atomically $ f (T.termInterrupt ansi) (T.termInput ansi)
 
-instance (MonadIO m, MonadThrow m) => T.MonadPrinter (AnsiTerminalT m) where
-  putChar c = AnsiTerminalT $ do
+instance (MonadIO m, MonadThrow m) => T.MonadPrinter (TerminalT m) where
+  putChar c = TerminalT $ do
     ansi <- ask
     when (safeChar c) $
       liftIO $ atomically $ T.termOutput ansi $! Text.singleton c
-  putString cs = AnsiTerminalT $ do
+  putString cs = TerminalT $ do
     ansi <- ask
     liftIO $ forM_ (filter safeChar cs) $ \c->
       atomically $ T.termOutput ansi $! Text.singleton c
-  putText t = AnsiTerminalT $ do
+  putText t = TerminalT $ do
     ansi <- ask
     liftIO $ loop (atomically . T.termOutput ansi) (Text.filter safeChar t)
     where
@@ -87,13 +90,13 @@ instance (MonadIO m, MonadThrow m) => T.MonadPrinter (AnsiTerminalT m) where
         | Text.null t0 = pure ()
         | otherwise    = let (t1,t2) = Text.splitAt 80 t0
                          in  out t1 >> loop out t2
-  flush = AnsiTerminalT $ do
+  flush = TerminalT $ do
     ansi <- ask
     liftIO  $ atomically $ T.termFlush ansi
   getLineWidth = snd <$> T.getScreenSize
 
-instance (MonadIO m, MonadThrow m) => T.MonadPrettyPrinter (AnsiTerminalT m) where
-  data Annotation (AnsiTerminalT m)
+instance (MonadIO m, MonadThrow m) => T.MonadPrettyPrinter (TerminalT m) where
+  data Annotation (TerminalT m)
     = Bold
     | Italic
     | Underlined
@@ -188,17 +191,17 @@ instance (MonadIO m, MonadThrow m) => T.MonadPrettyPrinter (AnsiTerminalT m) whe
   resetAnnotation (Background _) = write "\ESC[49m"
   resetAnnotations               = write "\ESC[m"
 
-instance (MonadIO m, MonadThrow m) => T.MonadFormatPrinter (AnsiTerminalT m) where
+instance (MonadIO m, MonadThrow m) => T.MonadFormatPrinter (TerminalT m) where
   bold       = Bold
   italic     = Italic
   underlined = Underlined
 
-instance (MonadIO m, MonadThrow m) => T.MonadColorPrinter (AnsiTerminalT m) where
+instance (MonadIO m, MonadThrow m) => T.MonadColorPrinter (TerminalT m) where
   inverted   = Inverted
   foreground = Foreground
   background = Background
 
-instance (MonadIO m, MonadThrow m) => T.MonadTerminal (AnsiTerminalT m) where
+instance (MonadIO m, MonadThrow m) => T.MonadTerminal (TerminalT m) where
   moveCursorUp i                         = write $ "\ESC[" <> Text.pack (show i) <> "A"
   moveCursorDown i                       = write $ "\ESC[" <> Text.pack (show i) <> "B"
   moveCursorForward i                    = write $ "\ESC[" <> Text.pack (show i) <> "C"
@@ -223,7 +226,7 @@ instance (MonadIO m, MonadThrow m) => T.MonadTerminal (AnsiTerminalT m) where
   hideCursor                             = write "\ESC[?25l"
   clearLine                              = write "\ESC[2K"
 
-  getScreenSize = AnsiTerminalT $ do
+  getScreenSize = TerminalT $ do
     ansi <- ask
     liftIO $ atomically $ T.termScreenSize ansi
 
@@ -237,7 +240,7 @@ safeChar c
   | c  < '\xa0' = False -- C1 up to start of Latin-1.
   | otherwise   = True
 
-write :: (MonadIO m) => Text.Text -> AnsiTerminalT m ()
-write t = AnsiTerminalT $ do
+write :: (MonadIO m) => Text.Text -> TerminalT m ()
+write t = TerminalT $ do
   ansi <- ask
   liftIO $ atomically $ T.termOutput ansi t

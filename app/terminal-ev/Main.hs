@@ -12,7 +12,7 @@ import           Data.Text.Prettyprint.Doc
 import           System.Terminal
 
 main :: IO ()
-main = withTerminal $ runAnsiTerminalT $ fix $ \loop-> do
+main = withTerminal $ runTerminalT $ fix $ \loop-> do
   ev <- waitEvent
   case ev of
     OtherEvent {}  -> putDocLn $ annotate (foreground $ bright Black)   (pretty $ show ev)

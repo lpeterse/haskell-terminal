@@ -102,7 +102,7 @@ testDecoderWindowsConsole = testGroup "Windows Console"
     f = assertDecoding $ \case
       '\t'   -> Just $ KeyEvent TabKey mempty
       '\r'   -> Just $ KeyEvent EnterKey mempty
-      '\n'   -> Just $ KeyEvent EnterKey mempty
+      '\n'   -> Just $ KeyEvent EnterKey mempty -- when pressed with ctrl
       '\b'   -> Just $ KeyEvent BackspaceKey mempty -- when pressed with alt
       '\DEL' -> Just $ KeyEvent BackspaceKey mempty
       _      -> Nothing

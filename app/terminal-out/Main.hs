@@ -1,4 +1,3 @@
-{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies      #-}
 module Main where
@@ -14,7 +13,7 @@ import           System.Terminal
 import           Prelude                   hiding ((<>))
 
 main :: IO ()
-main = withTerminal $ runAnsiTerminalT foo
+main = withTerminal $ runTerminalT foo
 
 foo :: (MonadTerminal m, MonadIO m) => m ()
 foo = printer >> flush
