@@ -94,7 +94,8 @@ executables:
 tests:
   terminal-test:
     main:                Spec.hs
-    source-dirs:         test
+    source-dirs:
+    - test
     ghc-options:
     - -threaded
     - -rtsopts

@@ -46,8 +46,12 @@ module Control.Monad.Terminal
   -- * Low-Level
   -- ** Terminal
   , Terminal (..)
+  -- ** Decoding
+  , Decoder (..)
+  , ansiDecoder
   ) where
 
+import           Control.Monad.Terminal.Ansi.Decoder
 import           Control.Monad.Terminal.Input
 import           Control.Monad.Terminal.Printer
 import           Control.Monad.Terminal.Terminal
