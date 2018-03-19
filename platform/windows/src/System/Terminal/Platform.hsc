@@ -53,6 +53,12 @@ withTerminal action = do
         , T.termInterrupt      = swapTVar   interrupt False >>= check
         , T.termFlush          = putTMVar   outputFlush ()
         , T.termScreenSize     = readTVar   screenSize
+        , T.termSpecialCharacters = \case
+            '\r'   -> Just $ T.KeyEvent T.EnterKey mempty
+            '\t'   -> Just $ T.KeyEvent T.TabKey mempty
+            '\SP'  -> Just $ T.KeyEvent T.SpaceKey mempty
+            '\DEL' -> Just $ T.KeyEvent T.BackspaceKey mempty
+            _      -> Nothing
         }
 
 withConsoleModes :: (MonadIO m, MonadMask m) => m a -> m a
@@ -207,11 +213,11 @@ withInputProcessing mainThread interrupt events screenSize ma = do
                   _      -> writeTVar  latestCharacter '\ESC'
                 writeTChan events (T.KeyEvent (T.CharKey '\ESC') mempty)
             | d -> atomically $ writeTVar latestCharacter c >> case c of
-                '\t'    -> writeTChan events (T.KeyEvent T.TabKey      mods)
-                '\r'    -> writeTChan events (T.KeyEvent T.EnterKey    mods)
-                '\n'    -> writeTChan events (T.KeyEvent T.EnterKey    mods)
-                '\SP'   -> writeTChan events (T.KeyEvent T.SpaceKey    mods)
-                '\DEL'  -> writeTChan events (T.KeyEvent T.BackspaceKey    mods)
+                -- '\t'    -> writeTChan events (T.KeyEvent T.TabKey      mods)
+                -- '\r'    -> writeTChan events (T.KeyEvent T.EnterKey    mods)
+                -- '\n'    -> writeTChan events (T.KeyEvent T.EnterKey    mods)
+                -- '\SP'   -> writeTChan events (T.KeyEvent T.SpaceKey    mods)
+                -- '\DEL'  -> writeTChan events (T.KeyEvent T.BackspaceKey    mods)
                 _       -> writeTChan events (T.KeyEvent (T.CharKey c) mods)
             | otherwise -> pure () -- All other key events shall be ignored.
           MouseEvent mouseEvent -> case mouseEvent of

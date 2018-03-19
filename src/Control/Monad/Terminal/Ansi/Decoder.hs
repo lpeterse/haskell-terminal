@@ -18,8 +18,8 @@ import           Control.Monad.Terminal.Input
 --   See below for an example.
 newtype Decoder = Decoder { feedDecoder :: Char -> ([Event], Decoder) }
 
-ansiDecoder :: Decoder
-ansiDecoder  = defaultMode
+ansiDecoder :: (Char -> Maybe Event) -> Decoder
+ansiDecoder specialChars = defaultMode
   where
     -- Make a production and return to `defaultMode`.
     produce   :: [Event] -> ([Event], Decoder)
@@ -41,13 +41,19 @@ ansiDecoder  = defaultMode
         | c == '\ESC' -> continue escapeMode
         | c == '\n'   -> produce [KeyEvent (CharKey (toEnum $ (+64) $ fromEnum c)) ctrlKey, KeyEvent EnterKey mempty]
         -- All other C0 control codes are mapped to their corresponding ASCII character + CTRL modifier.
-        | c <= '\US'  -> produce [KeyEvent (CharKey (toEnum $ (+64) $ fromEnum c)) ctrlKey]
+        -- If the character is a special character, then two events are produced.
+        | c <= '\US'  -> produce $ KeyEvent (CharKey (toEnum $ (+64) $ fromEnum c)) ctrlKey : case specialChars c of
+                          Nothing -> []
+                          Just ev -> [ev]
+        -- Space shall be interpreted as control code and translated to `SpaceKey` to be
+        -- consistent with the handling of `TabKey` and other whitespaces.
+        | c == '\SP'  -> produce [KeyEvent SpaceKey mempty]
         -- All remaning characters of the Latin-1 block are returned as is.
         | c <  '\DEL' -> produce [KeyEvent (CharKey c) mempty]
-        -- DEL is a very delicate case. Its complicated mapping to either Backspace or Delete
-        -- shall have been done at a different layer at this point. This decoder
-        -- only reflects the ^? interpretation of this code.
-        | c == '\DEL' -> produce [KeyEvent (CharKey '?') ctrlKey]
+        -- DEL is a very delicate case. It might be `KeyBackspace` or `KeyDelete`.
+        | c == '\DEL' -> produce $ KeyEvent (CharKey '?') ctrlKey : case specialChars c of
+                          Nothing -> []
+                          Just ev -> [ev]
         -- Skip all other C1 control codes.
         | c <  '\xA0' -> produce []
         -- All other Unicode characters are returned as is.
@@ -61,7 +67,7 @@ ansiDecoder  = defaultMode
       -- Single escape key press is always followed by a NUL fill character
       -- by design (instead of timing). This makes reasoning and testing much easier
       -- and reliable.
-      | c == '\NUL' -> produce [KeyEvent (CharKey '[') ctrlKey]
+      | c == '\NUL' -> produce [KeyEvent (CharKey '[') ctrlKey, KeyEvent EscapeKey mempty]
       | otherwise   -> continue (escapeSequenceMode c)
 
     -- This function shall be called with the escape sequence introducer.
@@ -71,8 +77,22 @@ ansiDecoder  = defaultMode
     escapeSequenceMode c = Decoder $ \case
       '\NUL' | c >= ' ' && c <= '~'  -> produce [KeyEvent (CharKey c) altKey]
              | c >= '\xa0'           -> produce [KeyEvent (CharKey c) altKey]
-      d      | c == '['              -> csiMode d
+      d      | c == 'O'              -> produce (ss3Mode d)
+             | c == '['              -> csiMode d
              | otherwise             -> produce []
+
+    -- SS3 mode is another less well-known escape sequence mode.
+    -- It is introduced by `\\ESCO`. Some terminal emulators use it for
+    -- compatibility with veeery old terminals. SS3 mode only allows one
+    -- subsequent character. Interpretation has been determined empirically
+    -- and with reference to http://rtfm.etla.org/xterm/ctlseq.html
+    ss3Mode :: Char -> [Event]
+    ss3Mode = \case
+      'P' -> [KeyEvent (FunctionKey  1) mempty]
+      'Q' -> [KeyEvent (FunctionKey  2) mempty]
+      'R' -> [KeyEvent (FunctionKey  3) mempty]
+      'S' -> [KeyEvent (FunctionKey  4) mempty]
+      _   -> []
 
     -- ESC[ is followed by any number (including none) of parameter chars in the
     -- range 0–9:;<=>?, then by any number of intermediate chars
@@ -166,16 +186,8 @@ interpretCSI params intermediates = \case
     "19" -> [KeyEvent (FunctionKey  8) ctrlKey]
     "20" -> [KeyEvent (FunctionKey  9) ctrlKey]
     "21" -> [KeyEvent (FunctionKey 10) ctrlKey]
-    "22" -> [KeyEvent (FunctionKey 11) ctrlKey]
-    "23" -> [KeyEvent (FunctionKey 12) ctrlKey]
-    "24" -> [KeyEvent (FunctionKey 13) ctrlKey]
-    "25" -> [KeyEvent (FunctionKey 14) ctrlKey]
-    "27" -> [KeyEvent (FunctionKey 15) ctrlKey]
-    "28" -> [KeyEvent (FunctionKey 16) ctrlKey]
-    "31" -> [KeyEvent (FunctionKey 17) ctrlKey]
-    "32" -> [KeyEvent (FunctionKey 18) ctrlKey]
-    "34" -> [KeyEvent (FunctionKey 19) ctrlKey]
-    "35" -> [KeyEvent (FunctionKey 20) ctrlKey]
+    "23" -> [KeyEvent (FunctionKey 11) ctrlKey]
+    "24" -> [KeyEvent (FunctionKey 12) ctrlKey]
     _    -> []
   'f' -> []
   'i' -> [KeyEvent PrintKey mempty]
@@ -197,16 +209,8 @@ interpretCSI params intermediates = \case
     "19" -> modified (FunctionKey 8)
     "20" -> modified (FunctionKey 9)
     "21" -> modified (FunctionKey 10)
-    "22" -> modified (FunctionKey 11)
-    "23" -> modified (FunctionKey 12)
-    "24" -> modified (FunctionKey 13)
-    "25" -> modified (FunctionKey 14)
-    "27" -> modified (FunctionKey 15)
-    "28" -> modified (FunctionKey 16)
-    "31" -> modified (FunctionKey 17)
-    "32" -> modified (FunctionKey 18)
-    "33" -> modified (FunctionKey 19)
-    "34" -> modified (FunctionKey 20)
+    "23" -> modified (FunctionKey 11)
+    "24" -> modified (FunctionKey 12)
     _    -> []
   _ -> []
   where

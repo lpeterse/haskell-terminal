@@ -33,7 +33,7 @@ newtype AnsiTerminalT m a
 runAnsiTerminalT :: (MonadIO m, MonadMask m) => AnsiTerminalT m a -> T.Terminal -> m a
 runAnsiTerminalT (AnsiTerminalT action) ansi = do
   eventsChan <- liftIO newTChanIO
-  decoderVar <- liftIO (newTVarIO T.ansiDecoder)
+  decoderVar <- liftIO $ newTVarIO $ T.ansiDecoder $ T.termSpecialCharacters ansi
   runReaderT action ansi { T.termInput = nextEvent eventsChan decoderVar }
   where
     -- This function transforms the incoming raw event stream and sends
