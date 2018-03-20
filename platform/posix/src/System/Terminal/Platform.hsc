@@ -13,9 +13,6 @@ import           Control.Monad                 (forever, when, unless, void)
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
-import           Control.Monad.Trans.Class
-import           Control.Monad.Trans.Reader
-import           Control.Monad.Trans.State
 import           Data.Bits
 import qualified Data.ByteString               as BS
 import qualified Data.ByteString.Char8         as BS8
@@ -99,8 +96,8 @@ withOutputProcessing output outputFlush = bracket
   ( liftIO . A.cancel ) . const
   where
     run = forever $ atomically ((Just <$> takeTMVar output) `orElse` (takeTMVar outputFlush >> pure Nothing)) >>= \case
-      Nothing -> IO.hFlush IO.stdout
-      Just t  -> Text.hPutStr IO.stdout t
+        Nothing -> IO.hFlush IO.stdout
+        Just t  -> Text.hPutStr IO.stdout t
 
 withInputProcessing :: (MonadIO m, MonadMask m) => ThreadId -> Termios -> TVar Bool -> TChan Event -> m a -> m a
 withInputProcessing mainThread termios interrupt events = bracket
