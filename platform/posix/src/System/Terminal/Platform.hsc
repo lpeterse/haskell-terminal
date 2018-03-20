@@ -34,13 +34,14 @@ import qualified GHC.Conc                      as Conc
 import qualified Data.Dynamic                  as Dyn
 import           System.Posix.Types            (Fd(..))
 
-import qualified Control.Monad.Terminal        as T
-import qualified Control.Monad.Terminal.Ansi   as T
+import           Control.Monad.Terminal.Terminal
+import           Control.Monad.Terminal.Input
+import           Control.Monad.Terminal.TerminalT
 
 #include "Rts.h"
 #include "hs_terminal.h"
 
-withTerminal :: (MonadIO m, MonadMask m) => (T.Terminal -> m a) -> m a
+withTerminal :: (MonadIO m, MonadMask m) => (Terminal -> m a) -> m a
 withTerminal action = do
   termType    <- BS8.pack . fromMaybe "xterm" <$> liftIO (lookupEnv "TERM")
   mainThread  <- liftIO myThreadId
@@ -49,24 +50,35 @@ withTerminal action = do
   outputFlush <- liftIO newEmptyTMVarIO
   events      <- liftIO newTChanIO
   screenSize  <- liftIO (newTVarIO =<< getWindowSize)
-  withTermiosSettings $
-    withResizeHandler (atomically . writeTChan events . T.WindowEvent . T.WindowSizeChanged =<< getWindowSize) $
-    withInputProcessing mainThread interrupt events $ 
-    withOutputProcessing output outputFlush $ action $ T.Terminal {
-        T.termType           = termType
-      , T.termInput          = readTChan events
-      , T.termInterrupt      = swapTVar interrupt False >>= check
-      , T.termOutput         = putTMVar output
-      , T.termFlush          = putTMVar outputFlush ()
-      , T.termScreenSize     = readTVar screenSize
+  withTermiosSettings $ \termios->
+    withResizeHandler (atomically . writeTChan events . WindowEvent . WindowSizeChanged =<< getWindowSize) $
+    withInputProcessing mainThread termios interrupt events $ 
+    withOutputProcessing output outputFlush $ action $ Terminal {
+        termType           = termType
+      , termInput          = readTChan events
+      , termInterrupt      = swapTVar interrupt False >>= check
+      , termOutput         = putTMVar output
+      , termFlush          = putTMVar outputFlush ()
+      , termScreenSize     = readTVar screenSize
+      , termSpecialChars   = \case
+          '\n'   -> Just $ KeyEvent EnterKey mempty
+          '\t'   -> Just $ KeyEvent TabKey mempty
+          '\SP'  -> Just $ KeyEvent SpaceKey mempty
+          '\b'   -> Just $ KeyEvent (if termiosVERASE termios == '\b'   then BackspaceKey else DeleteKey) mempty
+          '\DEL' -> Just $ KeyEvent (if termiosVERASE termios == '\DEL' then DeleteKey else BackspaceKey) mempty
+          _      -> Nothing
       }
 
-withTermiosSettings :: (MonadIO m, MonadMask m) => m a -> m a
-withTermiosSettings ma = bracket before after between
+withTermiosSettings :: (MonadIO m, MonadMask m) => (Termios -> m a) -> m a
+withTermiosSettings fma = bracket before after between
   where
-    before  = liftIO (getTermios >>= \t-> setTermios t { termiosISIG = False, termiosICANON = False, termiosECHO = False } >> pure t)
+    before  = liftIO $ do
+      termios <- getTermios
+      let termios' = termios { termiosISIG = False, termiosICANON = False, termiosECHO = False }
+      setTermios termios'
+      pure termios
     after   = liftIO . setTermios
-    between = const ma
+    between = fma
 
 withResizeHandler :: (MonadIO m, MonadMask m) => IO () -> m a -> m a
 withResizeHandler handler = bracket installHandler restoreHandler . const
@@ -90,29 +102,27 @@ withOutputProcessing output outputFlush = bracket
       Nothing -> IO.hFlush IO.stdout
       Just t  -> Text.hPutStr IO.stdout t
 
-withInputProcessing :: (MonadIO m, MonadMask m) => ThreadId -> TVar Bool -> TChan T.Event -> m a -> m a
-withInputProcessing mainThread interrupt events = bracket
+withInputProcessing :: (MonadIO m, MonadMask m) => ThreadId -> Termios -> TVar Bool -> TChan Event -> m a -> m a
+withInputProcessing mainThread termios interrupt events = bracket
   ( liftIO $ A.async run )
   ( liftIO . A.cancel ) . const
   where
     run :: IO ()
-    run = do 
-      termios <- getTermios
-      forever $ do 
+    run = forever $ do 
         IO.hGetChar handle >>= \case
           c | c == termiosVINTR  termios -> handleInterrupt c
-            | c == termiosVERASE termios -> atomically $ writeChar c >> writeKey T.BackspaceKey
+            | c == termiosVERASE termios -> atomically $ writeChar c >> writeKey BackspaceKey
             | otherwise                  -> atomically $ writeChar c
         writeFillCharacterAfterTimeout
 
     handle     :: IO.Handle
     handle      = IO.stdin
-    writeEvent :: T.Event -> STM ()
+    writeEvent :: Event -> STM ()
     writeEvent  = writeTChan events
-    writeKey   :: T.Key -> STM ()
-    writeKey k  = writeTChan events (T.KeyEvent k mempty)
+    writeKey   :: Key -> STM ()
+    writeKey k  = writeTChan events (KeyEvent k mempty)
     writeChar  :: Char -> STM ()
-    writeChar c = writeTChan events (T.KeyEvent (T.CharKey c) mempty)
+    writeChar c = writeTChan events (KeyEvent (CharKey c) mempty)
     -- This function is responsible for passing interrupt events and
     -- eventually throwing an exception to the main thread in case it
     -- detects that the main thread is not serving its duty to process
@@ -121,7 +131,7 @@ withInputProcessing mainThread interrupt events = bracket
     -- the main thread is not responsive.
     handleInterrupt  :: Char -> IO ()
     handleInterrupt c =  do
-      unhandledInterrupt <- liftIO (atomically $ writeChar c >> writeEvent T.InterruptEvent >> swapTVar interrupt True)
+      unhandledInterrupt <- liftIO (atomically $ writeChar c >> writeEvent InterruptEvent >> swapTVar interrupt True)
       when unhandledInterrupt (E.throwTo mainThread E.UserInterrupt)
     -- This function first evaluates whether more input is immediately available.
     -- If this is the case it just returns. Otherwise it registers interest in

@@ -53,7 +53,7 @@ withTerminal action = do
         , T.termInterrupt      = swapTVar   interrupt False >>= check
         , T.termFlush          = putTMVar   outputFlush ()
         , T.termScreenSize     = readTVar   screenSize
-        , T.termSpecialCharacters = \case
+        , T.termSpecialChars   = \case
             '\r'   -> Just $ T.KeyEvent T.EnterKey mempty
             '\t'   -> Just $ T.KeyEvent T.TabKey mempty
             '\SP'  -> Just $ T.KeyEvent T.SpaceKey mempty
