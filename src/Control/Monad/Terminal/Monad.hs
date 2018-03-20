@@ -30,3 +30,4 @@ class (MonadInput m, MonadPrettyPrinter m, MonadFormatPrinter m, MonadColorPrint
   hideCursor                  :: m ()
   getScreenSize               :: m (Int,Int)
   clearLine                   :: m ()
+  useAlternateScreenBuffer    :: Bool -> m ()

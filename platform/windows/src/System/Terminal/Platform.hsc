@@ -227,12 +227,16 @@ withInputProcessing mainThread interrupt events screenSize ma = do
               btn <- readTVar latestMouseButton
               writeTChan events $ T.MouseEvent $ T.MouseButtonReleased (r - srWindowTop csbi, c - srWindowLeft csbi) btn
               writeTChan events $ T.MouseEvent $ T.MouseButtonClicked  (r - srWindowTop csbi, c - srWindowLeft csbi) btn
+            T.MouseButtonClicked (r,c) btn -> atomically $ do
+              csbi <- readTVar latestScreenBufferInfo
+              writeTChan events $ T.MouseEvent $ T.MouseButtonClicked (r - srWindowTop csbi, c - srWindowLeft csbi) btn
             T.MouseWheeled (r,c) dir -> atomically $ do
               csbi <- readTVar latestScreenBufferInfo
               writeTChan events $ T.MouseEvent $ T.MouseWheeled (r - srWindowTop csbi, c - srWindowLeft csbi) dir
             T.MouseMoved (r,c) -> atomically $ do
               csbi <- readTVar latestScreenBufferInfo
               writeTChan events $ T.MouseEvent $ T.MouseMoved (r - srWindowTop csbi, c - srWindowLeft csbi)
+
           WindowEvent wev -> case wev of
             T.WindowSizeChanged _ -> do
               csbi <- getConsoleScreenBufferInfo

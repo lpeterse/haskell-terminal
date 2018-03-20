@@ -230,6 +230,9 @@ instance (MonadIO m, MonadThrow m) => T.MonadTerminal (TerminalT m) where
     ansi <- ask
     liftIO $ atomically $ T.termScreenSize ansi
 
+  useAlternateScreenBuffer          True = write "\ESC[?1049h"
+  useAlternateScreenBuffer         False = write "\ESC[?1049l"
+
 -- | See https://en.wikipedia.org/wiki/List_of_Unicode_characters
 safeChar :: Char -> Bool
 safeChar c

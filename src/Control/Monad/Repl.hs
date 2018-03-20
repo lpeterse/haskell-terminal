@@ -180,6 +180,7 @@ instance (MonadCatch m, MonadTerminal m) => T.MonadTerminal (ReplT s m) where
   hideCursor                  = lift   hideCursor
   clearLine                   = lift   clearLine
   getScreenSize               = lift   getScreenSize
+  useAlternateScreenBuffer    = lift . useAlternateScreenBuffer
 
 instance (MonadCatch m, T.MonadInput m) => T.MonadInput (ReplT s m) where
   waitMapInterruptAndEvents = lift . waitMapInterruptAndEvents

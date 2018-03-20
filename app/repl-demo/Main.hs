@@ -47,4 +47,5 @@ repl = readString prompt >>= \case
                     threadDelay 10000
                     update $ fromIntegral i / 1000
     "colors"   -> undefined
+    "alternate" -> useAlternateScreenBuffer True
     line       -> putStringLn (show line)
