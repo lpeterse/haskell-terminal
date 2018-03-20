@@ -26,8 +26,6 @@ dependencies:
 library:
   ghc-options: -Werror -O2 -fwarn-incomplete-patterns
   exposed-modules:
-    - Control.Monad.Repl
-    - Control.Monad.Repl.IO
     - Control.Monad.Terminal
     - System.Terminal
   other-modules:
@@ -57,18 +55,6 @@ library:
           - platform/posix/cbits/hs_terminal.c
 
 executables:
-  repl-demo:
-    main:                Main.hs
-    source-dirs:         app/repl-demo
-    ghc-options:
-    - -O2
-    - -Werror
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - async
-    - terminal
   terminal-ev:
     main:                Main.hs
     source-dirs:         app/terminal-ev

@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: ca578c978d404ffac168f7744c05172616f1d2f3921ffa8bd18c78fae4b32844
+-- hash: 9b4f05448dcec1dac0a92a7d9fea6aa5869795de70d5353e81269f36f5a931b0
 
 name:           terminal
 version:        0.1.0.0
@@ -54,8 +54,6 @@ library
     c-sources:
         platform/posix/cbits/hs_terminal.c
   exposed-modules:
-      Control.Monad.Repl
-      Control.Monad.Repl.IO
       Control.Monad.Terminal
       System.Terminal
   other-modules:
@@ -66,25 +64,6 @@ library
       Control.Monad.Terminal.Terminal
       Control.Monad.Terminal.TerminalT
       System.Terminal.Platform
-  default-language: Haskell2010
-
-executable repl-demo
-  main-is: Main.hs
-  hs-source-dirs:
-      app/repl-demo
-  ghc-options: -O2 -Werror -threaded -rtsopts -with-rtsopts=-N
-  build-depends:
-      async
-    , base >=4.7 && <5
-    , bytestring
-    , exceptions
-    , prettyprinter
-    , stm
-    , terminal
-    , text
-    , transformers
-  other-modules:
-      Paths_terminal
   default-language: Haskell2010
 
 executable terminal-ev
