@@ -41,11 +41,45 @@
   - Integrates the relatively new [prettyprinter](https://hackage.haskell.org/package/prettyprinter)
     library. Nicely formatted and colorful output requires nothing more than a few combinators.
 
-## The problem with _terminfo_
+## To use or not to use _terminfo_
 
 The [terminfo](https://hackage.haskell.org/package/terminfo) library is a binding to
 [libtinfo](https://en.wikipedia.org/wiki/Terminfo).
 
+_libtinfo_ is a library that queries a database (usually below `/usr/share/terminfo`)
+to determine the specifica and necessary control codes for interacting with a given
+terminal.
+
+Unfortunately, it is a reocurring source of issues:
+
+- https://github.com/commercialhaskell/stack/issues/1012
+- https://github.com/purescript/purescript/issues/2176
+- https://ghc.haskell.org/trac/ghc/ticket/8746?cversion=0&cnum_hist=2
+- https://ghc.haskell.org/trac/ghc/ticket/13210
+
+Arguments in favor of _terminfo_:
+
+  - Would allow to support all terminals in existence.
+  - It's "the standard".
+
+Arguments against _terminfo_:
+
+  - The _terminfo_ binding library is not threadsafe. This is not so much
+    of a problem when serving a single local terminal, but it might be a problem
+    when writing something like an SSH daemon in Haskell.
+  - _terminfo_ offers more than 500 capabilities. Only a very small part of it
+    is actually needed and since there is no legacy code to support there is no
+    real reason to expose more than a small subset of capabilities that is supported
+    by all terminals (-> ANSI sequences).
+  - Claim: All relevant terminals support and understand the relevant ANSI escape sequences
+    and/or try to behave like _xterm_. Terminals that don't are not relevant.
+  - Is it really necessary to support something like _tvi925_ (Televideo 925, around 1982)?
+    I honor that _terminfo_ takes the burden to maintain the definition files
+    for such historical hardware, but I doubt that anyone would miss it if we decide not
+    to support it.
+
+For now, I decided to not use _terminfo_ and see how well it works.
+This decision might be revised in the future. The API won't be affected by it. 
 
 ## How _terminal_ compares to..
 
