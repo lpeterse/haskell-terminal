@@ -4,9 +4,7 @@ module Control.Monad.Terminal
     -- ** TerminalT
     TerminalT ()
   , runTerminalT
-    -- ** MonadTerminal
-  , MonadTerminal (..)
-    -- * Printing
+    -- * Printing & Screen Modification
     -- ** MonadPrinter
   , MonadPrinter (..)
     -- ** MonadPrettyPrinter
@@ -21,6 +19,8 @@ module Control.Monad.Terminal
   , BasicColor (..)
   , Color (..)
   , ColorMode (..)
+    -- ** MonadTerminal
+  , MonadTerminal (..)
     -- * Event Processing
     -- ** MonadInput
   , MonadInput (..)

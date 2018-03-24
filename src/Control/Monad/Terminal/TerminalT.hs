@@ -204,8 +204,8 @@ instance (MonadIO m, MonadThrow m) => T.MonadColorPrinter (TerminalT m) where
 instance (MonadIO m, MonadThrow m) => T.MonadTerminal (TerminalT m) where
   moveCursorUp i                         = write $ "\ESC[" <> Text.pack (show i) <> "A"
   moveCursorDown i                       = write $ "\ESC[" <> Text.pack (show i) <> "B"
-  moveCursorForward i                    = write $ "\ESC[" <> Text.pack (show i) <> "C"
-  moveCursorBackward i                   = write $ "\ESC[" <> Text.pack (show i) <> "D"
+  moveCursorLeft i                       = write $ "\ESC[" <> Text.pack (show i) <> "D"
+  moveCursorRight i                      = write $ "\ESC[" <> Text.pack (show i) <> "C"
   getCursorPosition = do
     write "\ESC[6n"
     waitForCursorPositionReport
@@ -218,13 +218,19 @@ instance (MonadIO m, MonadThrow m) => T.MonadTerminal (TerminalT m) where
         T.DeviceEvent (T.CursorPositionReport pos) -> pure pos
         _ -> waitForCursorPositionReport
   setCursorPosition (x,y)                = write $ "\ESC[" <> Text.pack (show x) <> ";" <> Text.pack (show y) <> "H"
-  setVerticalCursorPosition i            = write $ "\ESC[" <> Text.pack (show i) <> "d"
-  setHorizontalCursorPosition i          = write $ "\ESC[" <> Text.pack (show i) <> "G"
+  setCursorPositionVertical i            = write $ "\ESC[" <> Text.pack (show i) <> "d"
+  setCursorPositionHorizontal i          = write $ "\ESC[" <> Text.pack (show i) <> "G"
   saveCursorPosition                     = write "\ESC7"
   restoreCursorPosition                  = write "\ESC8"
   showCursor                             = write "\ESC[?25h"
   hideCursor                             = write "\ESC[?25l"
+
   clearLine                              = write "\ESC[2K"
+  clearLineLeft                          = write "\ESC[1K"
+  clearLineRight                         = write "\ESC[0K"
+  clearScreen                            = write "\ESC[2K"
+  clearScreenAbove                       = write "\ESC[1K"
+  clearScreenBelow                       = write "\ESC[0K"
 
   getScreenSize = TerminalT $ do
     ansi <- ask
