@@ -9,9 +9,9 @@ class (MonadInput m, MonadPrettyPrinter m, MonadFormatPrinter m, MonadColorPrint
   -- | Move the cursor `n` lines down. Do not change column.
   moveCursorDown              :: Int -> m ()
   -- | Move the cursor `n` columns to the left. Do not change line.
-  moveCursorLeft          :: Int -> m ()
+  moveCursorLeft              :: Int -> m ()
   -- | Move the cursor `n` columns to the right. Do not change line.
-  moveCursorRight           :: Int -> m ()
+  moveCursorRight             :: Int -> m ()
   -- | Get the current cursor position. `(0,0) is the upper left of the screen.
   getCursorPosition           :: m (Int, Int)
   -- | Set the cursor position. `(0,0)` is the upper left of the screen.

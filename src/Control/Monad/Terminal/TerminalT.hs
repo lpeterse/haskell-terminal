@@ -217,9 +217,9 @@ instance (MonadIO m, MonadThrow m) => T.MonadTerminal (TerminalT m) where
         T.InterruptEvent                           -> throwM E.UserInterrupt
         T.DeviceEvent (T.CursorPositionReport pos) -> pure pos
         _ -> waitForCursorPositionReport
-  setCursorPosition (x,y)                = write $ "\ESC[" <> Text.pack (show x) <> ";" <> Text.pack (show y) <> "H"
-  setCursorPositionVertical i            = write $ "\ESC[" <> Text.pack (show i) <> "d"
-  setCursorPositionHorizontal i          = write $ "\ESC[" <> Text.pack (show i) <> "G"
+  setCursorPosition (x,y)                = write $ "\ESC[" <> Text.pack (show $ x + 1) <> ";" <> Text.pack (show $ y + 1) <> "H"
+  setCursorPositionVertical i            = write $ "\ESC[" <> Text.pack (show $ i + 1) <> "d"
+  setCursorPositionHorizontal i          = write $ "\ESC[" <> Text.pack (show $ i + 1) <> "G"
   saveCursorPosition                     = write "\ESC7"
   restoreCursorPosition                  = write "\ESC8"
   showCursor                             = write "\ESC[?25h"
@@ -228,9 +228,9 @@ instance (MonadIO m, MonadThrow m) => T.MonadTerminal (TerminalT m) where
   clearLine                              = write "\ESC[2K"
   clearLineLeft                          = write "\ESC[1K"
   clearLineRight                         = write "\ESC[0K"
-  clearScreen                            = write "\ESC[2K"
-  clearScreenAbove                       = write "\ESC[1K"
-  clearScreenBelow                       = write "\ESC[0K"
+  clearScreen                            = write "\ESC[2J"
+  clearScreenAbove                       = write "\ESC[1J"
+  clearScreenBelow                       = write "\ESC[0J"
 
   getScreenSize = TerminalT $ do
     ansi <- ask

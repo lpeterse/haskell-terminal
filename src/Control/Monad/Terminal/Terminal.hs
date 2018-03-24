@@ -48,9 +48,8 @@ data Terminal
     --   so it is probably better to not give any guarantees here).
   , termFlush        :: STM ()
     -- | This transaction shall return the latest known screen size without
-    --   blocking. The first parameter denotes the row and the second the column.
-    --   Both are 1-base which means that (1,1) is the upper left corner of the
-    --   terminal.
+    --   blocking. The first parameter denotes the number of rows and the
+    --   one the number of columns.
   , termScreenSize   :: STM (Int, Int)
   , termSpecialChars :: Char -> Maybe Event
   }

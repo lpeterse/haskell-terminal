@@ -163,7 +163,7 @@ interpretCSI params intermediates = \case
   -- well as a cursor position report. There is no real solution to disambiguate these two
   -- other than context of expectation (cursor position report has probably been requested).
   -- This decoder shall simply emit both events and the user shall ignore unexpected events.
-  'R'        -> modified (FunctionKey  3) ++ [DeviceEvent $ CursorPositionReport (fstNumber 0, sndNumber 0)]
+  'R'        -> modified (FunctionKey  3) ++ [DeviceEvent $ CursorPositionReport (fstNumber 1 - 1, sndNumber 1 - 1)]
   'S'        -> modified (FunctionKey  4)
   'T'        -> []
   'U'        -> []

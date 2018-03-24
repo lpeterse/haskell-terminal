@@ -242,7 +242,7 @@ withInputProcessing mainThread interrupt events screenSize ma = do
               csbi <- getConsoleScreenBufferInfo
               atomically $ do
                 writeTVar latestScreenBufferInfo csbi
-                let sz = (srWindowBottom csbi - srWindowTop csbi, srWindowRight csbi - srWindowLeft csbi)
+                let sz = (srWindowBottom csbi - srWindowTop csbi + 1, srWindowRight csbi - srWindowLeft csbi + 1)
                 sz' <- swapTVar screenSize sz
                 -- Observation: Not every event is an actual change to the screen size.
                 -- Only real changes shall be passed.
@@ -274,7 +274,7 @@ getConsoleScreenBufferInfo = alloca $ \ptr->
 getConsoleScreenSize :: IO (Int, Int)
 getConsoleScreenSize = do
   csbi <- getConsoleScreenBufferInfo
-  pure (srWindowBottom csbi - srWindowTop csbi, srWindowRight csbi - srWindowLeft csbi)
+  pure (srWindowBottom csbi - srWindowTop csbi + 1, srWindowRight csbi - srWindowLeft csbi + 1)
 
 data ConsoleInputEvent
   = KeyEvent
