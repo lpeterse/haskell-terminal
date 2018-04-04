@@ -208,6 +208,7 @@ instance (MonadIO m, MonadThrow m) => T.MonadTerminal (TerminalT m) where
   moveCursorRight i                      = write $ "\ESC[" <> Text.pack (show i) <> "C"
   getCursorPosition = do
     write "\ESC[6n"
+    T.flush
     waitForCursorPositionReport
     where
       -- Swallow all incoming events until either a cursor position report

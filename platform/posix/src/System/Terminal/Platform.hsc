@@ -48,7 +48,7 @@ withTerminal action = do
   events      <- liftIO newTChanIO
   screenSize  <- liftIO (newTVarIO =<< getWindowSize)
   withTermiosSettings $ \termios->
-    withResizeHandler (atomically . writeTChan events . WindowEvent . WindowSizeChanged =<< getWindowSize) $
+    withResizeHandler (handleResize screenSize events) $
     withInputProcessing mainThread termios interrupt events $ 
     withOutputProcessing output outputFlush $ action $ Terminal {
         termType           = termType
@@ -65,6 +65,12 @@ withTerminal action = do
           '\DEL' -> Just $ KeyEvent (if termiosVERASE termios == '\DEL' then DeleteKey else BackspaceKey) mempty
           _      -> Nothing
       }
+  where
+    handleResize screenSize events = do
+      ws <- getWindowSize
+      atomically $ do
+        writeTVar screenSize ws
+        writeTChan events (WindowEvent $ WindowSizeChanged ws)
 
 withTermiosSettings :: (MonadIO m, MonadMask m) => (Termios -> m a) -> m a
 withTermiosSettings fma = bracket before after between
