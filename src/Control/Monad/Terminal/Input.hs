@@ -104,9 +104,11 @@ data Key
 newtype Modifiers = Modifiers Int
   deriving (Eq, Ord, Bits)
 
+instance Semigroup Modifiers where
+  Modifiers a <> Modifiers b = Modifiers (a .|. b)
+
 instance Monoid Modifiers where
   mempty = Modifiers 0
-  mappend (Modifiers a) (Modifiers b) = Modifiers (a .|. b)
 
 instance Show Modifiers where
   show (Modifiers 0) = "mempty"
@@ -136,16 +138,16 @@ data Event
 
 data MouseEvent
   = MouseMoved          (Int,Int)
-  | MouseButtonPressed  (Int,Int) Button
-  | MouseButtonReleased (Int,Int) Button
-  | MouseButtonClicked  (Int,Int) Button
+  | MouseButtonPressed  (Int,Int) MouseButton
+  | MouseButtonReleased (Int,Int) MouseButton
+  | MouseButtonClicked  (Int,Int) MouseButton
   | MouseWheeled        (Int,Int) Direction
   deriving (Eq,Ord,Show)
 
-data Button
-  = LeftButton
-  | RightButton
-  | OtherButton
+data MouseButton
+  = LeftMouseButton
+  | RightMouseButton
+  | OtherMouseButton
   deriving (Eq,Ord,Show)
 
 data Direction

@@ -19,7 +19,6 @@ import           Control.Monad.STM
 import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Reader
 import           Data.Foldable                   (forM_)
-import           Data.Monoid
 import qualified Data.Text                       as Text
 import qualified Data.Text.Prettyprint.Doc       as PP
 

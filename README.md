@@ -1,5 +1,7 @@
 # terminal
 
+_terminal_ is a driver library for ANSI terminals like _xterm_.
+
 ## Features
 
   - Abstract monadic interfaces for different concerns: Write code that is only allowed to print
@@ -115,7 +117,7 @@ This decision might be revised in the future. The API won't be affected by it.
   - It has a dependency on _terminfo_ in order to support a broad range of terminals
     (especially those that are non-ANSI).
   - It offers operations for printing to the terminal which pass control codes
-    untouched.
+    unescaped.
   - It might be interesting to investigate whether _terminal_ could be used
     as an alternative backend for _haskeline_.
 

@@ -10,37 +10,33 @@ import           Control.Concurrent.STM.TVar
 import           Control.Concurrent.STM.TMVar
 import qualified Control.Exception             as E
 import           Control.Monad                 (forever, when, unless, void)
-import           Control.Monad.Catch
+import           Control.Monad.Catch hiding    (handle)
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
 import           Data.Bits
-import qualified Data.ByteString               as BS
 import qualified Data.ByteString.Char8         as BS8
 import           Data.Maybe
 import qualified Data.Text                     as Text
 import qualified Data.Text.IO                  as Text
-import           Data.Word
 import           Foreign.C.Types
 import           Foreign.Marshal.Alloc
 import           Foreign.Ptr
 import           Foreign.Storable
 import           System.Environment
 import qualified System.IO                     as IO
-import qualified System.IO.Error               as IO
 import qualified GHC.Conc                      as Conc
 import qualified Data.Dynamic                  as Dyn
 import           System.Posix.Types            (Fd(..))
 
 import           Control.Monad.Terminal.Terminal
 import           Control.Monad.Terminal.Input
-import           Control.Monad.Terminal.TerminalT
 
 #include "Rts.h"
 #include "hs_terminal.h"
 
 withTerminal :: (MonadIO m, MonadMask m) => (Terminal -> m a) -> m a
 withTerminal action = do
-  termType    <- BS8.pack . fromMaybe "xterm" <$> liftIO (lookupEnv "TERM")
+  term        <- BS8.pack . fromMaybe "xterm" <$> liftIO (lookupEnv "TERM")
   mainThread  <- liftIO myThreadId
   interrupt   <- liftIO (newTVarIO False)
   output      <- liftIO newEmptyTMVarIO
@@ -51,7 +47,7 @@ withTerminal action = do
     withResizeHandler (handleResize screenSize events) $
     withInputProcessing mainThread termios interrupt events $ 
     withOutputProcessing output outputFlush $ action $ Terminal {
-        termType           = termType
+        termType           = term
       , termInput          = readTChan events
       , termInterrupt      = swapTVar interrupt False >>= check
       , termOutput         = putTMVar output

@@ -126,20 +126,20 @@ ansiDecoder specialChars = defaultMode
         -- will therefore recover to default mode after at most 32 characters.
         f :: Int -> String -> Decoder
         f 0 _  = defaultMode
-        f i ps = Decoder $ const $ \c-> if
-          | c >= '0' && c <= '?' -> continue $ f (i - 1) (c:ps)  -- More parameters.
-          | c >= '!' && c <= '/' -> continue $ g charLimit ps [] -- Start of intermediates.
-          | c >= '@' && c <= '~' -> produce $ interpretCSI (reverse ps) [] c
+        f i ps = Decoder $ const $ \x-> if
+          | x >= '0' && x <= '?' -> continue $ f (i - 1) (x:ps)  -- More parameters.
+          | x >= '!' && x <= '/' -> continue $ g charLimit ps [] -- Start of intermediates.
+          | x >= '@' && x <= '~' -> produce $ interpretCSI (reverse ps) [] x
           | otherwise            -> produce [] -- Illegal state. Return to default mode.
         g :: Int -> String -> String -> Decoder
         g 0 _  _  = defaultMode
-        g i ps is = Decoder $ const $ \c-> if
-          | c >= '!' && c <= '/' -> continue $ g (i - 1) ps (c:is) -- More intermediates.
-          | c >= '@' && c <= '~' -> produce $ interpretCSI (reverse ps) (reverse is) c
+        g i ps is = Decoder $ const $ \x-> if
+          | x >= '!' && x <= '/' -> continue $ g (i - 1) ps (x:is) -- More intermediates.
+          | x >= '@' && x <= '~' -> produce $ interpretCSI (reverse ps) (reverse is) x
           | otherwise            -> produce [] -- Illegal state. Return to default mode.
 
 interpretCSI :: String -> String -> Char -> [Event]
-interpretCSI params intermediates = \case
+interpretCSI params _intermediates = \case
   '$'        -> [KeyEvent DeleteKey (altKey `mappend` shiftKey)]  -- urxvt, gnome-terminal
   '@'        -> []
   'A'        -> modified $ ArrowKey Upwards
