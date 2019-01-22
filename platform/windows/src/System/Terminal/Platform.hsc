@@ -168,7 +168,7 @@ withInputProcessing mainThread interrupt events screenSize ma = do
     run terminate = do
       latestScreenBufferInfo <- newTVarIO =<< getConsoleScreenBufferInfo
       latestCharacter        <- newTVarIO '\NUL'
-      latestMouseButton      <- newTVarIO T.LeftButton
+      latestMouseButton      <- newTVarIO T.LeftMouseButton
       fix $ \continue-> tryGetConsoleInputEvent >>= \case
         -- `tryGetConsoleInputEvent` is a blocking system call. It cannot be interrupted, but
         -- is guaranteed to return after at most 100ms. In this case it is checked whether
@@ -321,12 +321,12 @@ instance Storable ConsoleInputEvent where
         (#const MOUSE_WHEELED)  -> pure (T.MouseWheeled pos $ if btn .&. 0xff000000 > 0 then T.Downwards  else T.Upwards)
         (#const MOUSE_HWHEELED) -> pure (T.MouseWheeled pos $ if btn .&. 0xff000000 > 0 then T.Rightwards else T.Leftwards)
         _ -> case btn of
-          (#const FROM_LEFT_1ST_BUTTON_PRESSED) -> pure $ T.MouseButtonPressed  pos T.LeftButton
-          (#const FROM_LEFT_2ND_BUTTON_PRESSED) -> pure $ T.MouseButtonPressed  pos T.OtherButton
-          (#const FROM_LEFT_3RD_BUTTON_PRESSED) -> pure $ T.MouseButtonPressed  pos T.OtherButton
-          (#const FROM_LEFT_4TH_BUTTON_PRESSED) -> pure $ T.MouseButtonPressed  pos T.OtherButton
-          (#const RIGHTMOST_BUTTON_PRESSED)     -> pure $ T.MouseButtonPressed  pos T.RightButton
-          _                                     -> pure $ T.MouseButtonReleased pos T.OtherButton
+          (#const FROM_LEFT_1ST_BUTTON_PRESSED) -> pure $ T.MouseButtonPressed  pos T.LeftMouseButton
+          (#const FROM_LEFT_2ND_BUTTON_PRESSED) -> pure $ T.MouseButtonPressed  pos T.OtherMouseButton
+          (#const FROM_LEFT_3RD_BUTTON_PRESSED) -> pure $ T.MouseButtonPressed  pos T.OtherMouseButton
+          (#const FROM_LEFT_4TH_BUTTON_PRESSED) -> pure $ T.MouseButtonPressed  pos T.OtherMouseButton
+          (#const RIGHTMOST_BUTTON_PRESSED)     -> pure $ T.MouseButtonPressed  pos T.RightMouseButton
+          _                                     -> pure $ T.MouseButtonReleased pos T.OtherMouseButton
     (#const FOCUS_EVENT) -> peek ptrFocus >>= \case
       0 -> pure $ WindowEvent T.WindowLostFocus
       _ -> pure $ WindowEvent T.WindowGainedFocus

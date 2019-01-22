@@ -42,6 +42,7 @@ module Control.Monad.Terminal
   , metaKey
     -- *** Mouse Events
   , MouseEvent (..)
+  , MouseButton (..)
     -- *** Window Events
   , WindowEvent (..)
     -- *** Device Events

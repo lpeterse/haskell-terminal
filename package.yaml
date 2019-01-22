@@ -1,17 +1,18 @@
 name:                terminal
 synopsis:            Portable terminal interaction library
 version:             0.1.0.0
-github:              "lpeterse/terminal"
+github:              "lpeterse/haskell-terminal"
 license:             BSD3
 author:              "Lars Petersen"
 maintainer:          "info@lars-petersen.net"
 copyright:           "2018 Lars Petersen"
+category:            Terminal
 
 extra-source-files:
 - README.md
 - CHANGELOG.md
 
-description:         Please see the README on Github at <https://github.com/lpeterse/terminal#readme>
+description:         Please see the README on Github at <https://github.com/lpeterse/haskell-terminal#readme>
 
 dependencies:
 - base >= 4.7 && < 5
@@ -24,7 +25,7 @@ dependencies:
 - prettyprinter
 
 library:
-  ghc-options: -Werror -O2 -fwarn-incomplete-patterns
+  ghc-options: -Wall -fwarn-incomplete-patterns
   exposed-modules:
     - Control.Monad.Terminal
     - System.Terminal
@@ -54,28 +55,6 @@ library:
         c-sources:
           - platform/posix/cbits/hs_terminal.c
 
-executables:
-  terminal-ev:
-    main:                Main.hs
-    source-dirs:         app/terminal-ev
-    ghc-options:
-    - -Werror
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - terminal
-  terminal-out:
-    main:                Main.hs
-    source-dirs:         app/terminal-out
-    ghc-options:
-    - -Werror
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - terminal
-
 tests:
   terminal-test:
     main:                Spec.hs
@@ -90,3 +69,25 @@ tests:
     - tasty
     - tasty-hunit
     - tasty-quickcheck
+
+#executables:
+#  terminal-ev:
+#    main:                Main.hs
+#    source-dirs:         app/terminal-ev
+#    ghc-options:
+#    - -Werror
+#    - -threaded
+#    - -rtsopts
+#    - -with-rtsopts=-N
+#    dependencies:
+#    - terminal
+#  terminal-out:
+#    main:                Main.hs
+#    source-dirs:         app/terminal-out
+#    ghc-options:
+#    - -Werror
+#    - -threaded
+#    - -rtsopts
+#    - -with-rtsopts=-N
+#    dependencies:
+#    - terminal
