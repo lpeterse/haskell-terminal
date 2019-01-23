@@ -142,6 +142,6 @@ This decision might be revised in the future. The API won't be affected by it.
 
 ### brick
 
-  - [brick](https://hackage.haskell.org/package/vty) is library on top of _vty_. Its
+  - [brick](https://hackage.haskell.org/package/brick) is library on top of _vty_. Its
     scope is different from what _terminal_ does.
 
