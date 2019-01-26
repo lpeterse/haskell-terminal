@@ -26,41 +26,55 @@ dependencies:
 - async
 - bytestring
 - exceptions
+- prettyprinter
 - stm
 - text
 - transformers
-- prettyprinter
+
+default-extensions:
+- LambdaCase
+- BlockArguments
+- OverloadedStrings
+- GeneralizedNewtypeDeriving
 
 library:
   ghc-options: -Wall -fwarn-incomplete-patterns
+  source-dirs: src
+  dependencies:
+    - terminal-internal
   exposed-modules:
     - Control.Monad.Terminal
     - System.Terminal
-  other-modules:
-    - Control.Monad.Terminal.Decoder
-    - Control.Monad.Terminal.Input
-    - Control.Monad.Terminal.Monad
-    - Control.Monad.Terminal.Printer
-    - Control.Monad.Terminal.Terminal
-    - Control.Monad.Terminal.TerminalT
-    - System.Terminal.Platform
-  source-dirs: src
-  when:
-    - condition: os(windows)
-      then:
-        source-dirs:
-          - platform/windows/src
-        include-dirs:
-          - platform/windows/include
-        c-sources:
-          - platform/windows/cbits/hs_terminal.c
-      else:
-        source-dirs:
-          - platform/posix/src
-        include-dirs:
-          - platform/posix/include
-        c-sources:
-          - platform/posix/cbits/hs_terminal.c
+
+internal-libraries:
+  terminal-internal:
+    ghc-options: -Wall -fwarn-incomplete-patterns
+    exposed-modules:
+      - Control.Monad.Terminal.Decoder
+      - Control.Monad.Terminal.Input
+      - Control.Monad.Terminal.Monad
+      - Control.Monad.Terminal.Printer
+      - Control.Monad.Terminal.Terminal
+      - Control.Monad.Terminal.TerminalT
+      - System.Terminal.Platform
+    when:
+      - condition: os(windows)
+        then:
+          source-dirs:
+            - src-internal
+            - platform/windows/src
+          include-dirs:
+            - platform/windows/include
+          c-sources:
+            - platform/windows/cbits/hs_terminal.c
+        else:
+          source-dirs:
+            - src-internal
+            - platform/posix/src
+          include-dirs:
+            - platform/posix/include
+          c-sources:
+            - platform/posix/cbits/hs_terminal.c
 
 tests:
   terminal-test:
@@ -72,7 +86,7 @@ tests:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - terminal
+    - terminal-internal
     - tasty
     - tasty-hunit
     - tasty-quickcheck

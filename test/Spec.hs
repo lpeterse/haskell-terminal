@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase        #-}
-{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import           Data.Monoid
@@ -7,7 +5,10 @@ import           Data.Monoid
 import           Test.Tasty
 import           Test.Tasty.HUnit
 
-import           Control.Monad.Terminal
+import           Control.Monad.Terminal.Terminal
+import           Control.Monad.Terminal.Decoder
+import           Control.Monad.Terminal.Monad
+import           Control.Monad.Terminal.Input
 
 main :: IO ()
 main = defaultMain $ testGroup "Control.Monad.Terminal"
