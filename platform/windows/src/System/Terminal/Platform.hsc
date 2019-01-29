@@ -43,6 +43,7 @@ withTerminal action = do
   output         <- liftIO newEmptyTMVarIO
   outputFlush    <- liftIO newEmptyTMVarIO
   screenSize     <- liftIO (newTVarIO =<< getConsoleScreenSize)
+  cursorPosition <- liftIO newEmptyTMVarIO
   withConsoleModes $
     withOutputProcessing mainThread output outputFlush $
       withInputProcessing mainThread interrupt events screenSize $ action $
@@ -52,7 +53,7 @@ withTerminal action = do
         , T.termOutput         = putTMVar   output
         , T.termInterrupt      = swapTVar   interrupt False >>= check
         , T.termFlush          = putTMVar   outputFlush ()
-        , T.termScreenSize     = readTVar   screenSize
+        , T.termGetScreenSize  = readTVar   screenSize
         , T.termSpecialChars   = \case
             '\r'   -> Just $ T.KeyEvent T.EnterKey mempty
             '\t'   -> Just $ T.KeyEvent T.TabKey mempty

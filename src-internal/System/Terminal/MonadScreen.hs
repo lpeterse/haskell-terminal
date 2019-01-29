@@ -1,25 +1,27 @@
-module Control.Monad.Terminal.Monad where
+module System.Terminal.MonadScreen where
 
-import           Control.Monad.Terminal.Input
-import           Control.Monad.Terminal.Printer
+import           Control.Monad.Catch
 
-class (MonadInput m, MonadPrettyPrinter m, MonadFormatPrinter m, MonadColorPrinter m) => MonadTerminal m where
+import           System.Terminal.MonadInput
+import           System.Terminal.MonadPrinter
+
+class MonadScreen m where
   -- | Move the cursor `n` lines up. Do not change column.
-  moveCursorUp                :: Int -> m ()
+  moveCursorUp                :: Rows -> m ()
   -- | Move the cursor `n` lines down. Do not change column.
-  moveCursorDown              :: Int -> m ()
+  moveCursorDown              :: Rows -> m ()
   -- | Move the cursor `n` columns to the left. Do not change line.
-  moveCursorLeft              :: Int -> m ()
+  moveCursorLeft              :: Columns -> m ()
   -- | Move the cursor `n` columns to the right. Do not change line.
-  moveCursorRight             :: Int -> m ()
+  moveCursorRight             :: Columns -> m ()
   -- | Get the current cursor position. `(0,0) is the upper left of the screen.
-  getCursorPosition           :: m (Int, Int)
+  getCursorPosition           :: m (Row, Column)
   -- | Set the cursor position. `(0,0)` is the upper left of the screen.
-  setCursorPosition           :: (Int,Int) -> m ()
+  setCursorPosition           :: (Row, Column) -> m ()
   -- | Set the vertical cursor position to the `n`th line. Do not change column.
-  setCursorPositionVertical   :: Int -> m ()
+  setCursorPositionVertical   :: Row -> m ()
   -- | Set the horizontal cursor position to the `n`th column. Do not change line.
-  setCursorPositionHorizontal :: Int -> m ()
+  setCursorPositionHorizontal :: Column -> m ()
   -- | Save the current cursor position to be restored later by `restoreCursorPosition`.
   saveCursorPosition          :: m ()
   -- | Restore cursor to position previously saved by `saveCursorPosition`.
@@ -42,7 +44,7 @@ class (MonadInput m, MonadPrettyPrinter m, MonadFormatPrinter m, MonadColorPrint
   -- | Clear the screen below the cursor.
   clearScreenBelow            :: m ()
 
-  getScreenSize               :: m (Int,Int)
+  getScreenSize               :: m (Rows, Columns)
   -- | Whether or not to use the alternate screen buffer.
   --
   --   - The main screen buffer content is preserved and restored
@@ -50,6 +52,11 @@ class (MonadInput m, MonadPrettyPrinter m, MonadFormatPrinter m, MonadColorPrint
   --   - The dimensions of the alternate screen buffer are
   --     exactly those of the screen.
   useAlternateScreenBuffer    :: Bool -> m ()
+
+withAlternateScreenBuffer :: (MonadScreen m, MonadMask m) => m a -> m a
+withAlternateScreenBuffer = bracket_
+  (useAlternateScreenBuffer True)
+  (useAlternateScreenBuffer False)
 
 -- http://www.noah.org/python/pexpect/ANSI-X3.64.htm
 -- Erasing parts of the display (EL and ED) in the VT100 is performed thus:

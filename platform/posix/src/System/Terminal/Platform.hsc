@@ -1,22 +1,24 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase, RankNTypes #-}
 module System.Terminal.Platform
   ( withTerminal
+  , LocalTerminal ()
   ) where
 
+import           Control.Applicative
 import           Control.Concurrent
 import qualified Control.Concurrent.Async      as A
 import           Control.Concurrent.STM.TChan
 import           Control.Concurrent.STM.TVar
 import           Control.Concurrent.STM.TMVar
 import qualified Control.Exception             as E
-import           Control.Monad                 (forever, when, unless, void)
+import           Control.Monad                 (forM_, void, when)
 import           Control.Monad.Catch hiding    (handle)
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
 import           Data.Bits
+import qualified Data.ByteString               as BS
 import qualified Data.ByteString.Char8         as BS8
 import           Data.Maybe
-import qualified Data.Text                     as Text
 import qualified Data.Text.IO                  as Text
 import           Foreign.C.Types
 import           Foreign.Marshal.Alloc
@@ -26,52 +28,79 @@ import           System.Environment
 import qualified System.IO                     as IO
 import qualified GHC.Conc                      as Conc
 import qualified Data.Dynamic                  as Dyn
-import           System.Posix.Types            (Fd(..))
 
-import           Control.Monad.Terminal.Terminal
-import           Control.Monad.Terminal.Input
+import           System.Terminal.Terminal
+import           System.Terminal.MonadInput
+import           System.Terminal.Decoder
+import           System.Terminal.Encoder
 
 #include "Rts.h"
 #include "hs_terminal.h"
 
-withTerminal :: (MonadIO m, MonadMask m) => (Terminal -> m a) -> m a
+data LocalTerminal
+    = LocalTerminal
+    { localType              :: BS.ByteString
+    , localEvent             :: STM Event
+    , localInterrupt         :: STM ()
+    , localGetScreenSize     :: IO (Rows, Columns)
+    , localGetCursorPosition :: IO (Row, Column)
+    }
+
+instance Terminal LocalTerminal where
+    termType              = localType
+    termEvent             = localEvent
+    termInterrupt         = localInterrupt
+    termCommand _ c       = Text.hPutStr IO.stdout (ansiEncode c)
+    termFlush _           = IO.hFlush IO.stdout
+    termGetScreenSize     = localGetScreenSize
+    termGetCursorPosition = localGetCursorPosition
+
+withTerminal :: (MonadIO m, MonadMask m) => (LocalTerminal -> m a) -> m a
 withTerminal action = do
-  term        <- BS8.pack . fromMaybe "xterm" <$> liftIO (lookupEnv "TERM")
-  mainThread  <- liftIO myThreadId
-  interrupt   <- liftIO (newTVarIO False)
-  output      <- liftIO newEmptyTMVarIO
-  outputFlush <- liftIO newEmptyTMVarIO
-  events      <- liftIO newTChanIO
-  screenSize  <- liftIO (newTVarIO =<< getWindowSize)
-  withTermiosSettings $ \termios->
-    withResizeHandler (handleResize screenSize events) $
-    withInputProcessing mainThread termios interrupt events $ 
-    withOutputProcessing output outputFlush $ action $ Terminal {
-        termType           = term
-      , termInput          = readTChan events
-      , termInterrupt      = swapTVar interrupt False >>= check
-      , termOutput         = putTMVar output
-      , termFlush          = putTMVar outputFlush ()
-      , termScreenSize     = readTVar screenSize
-      , termSpecialChars   = \case
-          '\n'   -> Just $ KeyEvent EnterKey mempty
-          '\t'   -> Just $ KeyEvent TabKey mempty
-          '\SP'  -> Just $ KeyEvent SpaceKey mempty
-          '\b'   -> Just $ KeyEvent (if termiosVERASE termios == '\b'   then BackspaceKey else DeleteKey) mempty
-          '\DEL' -> Just $ KeyEvent (if termiosVERASE termios == '\DEL' then DeleteKey else BackspaceKey) mempty
-          _      -> Nothing
-      }
-  where
-    handleResize screenSize events = do
-      ws <- getWindowSize
-      atomically $ do
-        writeTVar screenSize ws
-        writeTChan events (WindowEvent $ WindowSizeChanged ws)
+    term           <- BS8.pack . fromMaybe "xterm" <$> liftIO (lookupEnv "TERM")
+    mainThread     <- liftIO myThreadId
+    interrupt      <- liftIO (newTVarIO False)
+    events         <- liftIO newTChanIO
+    screenSize     <- liftIO (newTVarIO =<< getWindowSize)
+    cursorPosition <- liftIO newEmptyTMVarIO
+    withTermiosSettings $ \termios->
+        withResizeHandler (handleResize screenSize events) $
+        withInputProcessing mainThread termios cursorPosition interrupt events $ 
+        action LocalTerminal
+            { localType              = term
+            , localEvent             = readTChan events
+            , localInterrupt         = swapTVar interrupt False >>= check
+            , localGetScreenSize     = atomically (readTVar screenSize)
+            , localGetCursorPosition = do
+                -- Empty the result variable.
+                atomically (void (takeTMVar cursorPosition) <|> pure ())
+                -- Send cursor position report request.
+                Text.hPutStr IO.stdout (ansiEncode GetCursorPosition)
+                IO.hFlush IO.stdout
+                -- Wait for the result variable to be filled by the input processor.
+                atomically (takeTMVar cursorPosition)
+            }
+    where
+        handleResize screenSize events = do
+            ws <- getWindowSize
+            atomically do
+                writeTVar screenSize ws
+                writeTChan events (WindowEvent $ WindowSizeChanged ws)
+
+specialChar :: Termios -> Modifiers -> Char -> Maybe Event
+specialChar t mods = \case
+    c | c == termiosVINTR  t -> Just $ SignalEvent Interrupt
+      | c == termiosVERASE t -> Just $ KeyEvent BackspaceKey mods
+      | c == '\n'            -> Just $ KeyEvent EnterKey     mods
+      | c == '\t'            -> Just $ KeyEvent TabKey       mods
+      | c == '\b'            -> Just $ KeyEvent DeleteKey    mods
+      | c == '\DEL'          -> Just $ KeyEvent DeleteKey    mods
+      | otherwise            -> Nothing
 
 withTermiosSettings :: (MonadIO m, MonadMask m) => (Termios -> m a) -> m a
 withTermiosSettings fma = bracket before after between
   where
-    before  = liftIO $ do
+    before  = liftIO do
       termios <- getTermios
       let termios' = termios { termiosISIG = False, termiosICANON = False, termiosECHO = False }
       setTermios termios'
@@ -82,83 +111,91 @@ withTermiosSettings fma = bracket before after between
 withResizeHandler :: (MonadIO m, MonadMask m) => IO () -> m a -> m a
 withResizeHandler handler = bracket installHandler restoreHandler . const
   where
-    installHandler = liftIO $ do
+    installHandler = liftIO do
       Conc.ensureIOManagerIsRunning
       oldHandler <- Conc.setHandler (#const SIGWINCH) (Just (const handler, Dyn.toDyn handler))
       oldAction  <- stg_sig_install (#const SIGWINCH) (#const STG_SIG_HAN) nullPtr
       pure (oldHandler,oldAction)
-    restoreHandler (oldHandler,oldAction) = liftIO $ do
+    restoreHandler (oldHandler,oldAction) = liftIO do
       void $ Conc.setHandler (#const SIGWINCH) oldHandler
       void $ stg_sig_install (#const SIGWINCH) oldAction nullPtr
       pure ()
 
-withOutputProcessing :: (MonadIO m, MonadMask m) => TMVar Text.Text -> TMVar () -> m a -> m a
-withOutputProcessing output outputFlush = bracket
-  ( liftIO $ A.async run )
-  ( liftIO . A.cancel ) . const
-  where
-    run = forever $ atomically ((Just <$> takeTMVar output) `orElse` (takeTMVar outputFlush >> pure Nothing)) >>= \case
-        Nothing -> IO.hFlush IO.stdout
-        Just t  -> Text.hPutStr IO.stdout t
+withInputProcessing :: (MonadIO m, MonadMask m) =>
+    ThreadId -> Termios -> TMVar (Row, Column) -> TVar Bool -> TChan Event -> m a -> m a
+withInputProcessing mainThread termios cursorPosition interrupt events =
+    bracket (liftIO $ A.async $ run decoder) (liftIO . A.cancel) . const
+    where
+        run :: Decoder -> IO ()
+        run d = do
+            c <- IO.hGetChar IO.stdin
+            case feedDecoder d mempty c of
+              -- The decoder is not in final state.
+              -- There are sequences depending on timing (escape either is literal
+              -- escape or the beginning of a sequence).
+              -- This block evaluates whether more input is available within
+              -- a limited timespan. If this is the case it just recurses 
+              -- with the decoder continuation.
+              -- Otherwise, a NUL character is fed in order to tell the decoder
+              -- that there is no more input belonging to the sequence.
+              Left d' -> IO.hWaitForInput IO.stdin timeoutMilliseconds >>= \case
+                  True  -> run d'
+                  False -> case feedDecoder d' mempty '\NUL' of
+                      Left d'' -> run d''
+                      Right evs -> do
+                          forM_ evs writeEvent
+                          run decoder
+              -- The decoder reached a final state.
+              -- All recognized events are appended to the event stream.
+              Right evs -> do
+                  forM_ evs writeEvent
+                  run decoder
 
-withInputProcessing :: (MonadIO m, MonadMask m) => ThreadId -> Termios -> TVar Bool -> TChan Event -> m a -> m a
-withInputProcessing mainThread termios interrupt events = bracket
-  ( liftIO $ A.async run )
-  ( liftIO . A.cancel ) . const
-  where
-    run :: IO ()
-    run = forever $ do 
-        IO.hGetChar handle >>= \case
-          c | c == termiosVINTR  termios -> handleInterrupt c
-            | c == termiosVERASE termios -> atomically $ writeChar c >> writeKey BackspaceKey
-            | otherwise                  -> atomically $ writeChar c
-        writeFillCharacterAfterTimeout
+        decoder :: Decoder
+        decoder = ansiDecoder (specialChar termios)
 
-    handle     :: IO.Handle
-    handle      = IO.stdin
-    writeEvent :: Event -> STM ()
-    writeEvent  = writeTChan events
-    writeKey   :: Key -> STM ()
-    writeKey k  = writeTChan events (KeyEvent k mempty)
-    writeChar  :: Char -> STM ()
-    writeChar c = writeTChan events (KeyEvent (CharKey c) mempty)
-    -- This function is responsible for passing interrupt events and
-    -- eventually throwing an exception to the main thread in case it
-    -- detects that the main thread is not serving its duty to process
-    -- interrupt events. It does this by setting a flag each time an interrupt
-    -- occurs - if the flag is still set when a new interrupt occurs, it assumes
-    -- the main thread is not responsive.
-    handleInterrupt  :: Char -> IO ()
-    handleInterrupt c =  do
-      unhandledInterrupt <- liftIO (atomically $ writeChar c >> writeEvent InterruptEvent >> swapTVar interrupt True)
-      when unhandledInterrupt (E.throwTo mainThread E.UserInterrupt)
-    -- This function first evaluates whether more input is immediately available.
-    -- If this is the case it just returns. Otherwise it registers interest in
-    -- the file descriptor and waits for either input becoming available or a timeout
-    -- to occur. When the timeout triggers, a NUL character is appended to the
-    -- event stream to enable subsequent decoders to unambigously decode all
-    -- cases without the need to take timing into consideration anymore.
-    writeFillCharacterAfterTimeout :: IO ()
-    writeFillCharacterAfterTimeout = do
-      ready <- IO.hReady handle
-      unless ready $ bracket (threadWaitReadSTM (Fd 0)) snd $ \(inputAvailable,_)-> do
-        timeout <- registerDelay timeoutMicroseconds >>= \t-> pure (readTVar t >>= check)
-        atomically $ inputAvailable `orElse` (timeout >> writeChar '\NUL')
-    -- The timeout duration has been choosen as a tradeoff between correctness
-    -- (actual transmission or scheduling delays shall not be misinterpreted) and
-    -- responsiveness for a human user (50 ms are barely noticable, but 1000 ms are).
-    -- I.e. when the user presses the ESC key (as vim users sometimes do ;-)
-    -- it shall be reflected in the application behavior quite instantly and
-    -- certainly _before_ the user presses the next key (thereby assuming that the
-    -- user is not able to type more than 20 characters per second).
-    -- For escape sequences it shall also be taken into consideration that they are
-    -- usually transmitted and received as chunks. Only on very rare occasions (buffer
-    -- boundaries) it might happen that they are split right after the sequence
-    -- introducer. In a modern environment with virtual terminals there is good
-    -- reason to consider this more unlikely than a user that types so fast
-    -- that his input might be misinterpreted as an escape sequence.
-    timeoutMicroseconds :: Int
-    timeoutMicroseconds  = 50000
+        -- Adds events to the event stream and catches certain events
+        -- that require special treatment.
+        writeEvent :: Event -> IO ()
+        writeEvent = \case
+            SignalEvent Interrupt ->
+                handleInterrupt
+            ev@(DeviceEvent (CursorPositionReport pos)) -> atomically do
+                -- One of the alternatives will succeed.
+                -- The second one is not strict required but a fail safe in order
+                -- to never block in case the terminal sends a report without request.
+                putTMVar cursorPosition pos <|> void (swapTMVar cursorPosition pos)
+                writeTChan events ev
+            ev -> atomically (writeTChan events ev)
+
+        -- This function is responsible for passing interrupt signals and
+        -- eventually throwing an exception to the main thread in case it
+        -- detects that the main thread is not serving its duty to process
+        -- interrupt signals. It does this by setting a flag each time an interrupt
+        -- occurs - if the flag is still set when a new interrupt occurs, it assumes
+        -- the main thread is not responsive.
+        handleInterrupt  :: IO ()
+        handleInterrupt = do
+            unhandledInterrupt <- atomically do
+                writeTChan events (SignalEvent Interrupt)
+                swapTVar interrupt True
+            when unhandledInterrupt (E.throwTo mainThread E.UserInterrupt)
+
+        -- The timeout duration has been choosen as a tradeoff between correctness
+        -- (actual transmission or scheduling delays shall not be misinterpreted) and
+        -- responsiveness for a human user (50 ms are barely noticable, but 1000 ms are).
+        -- I.e. when the user presses the ESC key (as vim users sometimes do ;-)
+        -- it shall be reflected in the application behavior quite instantly and
+        -- certainly _before_ the user presses the next key (thereby assuming that the
+        -- user is not able to type more than 20 characters per second).
+        -- For escape sequences it shall also be taken into consideration that they are
+        -- usually transmitted and received as chunks. Only on very rare occasions (buffer
+        -- boundaries) it might happen that they are split right after the sequence
+        -- introducer. In a modern environment with virtual terminals there is good
+        -- reason to consider this more unlikely than a user that types so fast
+        -- that his input might be misinterpreted as an escape sequence.
+        timeoutMilliseconds :: Int
+        timeoutMilliseconds  = 50
 
 getWindowSize :: IO (Int, Int)
 getWindowSize =
