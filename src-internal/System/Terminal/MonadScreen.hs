@@ -75,21 +75,12 @@ class (MonadPrinter m) => MonadScreen m where
 
     insertChars                 :: Int -> m ()
     deleteChars                 :: Int -> m ()
+    eraseChars                  :: Int -> m ()
     insertLines                 :: Int -> m ()
     deleteLines                 :: Int -> m ()
 
-    -- | Clear the entire line containing the cursor.
-    clearLine                   :: m ()
-    -- | Clear the line from cursor left.
-    clearLineLeft               :: m ()
-    -- | Clear the line from cursor right.
-    clearLineRight              :: m ()
-    -- | Clear the entire screen.
-    clearScreen                 :: m ()
-    -- | Clear the screen above the cursor.
-    clearScreenAbove            :: m ()
-    -- | Clear the screen below the cursor.
-    clearScreenBelow            :: m ()
+    eraseInLine                 :: EraseMode -> m ()
+    eraseInDisplay              :: EraseMode -> m ()
 
     -- | Show the cursor.
     showCursor                  :: m ()
@@ -105,3 +96,9 @@ class (MonadPrinter m) => MonadScreen m where
     --   - The dimensions of the alternate screen buffer are
     --     exactly those of the screen.
     setAlternateScreenBuffer    :: Bool -> m ()
+
+data EraseMode
+    = EraseBackward
+    | EraseForward
+    | EraseAll
+    deriving (Eq, Ord, Show)

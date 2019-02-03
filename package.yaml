@@ -92,6 +92,7 @@ tests:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
+    - terminal
     - terminal-internal
     - tasty
     - tasty-hunit

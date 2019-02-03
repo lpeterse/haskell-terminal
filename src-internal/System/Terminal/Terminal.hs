@@ -5,6 +5,7 @@ import           Data.ByteString
 import           Data.Text
 
 import           System.Terminal.MonadInput
+import           System.Terminal.MonadScreen
 
 class Terminal t where
   -- | The terminal identification string usually extracted from the
@@ -74,17 +75,14 @@ data Command
   | GetCursorPosition
   | SetCursorPosition (Row, Col)
   | SetCursorPositionVertical Row
-  | InsertChars Int
-  | DeleteChars Int
-  | InsertLines Int
-  | DeleteLines Int
-  | ClearLine
-  | ClearLineLeft
-  | ClearLineRight
-  | ClearScreen
-  | ClearScreenAbove
-  | ClearScreenBelow
-  | SetAutoWrap Bool
+  | InsertChars              Int
+  | DeleteChars              Int
+  | EraseChars               Int
+  | InsertLines              Int
+  | DeleteLines              Int
+  | EraseInLine              EraseMode
+  | EraseInDisplay           EraseMode
+  | SetAutoWrap              Bool
   | SetAlternateScreenBuffer Bool
   deriving (Eq, Ord, Show)
 

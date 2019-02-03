@@ -3,6 +3,7 @@ module System.Terminal.Encoder where
 import           Data.Text (Text, pack)
 
 import           System.Terminal.Terminal
+import           System.Terminal.MonadScreen
 
 ansiEncode :: Command -> Text
 ansiEncode = \case
@@ -75,12 +76,12 @@ ansiEncode = \case
     DeleteLines i   | i == 0                 -> ""
                     | i == 1                 -> "\ESC[M"
                     | otherwise              -> "\ESC[" <> pack (show i) <> "M"
-    ClearLine                                -> "\ESC[2K"
-    ClearLineLeft                            -> "\ESC[1K"
-    ClearLineRight                           -> "\ESC[0K"
-    ClearScreen                              -> "\ESC[2J"
-    ClearScreenAbove                         -> "\ESC[1J"
-    ClearScreenBelow                         -> "\ESC[0J"
+    EraseInLine     EraseForward             -> "\ESC[0K"
+    EraseInLine     EraseBackward            -> "\ESC[1K"
+    EraseInLine     EraseAll                 -> "\ESC[2K"
+    EraseInDisplay  EraseForward             -> "\ESC[0J"
+    EraseInDisplay  EraseBackward            -> "\ESC[1J"
+    EraseInDisplay  EraseAll                 -> "\ESC[2J"
     SetAutoWrap True                         -> "\ESC[?7h"
     SetAutoWrap False                        -> "\ESC[?7l"
     SetAlternateScreenBuffer True            -> "\ESC[?1049h"

@@ -24,6 +24,7 @@ module System.Terminal
   , putSimpleDocStream
     -- ** MonadScreen
   , MonadScreen (..)
+  , EraseMode (..)
     -- ** MonadTerminal
   , MonadTerminal
     -- * Event Processing

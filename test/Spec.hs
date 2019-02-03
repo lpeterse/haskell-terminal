@@ -5,16 +5,14 @@ import           Data.Monoid
 import           Test.Tasty
 import           Test.Tasty.HUnit
 
-import           Control.Monad.Terminal.Terminal
-import           Control.Monad.Terminal.Decoder
-import           Control.Monad.Terminal.Monad
-import           Control.Monad.Terminal.Input
+import qualified Spec.Virtual
 
 main :: IO ()
 main = defaultMain $ testGroup "Control.Monad.Terminal"
-  [ testDecoder
+  [ Spec.Virtual.tests
   ]
 
+{-
 testDecoder :: TestTree
 testDecoder = testGroup "ansiDecoder"
   [ testDecoderGeneric
@@ -138,3 +136,4 @@ assertDecoding specialChars mods input expected
       [] -> []
       (x:xs) ->  let (events, decoder') = feedDecoder decoder mods x
                  in events : decode decoder' xs
+-}

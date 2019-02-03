@@ -178,12 +178,8 @@ instance (MonadIO m, MonadThrow m, T.Terminal t) => MonadScreen (TerminalT t m) 
     deleteLines i = do
         command (T.DeleteLines i)
 
-    clearLine                = command T.ClearLine
-    clearLineLeft            = command T.ClearLineLeft
-    clearLineRight           = command T.ClearLineRight
-    clearScreen              = command T.ClearScreen
-    clearScreenAbove         = command T.ClearScreenAbove
-    clearScreenBelow         = command T.ClearScreenBelow
+    eraseInLine              = command . T.EraseInLine
+    eraseInDisplay           = command . T.EraseInDisplay
 
     showCursor               = command T.ShowCursor
     hideCursor               = command T.HideCursor
