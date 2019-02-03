@@ -43,14 +43,13 @@ class Terminal t where
   --   (there might be other buffers involved that cannot be force-flushed
   --   so it is probably better to not give any guarantees here).
   termFlush             :: t -> IO ()
-  -- | This operation shall return the latest known screen size without
-  --   blocking. The first parameter denotes the number of rows and the
-  --   one the number of columns.
-  termGetScreenSize     :: t -> IO (Rows, Columns)
+  -- | This operation shall return the latest known window size without
+  --   blocking.
+  termGetWindowSize     :: t -> IO (Rows, Cols)
   -- | This operation shall return the current cursor position.
   --   It may block as depending on implementation it usually requires an
   --   in-band roundtrip to the terminal. Use it wisely.
-  termGetCursorPosition :: t -> IO (Row, Column)
+  termGetCursorPosition :: t -> IO (Row, Col)
 
 -- | The commands every terminal needs to understand.
 --
@@ -58,7 +57,8 @@ class Terminal t where
 -- that all terminals understand. Otherwise portability will
 -- be lost.
 data Command
-  = PutText Text
+  = PutLn
+  | PutText Text
   | SetAttribute Attribute
   | ResetAttribute Attribute
   | ResetAttributes
@@ -66,21 +66,26 @@ data Command
   | MoveCursorDown Int
   | MoveCursorLeft Int
   | MoveCursorRight Int
-  | GetCursorPosition
-  | SetCursorPosition (Row, Column)
-  | SetCursorPositionVertical Row
-  | SetCursorPositionHorizontal Column
-  | SaveCursorPosition
-  | RestoreCursorPosition
   | ShowCursor
   | HideCursor
+  | SaveCursor
+  | RestoreCursor
+  | SetCursorPositionHorizontal Col
+  | GetCursorPosition
+  | SetCursorPosition (Row, Col)
+  | SetCursorPositionVertical Row
+  | InsertChars Int
+  | DeleteChars Int
+  | InsertLines Int
+  | DeleteLines Int
   | ClearLine
   | ClearLineLeft
   | ClearLineRight
   | ClearScreen
   | ClearScreenAbove
   | ClearScreenBelow
-  | UseAlternateScreenBuffer Bool
+  | SetAutoWrap Bool
+  | SetAlternateScreenBuffer Bool
   deriving (Eq, Ord, Show)
 
 data Attribute

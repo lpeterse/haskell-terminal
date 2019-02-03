@@ -19,12 +19,13 @@ module System.Terminal
     -- *** Pretty Printing
   , putDoc
   , putDocLn
+  , putPretty
+  , putPrettyLn
   , putSimpleDocStream
     -- ** MonadScreen
   , MonadScreen (..)
     -- ** MonadTerminal
   , MonadTerminal
-  , withAlternateScreenBuffer
     -- * Event Processing
     -- *** waitEvent
   , waitEvent
@@ -59,7 +60,7 @@ module System.Terminal
   , Terminal (..)
   , System.Terminal.Platform.LocalTerminal ()
     -- ** Misc
-  , Row, Rows, Column, Columns
+  , Row, Rows, Col, Cols
   , Command (..)
   , Decoder (..)
   , ansiDecoder
@@ -75,6 +76,7 @@ import           System.Terminal.MonadInput
 import           System.Terminal.MonadPrinter
 import           System.Terminal.MonadScreen
 import           System.Terminal.MonadTerminal
+import           System.Terminal.Pretty
 import           System.Terminal.Terminal
 import           System.Terminal.TerminalT
 import qualified System.Terminal.Platform

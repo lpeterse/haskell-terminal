@@ -6,6 +6,7 @@ import           System.Terminal.Terminal
 
 ansiEncode :: Command -> Text
 ansiEncode = \case
+    PutLn                                    -> "\n"
     PutText t                                -> t
     SetAttribute Bold                        -> "\ESC[1m"
     SetAttribute Italic                      -> ""
@@ -50,6 +51,10 @@ ansiEncode = \case
     ResetAttribute (Foreground _)            -> "\ESC[39m"
     ResetAttribute (Background _)            -> "\ESC[49m"
     ResetAttributes                          -> "\ESC[m"
+    ShowCursor                               -> "\ESC[?25h"
+    HideCursor                               -> "\ESC[?25l"
+    SaveCursor                               -> "\ESC7"
+    RestoreCursor                            -> "\ESC8"
     MoveCursorUp i                           -> "\ESC[" <> pack (show i) <> "A"
     MoveCursorDown i                         -> "\ESC[" <> pack (show i) <> "B"
     MoveCursorLeft i                         -> "\ESC[" <> pack (show i) <> "D"
@@ -58,15 +63,35 @@ ansiEncode = \case
     SetCursorPosition (x,y)                  -> "\ESC[" <> pack (show $ x + 1) <> ";" <> pack (show $ y + 1) <> "H"
     SetCursorPositionVertical i              -> "\ESC[" <> pack (show $ i + 1) <> "d"
     SetCursorPositionHorizontal i            -> "\ESC[" <> pack (show $ i + 1) <> "G"
-    SaveCursorPosition                       -> "\ESC7"
-    RestoreCursorPosition                    -> "\ESC8"
-    ShowCursor                               -> "\ESC[?25h"
-    HideCursor                               -> "\ESC[?25l"
+    InsertChars i   | i == 0                 -> ""
+                    | i == 1                 -> "\ESC[@"
+                    | otherwise              -> "\ESC[" <> pack (show i) <> "@"
+    DeleteChars i   | i == 0                 -> ""
+                    | i == 1                 -> "\ESC[P"
+                    | otherwise              -> "\ESC[" <> pack (show i) <> "P"
+    InsertLines i   | i == 0                 -> ""
+                    | i == 1                 -> "\ESC[L"
+                    | otherwise              -> "\ESC[" <> pack (show i) <> "L"
+    DeleteLines i   | i == 0                 -> ""
+                    | i == 1                 -> "\ESC[M"
+                    | otherwise              -> "\ESC[" <> pack (show i) <> "M"
     ClearLine                                -> "\ESC[2K"
     ClearLineLeft                            -> "\ESC[1K"
     ClearLineRight                           -> "\ESC[0K"
     ClearScreen                              -> "\ESC[2J"
     ClearScreenAbove                         -> "\ESC[1J"
     ClearScreenBelow                         -> "\ESC[0J"
-    UseAlternateScreenBuffer   True          -> "\ESC[?1049h"
-    UseAlternateScreenBuffer  False          -> "\ESC[?1049l"
+    SetAutoWrap True                         -> "\ESC[?7h"
+    SetAutoWrap False                        -> "\ESC[?7l"
+    SetAlternateScreenBuffer True            -> "\ESC[?1049h"
+    SetAlternateScreenBuffer False           -> "\ESC[?1049l"
+
+-- http://www.noah.org/python/pexpect/ANSI-X3.64.htm
+-- Erasing parts of the display (EL and ED) in the VT100 is performed thus:
+--
+--  Erase from cursor to end of line           Esc [ 0 K    or Esc [ K
+--  Erase from beginning of line to cursor     Esc [ 1 K
+--  Erase line containing cursor               Esc [ 2 K
+--  Erase from cursor to end of screen         Esc [ 0 J    or Esc [ J
+--  Erase from beginning of screen to cursor   Esc [ 1 J
+--  Erase entire screen                        Esc [ 2 J

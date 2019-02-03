@@ -42,8 +42,8 @@ data LocalTerminal
     { localType              :: BS.ByteString
     , localEvent             :: STM Event
     , localInterrupt         :: STM ()
-    , localGetScreenSize     :: IO (Rows, Columns)
-    , localGetCursorPosition :: IO (Row, Column)
+    , localGetWindowSize     :: IO (Rows, Cols)
+    , localGetCursorPosition :: IO (Row, Col)
     }
 
 instance Terminal LocalTerminal where
@@ -52,7 +52,7 @@ instance Terminal LocalTerminal where
     termInterrupt         = localInterrupt
     termCommand _ c       = Text.hPutStr IO.stdout (ansiEncode c)
     termFlush _           = IO.hFlush IO.stdout
-    termGetScreenSize     = localGetScreenSize
+    termGetWindowSize     = localGetWindowSize
     termGetCursorPosition = localGetCursorPosition
 
 withTerminal :: (MonadIO m, MonadMask m) => (LocalTerminal -> m a) -> m a
@@ -61,16 +61,16 @@ withTerminal action = do
     mainThread     <- liftIO myThreadId
     interrupt      <- liftIO (newTVarIO False)
     events         <- liftIO newTChanIO
-    screenSize     <- liftIO (newTVarIO =<< getWindowSize)
+    windowSize     <- liftIO (newTVarIO =<< getWindowSize)
     cursorPosition <- liftIO newEmptyTMVarIO
     withTermiosSettings $ \termios->
-        withResizeHandler (handleResize screenSize events) $
+        withResizeHandler (handleResize windowSize events) $
         withInputProcessing mainThread termios cursorPosition interrupt events $ 
         action LocalTerminal
             { localType              = term
             , localEvent             = readTChan events
             , localInterrupt         = swapTVar interrupt False >>= check
-            , localGetScreenSize     = atomically (readTVar screenSize)
+            , localGetWindowSize     = atomically (readTVar windowSize)
             , localGetCursorPosition = do
                 -- Empty the result variable.
                 atomically (void (takeTMVar cursorPosition) <|> pure ())
@@ -81,10 +81,10 @@ withTerminal action = do
                 atomically (takeTMVar cursorPosition)
             }
     where
-        handleResize screenSize events = do
+        handleResize windowSize events = do
             ws <- getWindowSize
             atomically do
-                writeTVar screenSize ws
+                writeTVar windowSize ws
                 writeTChan events (WindowEvent $ WindowSizeChanged ws)
 
 specialChar :: Termios -> Modifiers -> Char -> Maybe Event
@@ -122,7 +122,7 @@ withResizeHandler handler = bracket installHandler restoreHandler . const
       pure ()
 
 withInputProcessing :: (MonadIO m, MonadMask m) =>
-    ThreadId -> Termios -> TMVar (Row, Column) -> TVar Bool -> TChan Event -> m a -> m a
+    ThreadId -> Termios -> TMVar (Row, Col) -> TVar Bool -> TChan Event -> m a -> m a
 withInputProcessing mainThread termios cursorPosition interrupt events =
     bracket (liftIO $ A.async $ run decoder) (liftIO . A.cancel) . const
     where
@@ -197,7 +197,7 @@ withInputProcessing mainThread termios cursorPosition interrupt events =
         timeoutMilliseconds :: Int
         timeoutMilliseconds  = 50
 
-getWindowSize :: IO (Int, Int)
+getWindowSize :: IO (Rows, Cols)
 getWindowSize =
   alloca $ \ptr->
     unsafeIOCtl 0 (#const TIOCGWINSZ) ptr >>= \case

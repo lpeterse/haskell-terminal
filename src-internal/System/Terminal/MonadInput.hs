@@ -8,10 +8,10 @@ import           Data.Bits
 import qualified Data.ByteString as BS
 import           Data.List
 
-type Row     = Int
-type Rows    = Int
-type Column  = Int
-type Columns = Int
+type Row  = Int
+type Rows = Int
+type Col  = Int
+type Cols = Int
 
 -- | This monad describes an environment that maintains a stream of `Event`s
 --   and offers out-of-band signaling for interrupts.
@@ -29,22 +29,22 @@ type Columns = Int
 --    This allows to flush all unprocessed events from the stream that
 --    occured before the interrupt.
 class (MonadIO m) => MonadInput m where
-  -- | Wait for the next interrupt or next event transformed by a given mapper.
-  --
-  -- * The first mapper parameter is a transaction that succeeds as
-  --   soon as an interrupt occurs. Executing this transaction
-  --   resets the interrupt flag. When a second interrupt occurs before
-  --   the interrupt flag has been reset, the current thread shall
-  --   receive an `Control.Exception.AsyncException.UserInterrupt`.
-  -- * The second mapper parameter is a transaction that succeeds as
-  --   as soon as the next event arrives and removes that event from the
-  --   stream of events. It shall be executed at most once within a single
-  --   transaction or the transaction would block until the requested number
-  --   of events is available.
-  -- * NB: For each interrupt an `Interrupt` event occurs in the event stream.
-  --   Take caution in order not to handle them twice.
-  -- * The mapper may also be used in order to additionally wait on external
-  --   events (like an `Control.Monad.Async.Async` to complete).
+    -- | Wait for the next interrupt or next event transformed by a given mapper.
+    --
+    -- * The first mapper parameter is a transaction that succeeds as
+    --   soon as an interrupt occurs. Executing this transaction
+    --   resets the interrupt flag. When a second interrupt occurs before
+    --   the interrupt flag has been reset, the current thread shall
+    --   receive an `Control.Exception.AsyncException.UserInterrupt`.
+    -- * The second mapper parameter is a transaction that succeeds as
+    --   as soon as the next event arrives and removes that event from the
+    --   stream of events. It shall be executed at most once within a single
+    --   transaction or the transaction would block until the requested number
+    --   of events is available.
+    -- * NB: For each interrupt an `Interrupt` event occurs in the event stream.
+    --   Take caution in order not to handle them twice.
+    -- * The mapper may also be used in order to additionally wait on external
+    --   events (like an `Control.Monad.Async.Async` to complete).
     waitInterruptOrEvent :: (STM () -> STM Event -> STM a) -> m a
 
 -- | Wait for the next event.
@@ -165,11 +165,11 @@ altKey   = Modifiers 4
 metaKey  = Modifiers 8
 
 data MouseEvent
-  = MouseMoved          (Int,Int)
-  | MouseButtonPressed  (Int,Int) MouseButton
-  | MouseButtonReleased (Int,Int) MouseButton
-  | MouseButtonClicked  (Int,Int) MouseButton
-  | MouseWheeled        (Int,Int) Direction
+  = MouseMoved          (Row,Col)
+  | MouseButtonPressed  (Row,Col) MouseButton
+  | MouseButtonReleased (Row,Col) MouseButton
+  | MouseButtonClicked  (Row,Col) MouseButton
+  | MouseWheeled        (Row,Col) Direction
   deriving (Eq,Ord,Show)
 
 data MouseButton
@@ -188,12 +188,12 @@ data Direction
 data WindowEvent
   = WindowLostFocus
   | WindowGainedFocus
-  | WindowSizeChanged (Int,Int)
+  | WindowSizeChanged (Rows, Cols)
   deriving (Eq, Ord, Show)
 
 data DeviceEvent
   = DeviceAttributesReport String
-  | CursorPositionReport (Row, Column)
+  | CursorPositionReport (Row, Col)
   deriving (Eq, Ord, Show)
 
 data Signal
