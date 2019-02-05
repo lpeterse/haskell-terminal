@@ -41,80 +41,39 @@ class (MonadIO m) => MonadInput m where
     --   stream of events. It shall be executed at most once within a single
     --   transaction or the transaction would block until the requested number
     --   of events is available.
-    -- * NB: For each interrupt an `Interrupt` event occurs in the event stream.
-    --   Take caution in order not to handle them twice.
     -- * The mapper may also be used in order to additionally wait on external
     --   events (like an `Control.Monad.Async.Async` to complete).
-    waitInterruptOrEvent :: (STM () -> STM Event -> STM a) -> m a
+    waitWithInterruptOrEvent :: (STM Interrupt -> STM Event -> STM a) -> m a
 
 -- | Wait for the next event.
 --
--- * Returns as soon as an event occurs.
+-- * Returns as soon as an interrupt or a regular event occurs.
 -- * This operation resets the interrupt flag, signaling responsiveness to
---   the execution environment. Be careful: There might be several events
---   preceding the `Interrupt` event in the event stream. FIXME
-waitEvent :: MonadInput m => m Event
-waitEvent = waitInterruptOrEvent $ \intr evs-> do
-    ev <- evs
-    when (ev == SignalEvent Interrupt) (intr <|> pure ())
-    pure ev
+--   the execution environment.
+waitEvent :: MonadInput m => m (Either Interrupt Event)
+waitEvent = waitWithInterruptOrEvent $ \intr ev -> do
+    (Left <$> intr) <|> (Right <$> ev)
 
--- | Wait for the next event or a given transaction.
---
--- * Returns as soon as an event occurs or the transaction succeeds.
--- * This operation resets the interrupt flag when encountering an interrupt,
---   signaling responsiveness to the execution environment.
--- * `Interupt`s occur in the event stream at their correct
---   position wrt to ordering of events. This is eventually not desired
---   when trying to handle interrupts with highest priority and
---  `waitSignalOrElse` should be considered then.
-waitEventOrElse :: MonadInput m => STM a -> m (Either Event a)
-waitEventOrElse stma = waitInterruptOrEvent $ \intr evs -> do
-    let waitEv = do
-            ev <- evs
-            when (ev == SignalEvent Interrupt) (intr <|> pure ())
-            pure (Left ev)
-    let waitElse = Right <$> stma
-    waitEv <|> waitElse
-
--- | Wait simultaneously for the next interrupt or a given transaction.
---
--- * Returns `Nothing` on interrupt and `Just` when the supplied
---   transaction succeeds first.
--- * This operation resets the interrupt flag, signaling responsiveness
---   to the execution environment.
--- * All pending events up to the interrupt are dropped in case of an interrupt.
-waitInterruptOrElse :: MonadInput m => STM a -> m (Maybe a)
-waitInterruptOrElse stma = waitInterruptOrEvent $ \intr evs -> do
-    let waitInterrupt = do
-            intr
-            dropPending evs
-            pure Nothing
-    let waitElse = Just <$> stma
-    waitInterrupt <|> waitElse
+dropPendingEvents :: MonadInput m => m ()
+dropPendingEvents = waitWithInterruptOrEvent $ const $ dropWhileEvent
     where
-        dropPending:: STM Event -> STM ()
-        dropPending evs = ((Just <$> evs) <|> pure Nothing) >>= \case
-            Just (SignalEvent Interrupt) -> pure ()
-            Just {}                      -> dropPending evs
-            Nothing                      -> pure ()
+        dropWhileEvent ev = do
+            more <- (ev >> pure True) <|> pure False
+            when more (dropWhileEvent ev)
 
 -- | Check whether an interrupt is pending.
 --
 -- * This operation resets the interrupt flag, signaling responsiveness
 --   to the execution environment.
--- * All pending events up to the interrupt are dropped in case of an interrupt.
 checkInterrupt :: MonadInput m => m Bool
-checkInterrupt = waitInterruptOrElse (pure ()) >>= \case
-    Nothing -> pure True
-    _       -> pure False
+checkInterrupt = waitWithInterruptOrEvent $ \intr ev -> do
+    (intr >> pure True) <|> pure False
 
 data Event
     = KeyEvent Key Modifiers
     | MouseEvent MouseEvent
     | WindowEvent WindowEvent
     | DeviceEvent DeviceEvent
-    | SignalEvent Signal
     | OtherEvent String
     deriving (Eq,Ord,Show)
 
@@ -165,38 +124,37 @@ altKey   = Modifiers 4
 metaKey  = Modifiers 8
 
 data MouseEvent
-  = MouseMoved          (Row,Col)
-  | MouseButtonPressed  (Row,Col) MouseButton
-  | MouseButtonReleased (Row,Col) MouseButton
-  | MouseButtonClicked  (Row,Col) MouseButton
-  | MouseWheeled        (Row,Col) Direction
-  deriving (Eq,Ord,Show)
+    = MouseMoved          (Row,Col)
+    | MouseButtonPressed  (Row,Col) MouseButton
+    | MouseButtonReleased (Row,Col) MouseButton
+    | MouseButtonClicked  (Row,Col) MouseButton
+    | MouseWheeled        (Row,Col) Direction
+    deriving (Eq,Ord,Show)
 
 data MouseButton
-  = LeftMouseButton
-  | RightMouseButton
-  | OtherMouseButton
-  deriving (Eq,Ord,Show)
+    = LeftMouseButton
+    | RightMouseButton
+    | OtherMouseButton
+    deriving (Eq,Ord,Show)
 
 data Direction
-  = Upwards
-  | Downwards
-  | Leftwards
-  | Rightwards
-  deriving (Eq,Ord,Show)
+    = Upwards
+    | Downwards
+    | Leftwards
+    | Rightwards
+    deriving (Eq,Ord,Show)
 
 data WindowEvent
-  = WindowLostFocus
-  | WindowGainedFocus
-  | WindowSizeChanged (Rows, Cols)
-  deriving (Eq, Ord, Show)
+    = WindowLostFocus
+    | WindowGainedFocus
+    | WindowSizeChanged (Rows, Cols)
+    deriving (Eq, Ord, Show)
 
 data DeviceEvent
-  = DeviceAttributesReport String
-  | CursorPositionReport (Row, Col)
-  deriving (Eq, Ord, Show)
+    = DeviceAttributesReport String
+    | CursorPositionReport (Row, Col)
+    deriving (Eq, Ord, Show)
 
-data Signal
-  = Interrupt
-  | OtherSignal BS.ByteString
-  deriving (Eq, Ord, Show)
+data Interrupt
+    = Interrupt
+    deriving (Eq, Ord, Show)

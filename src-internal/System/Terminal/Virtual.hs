@@ -23,7 +23,7 @@ data VirtualTerminalSettings
     { virtualType              :: BS.ByteString
     , virtualWindowSize        :: STM (Rows,Cols)
     , virtualEvent             :: STM Event
-    , virtualInterrupt         :: STM ()
+    , virtualInterrupt         :: STM Interrupt
     }
 
 defaultSettings :: VirtualTerminalSettings

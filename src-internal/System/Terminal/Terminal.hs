@@ -29,7 +29,7 @@ class Terminal t where
   --   responsiveness to the background thread. The execution environment is otherwise
   --   advised to throw an `System.IO.Error.UserInterrupt` exception as soon as a
   --   second interrupt arrives and it sees a previous one unhandled.
-  termInterrupt         :: t -> STM ()
+  termInterrupt         :: t -> STM Interrupt
   -- | This transaction appends a piece of `Data.Text.Text` to the output buffer.
   --   It shall block when the buffer exeeded its capacity
   --   and unblock as soon as space becomes available again.

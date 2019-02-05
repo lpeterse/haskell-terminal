@@ -60,7 +60,7 @@ instance MonadTrans (TerminalT t) where
     lift = TerminalT . lift . lift
 
 instance (MonadIO m, T.Terminal t) => MonadInput (TerminalT t m) where
-    waitInterruptOrEvent f = TerminalT do
+    waitWithInterruptOrEvent f = TerminalT do
         t <- lift ask
         liftIO $ atomically $ f (T.termInterrupt t) (T.termEvent t)
 

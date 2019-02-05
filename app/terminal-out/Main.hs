@@ -17,7 +17,8 @@ main = withTerminal $ runTerminalT do
     putLn
     putString "DEF"
     putLn
-    moveCursorUp 1
-    insertLines 6
     flush
     liftIO (threadDelay 5000000)
+    ev <- waitEvent
+    putPrettyLn (show ev)
+    flush

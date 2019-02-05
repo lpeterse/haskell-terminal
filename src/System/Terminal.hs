@@ -28,17 +28,14 @@ module System.Terminal
     -- ** MonadTerminal
   , MonadTerminal
     -- * Event Processing
+  , MonadInput (..)
     -- *** waitEvent
   , waitEvent
-    -- *** waitEventOrElse
-  , waitEventOrElse
-    -- *** waitInterruptOrElse
-  , waitInterruptOrElse
-    -- ** checkInterrupt
   , checkInterrupt
-  , MonadInput (..)
+  , dropPendingEvents
     -- ** Events
   , Event (..)
+  , Interrupt (..)
     -- *** Keys & Modifiers
   , Key (..)
   , Direction (..)
@@ -52,8 +49,6 @@ module System.Terminal
   , MouseButton (..)
     -- *** Window Events
   , WindowEvent (..)
-    -- *** Signal Events
-  , Signal (..) 
     -- *** Device Events
   , DeviceEvent (..)
     -- * Low-Level

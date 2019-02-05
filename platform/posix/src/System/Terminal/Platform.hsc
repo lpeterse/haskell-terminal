@@ -41,7 +41,7 @@ data LocalTerminal
     = LocalTerminal
     { localType              :: BS.ByteString
     , localEvent             :: STM Event
-    , localInterrupt         :: STM ()
+    , localInterrupt         :: STM Interrupt
     , localGetWindowSize     :: IO (Rows, Cols)
     , localGetCursorPosition :: IO (Row, Col)
     }
@@ -64,12 +64,13 @@ withTerminal action = do
     windowSize     <- liftIO (newTVarIO =<< getWindowSize)
     cursorPosition <- liftIO newEmptyTMVarIO
     withTermiosSettings $ \termios->
+        withInterruptHandler (handleInterrupt mainThread interrupt) $
         withResizeHandler (handleResize windowSize events) $
         withInputProcessing mainThread termios cursorPosition interrupt events $ 
         action LocalTerminal
             { localType              = term
             , localEvent             = readTChan events
-            , localInterrupt         = swapTVar interrupt False >>= check
+            , localInterrupt         = swapTVar interrupt False >>= check >> pure Interrupt
             , localGetWindowSize     = atomically (readTVar windowSize)
             , localGetCursorPosition = do
                 -- Empty the result variable.
@@ -86,11 +87,20 @@ withTerminal action = do
             atomically do
                 writeTVar windowSize ws
                 writeTChan events (WindowEvent $ WindowSizeChanged ws)
+        -- This function is responsible for passing interrupt signals and
+        -- eventually throwing an exception to the main thread in case it
+        -- detects that the main thread is not serving its duty to process
+        -- interrupt signals. It does this by setting a flag each time an interrupt
+        -- occurs - if the flag is still set when a new interrupt occurs, it assumes
+        -- the main thread is not responsive.
+        handleInterrupt  :: ThreadId -> TVar Bool -> IO ()
+        handleInterrupt mainThread interrupt = do
+            unhandledInterrupt <- atomically (swapTVar interrupt True)
+            when unhandledInterrupt (E.throwTo mainThread E.UserInterrupt)
 
 specialChar :: Termios -> Modifiers -> Char -> Maybe Event
 specialChar t mods = \case
-    c | c == termiosVINTR  t -> Just $ SignalEvent Interrupt
-      | c == termiosVERASE t -> Just $ KeyEvent BackspaceKey mods
+    c | c == termiosVERASE t -> Just $ KeyEvent BackspaceKey mods
       | c == '\n'            -> Just $ KeyEvent EnterKey     mods
       | c == '\t'            -> Just $ KeyEvent TabKey       mods
       | c == '\b'            -> Just $ KeyEvent DeleteKey    mods
@@ -102,7 +112,7 @@ withTermiosSettings fma = bracket before after between
   where
     before  = liftIO do
       termios <- getTermios
-      let termios' = termios { termiosISIG = False, termiosICANON = False, termiosECHO = False }
+      let termios' = termios { termiosICANON = False, termiosECHO = False }
       setTermios termios'
       pure termios
     after   = liftIO . setTermios
@@ -119,6 +129,19 @@ withResizeHandler handler = bracket installHandler restoreHandler . const
     restoreHandler (oldHandler,oldAction) = liftIO do
       void $ Conc.setHandler (#const SIGWINCH) oldHandler
       void $ stg_sig_install (#const SIGWINCH) oldAction nullPtr
+      pure ()
+
+withInterruptHandler :: (MonadIO m, MonadMask m) => IO () -> m a -> m a
+withInterruptHandler handler = bracket installHandler restoreHandler . const
+  where
+    installHandler = liftIO do
+      Conc.ensureIOManagerIsRunning
+      oldHandler <- Conc.setHandler (#const SIGINT) (Just (const handler, Dyn.toDyn handler))
+      oldAction  <- stg_sig_install (#const SIGINT) (#const STG_SIG_HAN) nullPtr
+      pure (oldHandler,oldAction)
+    restoreHandler (oldHandler,oldAction) = liftIO do
+      void $ Conc.setHandler (#const SIGINT) oldHandler
+      void $ stg_sig_install (#const SIGINT) oldAction nullPtr
       pure ()
 
 withInputProcessing :: (MonadIO m, MonadMask m) =>
@@ -158,8 +181,6 @@ withInputProcessing mainThread termios cursorPosition interrupt events =
         -- that require special treatment.
         writeEvent :: Event -> IO ()
         writeEvent = \case
-            SignalEvent Interrupt ->
-                handleInterrupt
             ev@(DeviceEvent (CursorPositionReport pos)) -> atomically do
                 -- One of the alternatives will succeed.
                 -- The second one is not strict required but a fail safe in order
@@ -167,19 +188,6 @@ withInputProcessing mainThread termios cursorPosition interrupt events =
                 putTMVar cursorPosition pos <|> void (swapTMVar cursorPosition pos)
                 writeTChan events ev
             ev -> atomically (writeTChan events ev)
-
-        -- This function is responsible for passing interrupt signals and
-        -- eventually throwing an exception to the main thread in case it
-        -- detects that the main thread is not serving its duty to process
-        -- interrupt signals. It does this by setting a flag each time an interrupt
-        -- occurs - if the flag is still set when a new interrupt occurs, it assumes
-        -- the main thread is not responsive.
-        handleInterrupt  :: IO ()
-        handleInterrupt = do
-            unhandledInterrupt <- atomically do
-                writeTChan events (SignalEvent Interrupt)
-                swapTVar interrupt True
-            when unhandledInterrupt (E.throwTo mainThread E.UserInterrupt)
 
         -- The timeout duration has been choosen as a tradeoff between correctness
         -- (actual transmission or scheduling delays shall not be misinterpreted) and
