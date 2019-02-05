@@ -1,7 +1,7 @@
 module System.Terminal.MonadInput where
 
 import           Control.Applicative ((<|>))
-import           Control.Monad (void, when)
+import           Control.Monad (when)
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
 import           Data.Bits
@@ -70,12 +70,12 @@ waitEvent = waitInterruptOrEvent $ \intr evs-> do
 --  `waitSignalOrElse` should be considered then.
 waitEventOrElse :: MonadInput m => STM a -> m (Either Event a)
 waitEventOrElse stma = waitInterruptOrEvent $ \intr evs -> do
-    let waitEvent = do
+    let waitEv = do
             ev <- evs
             when (ev == SignalEvent Interrupt) (intr <|> pure ())
             pure (Left ev)
     let waitElse = Right <$> stma
-    waitEvent <|> waitElse
+    waitEv <|> waitElse
 
 -- | Wait simultaneously for the next interrupt or a given transaction.
 --
@@ -96,7 +96,7 @@ waitInterruptOrElse stma = waitInterruptOrEvent $ \intr evs -> do
         dropPending:: STM Event -> STM ()
         dropPending evs = ((Just <$> evs) <|> pure Nothing) >>= \case
             Just (SignalEvent Interrupt) -> pure ()
-            Just ev                      -> dropPending evs
+            Just {}                      -> dropPending evs
             Nothing                      -> pure ()
 
 -- | Check whether an interrupt is pending.

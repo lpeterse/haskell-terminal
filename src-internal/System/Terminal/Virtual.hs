@@ -69,6 +69,8 @@ command t = \case
     RestoreCursor         -> pure ()
     GetCursorPosition     -> getCursorPosition t
     SetCursorPosition pos -> setCursorPosition t pos
+--    SetCursorVertical r   -> setCursorVertical t r
+--    SetCursorHorizontal c -> setCursorHorizontal t c
     InsertChars i         -> insertChars       t i
     DeleteChars i         -> deleteChars       t i
     EraseChars  i         -> eraseChars        t i
@@ -157,7 +159,6 @@ insertChars t i = do
 
 deleteChars :: VirtualTerminal -> Int -> STM ()
 deleteChars t i = do
-    (_,w) <- virtualWindowSize (virtualSettings t)
     (r,c) <- readTVar (virtualCursor t)
     wndw  <- readTVar (virtualWindow t)
     let l  = wndw !! r
@@ -168,7 +169,6 @@ deleteChars t i = do
 
 eraseChars :: VirtualTerminal -> Int -> STM ()
 eraseChars t i = do
-    (_,w) <- virtualWindowSize (virtualSettings t)
     (r,c) <- readTVar (virtualCursor t)
     wndw  <- readTVar (virtualWindow t)
     let l  = wndw !! r
@@ -180,7 +180,7 @@ eraseChars t i = do
 insertLines :: VirtualTerminal -> Int -> STM ()
 insertLines t i = do
     (h,w) <- virtualWindowSize (virtualSettings t)
-    (r,c) <- readTVar (virtualCursor t)
+    (r,_) <- readTVar (virtualCursor t)
     wndw  <- readTVar (virtualWindow t)
     let w1 = take r wndw
         w2 = replicate i (replicate w ' ')
@@ -190,7 +190,7 @@ insertLines t i = do
 deleteLines :: VirtualTerminal -> Int -> STM ()
 deleteLines t i = do
     (h,w) <- virtualWindowSize (virtualSettings t)
-    (r,c) <- readTVar (virtualCursor t)
+    (r,_) <- readTVar (virtualCursor t)
     wndw  <- readTVar (virtualWindow t)
     let w1 = take r wndw
         w2 = take (h - r - i) $ drop r wndw
@@ -199,7 +199,7 @@ deleteLines t i = do
 
 eraseInLine :: VirtualTerminal -> EraseMode -> STM ()
 eraseInLine t m = do
-    (h,w) <- virtualWindowSize (virtualSettings t)
+    (_,w) <- virtualWindowSize (virtualSettings t)
     (r,c) <- readTVar (virtualCursor t)
     wndw  <- readTVar (virtualWindow t)
     let l  = wndw !! r
@@ -214,7 +214,7 @@ eraseInLine t m = do
 eraseInDisplay :: VirtualTerminal -> EraseMode -> STM ()
 eraseInDisplay t m = do
     (h,w) <- virtualWindowSize (virtualSettings t)
-    (r,c) <- readTVar (virtualCursor t)
+    (r,_) <- readTVar (virtualCursor t)
     wndw  <- readTVar (virtualWindow t)
     let w1  = take r wndw
         w1E = replicate r (replicate w ' ') 

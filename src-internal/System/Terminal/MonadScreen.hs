@@ -12,6 +12,16 @@ class (MonadPrinter m) => MonadScreen m where
     --   the window size was changed up to when the corresponding event
     --   updates the internal tracking state (this is unavoidable).
     getWindowSize               :: m (Rows, Cols)
+
+    -- | Move the cursor `n` lines up. Do not change column.
+    moveCursorUp                :: Rows -> m ()
+    -- | Move the cursor `n` lines down. Do not change column.
+    moveCursorDown              :: Rows -> m ()
+    -- | Move the cursor `n` columns to the right. Do not change line.
+    moveCursorForward           :: Cols -> m ()
+    -- | Move the cursor `n` columns to the left. Do not change line.
+    moveCursorBackward          :: Cols -> m ()
+
     -- | Get the current cursor position as tracked internally.
     --
     -- * `(0,0) is the upper left of the window.
@@ -64,15 +74,6 @@ class (MonadPrinter m) => MonadScreen m where
     --   is advised to check for these conditions.
     loadCursorPosition          :: m (Row, Col)
 
-    -- | Move the cursor `n` lines up. Do not change column.
-    moveCursorUp                :: Rows -> m ()
-    -- | Move the cursor `n` lines down. Do not change column.
-    moveCursorDown              :: Rows -> m ()
-    -- | Move the cursor `n` columns to the left. Do not change line.
-    moveCursorBackward          :: Cols -> m ()
-    -- | Move the cursor `n` columns to the right. Do not change line.
-    moveCursorForward           :: Cols -> m ()
-
     insertChars                 :: Int -> m ()
     deleteChars                 :: Int -> m ()
     eraseChars                  :: Int -> m ()
@@ -96,6 +97,13 @@ class (MonadPrinter m) => MonadScreen m where
     --   - The dimensions of the alternate screen buffer are
     --     exactly those of the screen.
     setAlternateScreenBuffer    :: Bool -> m ()
+
+-- TODO:
+--
+-- moveCursorNextLine Cursor down to beginning of <n>th line in the viewport
+-- moveCursorPreviousLine Cursor up to beginning of <n>th line in the viewport
+-- setCursorVertical
+-- setCursorHorizontal
 
 data EraseMode
     = EraseBackward
