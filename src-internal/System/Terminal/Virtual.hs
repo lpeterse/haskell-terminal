@@ -54,31 +54,31 @@ withVirtualTerminal settings handler = do
 
 command :: VirtualTerminal -> Command -> STM ()
 command t = \case
-    PutLn                 -> putLn t
-    PutText s             -> putString t (T.unpack s)
-    SetAttribute _        -> pure ()
-    ResetAttribute _      -> pure ()
-    ResetAttributes       -> pure ()
-    MoveCursorUp i        -> moveCursorVertical   t (negate i)
-    MoveCursorDown i      -> moveCursorVertical   t i
-    MoveCursorLeft i      -> moveCursorHorizontal t (negate i)
-    MoveCursorRight i     -> moveCursorHorizontal t i
-    ShowCursor            -> pure ()
-    HideCursor            -> pure ()
-    SaveCursor            -> pure ()
-    RestoreCursor         -> pure ()
-    GetCursorPosition     -> getCursorPosition t
-    SetCursorPosition pos -> setCursorPosition t pos
---    SetCursorVertical r   -> setCursorVertical t r
---    SetCursorHorizontal c -> setCursorHorizontal t c
-    InsertChars i         -> insertChars       t i
-    DeleteChars i         -> deleteChars       t i
-    EraseChars  i         -> eraseChars        t i
-    InsertLines i         -> insertLines       t i
-    DeleteLines i         -> deleteLines       t i
-    EraseInLine m         -> eraseInLine       t m
-    EraseInDisplay m      -> eraseInDisplay    t m
-    SetAutoWrap b         -> setAutoWrap       t b
+    PutLn                         -> putLn t
+    PutText s                     -> putString t (T.unpack s)
+    SetAttribute _                -> pure ()
+    ResetAttribute _              -> pure ()
+    ResetAttributes               -> pure ()
+    MoveCursorUp i                -> moveCursorVertical   t (negate i)
+    MoveCursorDown i              -> moveCursorVertical   t i
+    MoveCursorLeft i              -> moveCursorHorizontal t (negate i)
+    MoveCursorRight i             -> moveCursorHorizontal t i
+    ShowCursor                    -> pure ()
+    HideCursor                    -> pure ()
+    SaveCursor                    -> pure ()
+    RestoreCursor                 -> pure ()
+    GetCursorPosition             -> getCursorPosition t
+    SetCursorPosition pos         -> setCursorPosition t pos
+    SetCursorVertical r           -> setCursorVertical t r
+    SetCursorHorizontal c         -> setCursorHorizontal t c
+    InsertChars i                 -> insertChars       t i
+    DeleteChars i                 -> deleteChars       t i
+    EraseChars  i                 -> eraseChars        t i
+    InsertLines i                 -> insertLines       t i
+    DeleteLines i                 -> deleteLines       t i
+    EraseInLine m                 -> eraseInLine       t m
+    EraseInDisplay m              -> eraseInDisplay    t m
+    SetAutoWrap b                 -> setAutoWrap       t b
 {-
     SetAlternateScreenBuffer Bool
 -}
@@ -145,6 +145,18 @@ setCursorPosition :: VirtualTerminal -> (Row, Col) -> STM ()
 setCursorPosition t (r,c) = do
     (h,w) <- virtualWindowSize (virtualSettings t)
     writeTVar (virtualCursor t) (max 0 (min (h - 1) r), max 0 (min (w - 1) c))
+
+setCursorVertical :: VirtualTerminal -> Row -> STM ()
+setCursorVertical t r = do
+    (h,_) <- virtualWindowSize (virtualSettings t)
+    (_,c) <- readTVar (virtualCursor t)
+    writeTVar (virtualCursor t) (max 0 (min (h - 1) r), c)
+
+setCursorHorizontal :: VirtualTerminal -> Col -> STM ()
+setCursorHorizontal t c = do
+    (_,w) <- virtualWindowSize (virtualSettings t)
+    (r,_) <- readTVar (virtualCursor t)
+    writeTVar (virtualCursor t) (r, max 0 (min (w - 1) c))
 
 insertChars :: VirtualTerminal -> Int -> STM ()
 insertChars t i = do

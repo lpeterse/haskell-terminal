@@ -71,10 +71,10 @@ data Command
   | HideCursor
   | SaveCursor
   | RestoreCursor
-  | SetCursorPositionHorizontal Col
   | GetCursorPosition
   | SetCursorPosition (Row, Col)
-  | SetCursorPositionVertical Row
+  | SetCursorVertical   Row
+  | SetCursorHorizontal Col
   | InsertChars              Int
   | DeleteChars              Int
   | EraseChars               Int

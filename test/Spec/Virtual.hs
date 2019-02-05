@@ -43,6 +43,12 @@ tests = testGroup "System.Terminal.Virtual"
         , testSetCursorPosition04
         , testSetCursorPosition05
         ]
+    , testGroup "SetCursorVertical"
+        [ testSetCursorVertical01
+        ]
+    , testGroup "SetCursorHorizontal" 
+        [ testSetCursorHorizontal01
+        ]
     , testGroup "InsertChars"
         [ testInsertChars01
         ]
@@ -399,6 +405,44 @@ testSetCursorPosition05 =
             { virtualWindowSize = pure (3,10)
             }
         expCursor = (1,9)
+        expWindow =
+            [ "1234567890"
+            , "12345     "
+            , "          " ]
+
+testSetCursorVertical01 :: TestTree
+testSetCursorVertical01 =
+    testCase "shall set vertical cursor position" do
+        t <- withVirtualTerminal settings $ \t -> do
+            termCommand t (PutText "123456789012345")
+            termCommand t (SetCursorVertical 2)
+            pure t
+        assertEqual "window" expWindow =<< readTVarIO (virtualWindow t)
+        assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
+    where
+        settings = defaultSettings
+            { virtualWindowSize = pure (3,10)
+            }
+        expCursor = (2,5)
+        expWindow =
+            [ "1234567890"
+            , "12345     "
+            , "          " ]
+
+testSetCursorHorizontal01 :: TestTree
+testSetCursorHorizontal01 =
+    testCase "shall set horizontal cursor position" do
+        t <- withVirtualTerminal settings $ \t -> do
+            termCommand t (PutText "123456789012345")
+            termCommand t (SetCursorHorizontal 8)
+            pure t
+        assertEqual "window" expWindow =<< readTVarIO (virtualWindow t)
+        assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
+    where
+        settings = defaultSettings
+            { virtualWindowSize = pure (3,10)
+            }
+        expCursor = (1,8)
         expWindow =
             [ "1234567890"
             , "12345     "
