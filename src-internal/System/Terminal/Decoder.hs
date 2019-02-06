@@ -5,9 +5,9 @@ import           Data.Monoid                  ((<>))
 
 import           System.Terminal.MonadInput
 
--- | The type `Decoder` represents a finite state transducer.
+-- | The type `Decoder` is a finite state transducer.
 --
---   Intermediate state can be passed as closures.
+--   Intermediate state can be passed as closure.
 --   See below for an example.
 newtype Decoder = Decoder { feedDecoder :: Modifiers -> Char -> Either Decoder [Event] }
 

@@ -18,8 +18,6 @@ class Terminal t where
   --   Note: Trying to read more than one event within the same transaction
   --   might be successfull, but might also lead to undesired behaviour as
   --   the transaction will block until all of its preconditions are fulfilled.
-  --   Some form of `orElse` needs to be used in a correct way for reading
-  --   several events at once.
   termEvent             :: t -> STM Event
   -- | This transaction succeeds as soon as an interrupt occurs.
   --   Executing the transaction shall reset an interrupt flag maintained

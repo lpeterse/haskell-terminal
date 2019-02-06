@@ -17,16 +17,12 @@ type Cols = Int
 --
 --  * An interrupt shall occur if the user either presses CTRL+C
 --    or any other mechanism the environment designates for that purpose.
---  * Implementations shall maintain an signal flag that is set
---    when a signal occurs. Computations in this monad shall check and
+--  * Implementations shall maintain an interrupt flag that is set
+--    when an interrupt occurs. Computations in this monad shall check and
 --    reset this flag regularly. If the execution environment finds this
 --    flag still set when trying to signal another interrupt, it shall
 --    throw `Control.Exception.AsyncException.UserInterrupt` to the
 --    seemingly unresponsive computation.
---  * When a signal occurs, an `Event.SignalEvent`
---    must be added to the event stream in the same transaction.
---    This allows to flush all unprocessed events from the stream that
---    occured before the interrupt.
 class (MonadIO m) => MonadInput m where
     -- | Wait for the next interrupt or next event transformed by a given mapper.
     --

@@ -7,7 +7,6 @@ module System.Terminal.Platform
 import           Control.Applicative
 import           Control.Concurrent
 import qualified Control.Concurrent.Async      as A
-import           Control.Concurrent.STM.TChan
 import           Control.Concurrent.STM.TVar
 import           Control.Concurrent.STM.TMVar
 import qualified Control.Exception             as E
@@ -90,7 +89,9 @@ withTerminal action = do
         handleResize :: TVar (Rows,Cols) -> TVar Bool -> IO ()
         handleResize windowSize windowChanged = do
             ws <- getWindowSize
-            atomically (writeTVar windowSize ws)
+            atomically do 
+              writeTVar windowSize ws
+              writeTVar windowChanged True
         -- This function is responsible for passing interrupt signals and
         -- eventually throwing an exception to the main thread in case it
         -- detects that the main thread is not serving its duty to process
