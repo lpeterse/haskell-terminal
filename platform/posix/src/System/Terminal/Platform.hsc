@@ -51,7 +51,7 @@ instance Terminal LocalTerminal where
     termInterrupt         = localInterrupt
     termCommand _ c       = Text.hPutStr IO.stdout (defaultEncode c)
     termFlush _           = IO.hFlush IO.stdout
-    termGetWindowSize     = localGetWindowSize
+    termGetWindowSize     = getWindowSize
     termGetCursorPosition = localGetCursorPosition
 
 withTerminal :: (MonadIO m, MonadMask m) => (LocalTerminal -> m a) -> m a
@@ -59,23 +59,21 @@ withTerminal action = do
     term           <- BS8.pack . fromMaybe "xterm" <$> liftIO (lookupEnv "TERM")
     mainThread     <- liftIO myThreadId
     interrupt      <- liftIO (newTVarIO False)
-    events         <- liftIO newEmptyTMVarIO
-    windowSize     <- liftIO (newTVarIO =<< getWindowSize)
     windowChanged  <- liftIO (newTVarIO False)
+    events         <- liftIO newEmptyTMVarIO
     cursorPosition <- liftIO newEmptyTMVarIO
     withTermiosSettings $ \termios->
         withInterruptHandler (handleInterrupt mainThread interrupt) $
         withResizeHandler (handleResize windowSize windowChanged) $
         withInputProcessing termios cursorPosition events $ 
         action LocalTerminal
-            { localType              = term
-            , localEvent             = do
+            { localType = term
+            , localEvent = do
                 changed <- swapTVar windowChanged False
                 if changed
-                  then WindowEvent . WindowSizeChanged <$> readTVar windowSize
+                  then pure (WindowEvent WindowSizeChanged)
                   else takeTMVar events
-            , localInterrupt         = swapTVar interrupt False >>= check >> pure Interrupt
-            , localGetWindowSize     = atomically (readTVar windowSize)
+            , localInterrupt = swapTVar interrupt False >>= check >> pure Interrupt
             , localGetCursorPosition = do
                 -- Empty the result variable.
                 atomically (void (takeTMVar cursorPosition) <|> pure ())
@@ -86,12 +84,8 @@ withTerminal action = do
                 atomically (takeTMVar cursorPosition)
             }
     where
-        handleResize :: TVar (Rows,Cols) -> TVar Bool -> IO ()
-        handleResize windowSize windowChanged = do
-            ws <- getWindowSize
-            atomically do 
-              writeTVar windowSize ws
-              writeTVar windowChanged True
+        handleResize :: TVar Bool -> IO ()
+        handleResize windowChanged = atomically (writeTVar windowChanged True)
         -- This function is responsible for passing interrupt signals and
         -- eventually throwing an exception to the main thread in case it
         -- detects that the main thread is not serving its duty to process

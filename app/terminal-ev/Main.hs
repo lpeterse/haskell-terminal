@@ -23,7 +23,9 @@ main = withTerminal $ runTerminalT $ fix $ \loop-> do
           | isPrint c         -> putDocLn $ annotate (foreground $ bright blue)    (pretty $ "KeyEvent (CharKey '" ++ [c] ++ "') " ++ show mods)
           | otherwise         -> putDocLn $ annotate (foreground $ bright blue)    (pretty $ show ev)
         KeyEvent {}           -> putDocLn $ annotate (foreground $ bright blue)    (pretty $ show ev)
-        WindowEvent {}        -> putDocLn $ annotate (foreground $ bright magenta) (pretty $ show ev)
+        WindowEvent {}        -> do
+          sz <- getWindowSize
+          putDocLn $ annotate (foreground $ bright magenta) (pretty $ show ev <> ": " <> show sz) 
         _ ->                     putDocLn $ pretty $ show ev
       flush
       loop

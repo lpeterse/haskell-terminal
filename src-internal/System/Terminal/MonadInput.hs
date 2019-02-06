@@ -142,7 +142,7 @@ data Direction
 data WindowEvent
     = WindowLostFocus
     | WindowGainedFocus
-    | WindowSizeChanged (Rows, Cols)
+    | WindowSizeChanged
     deriving (Eq, Ord, Show)
 
 data DeviceEvent

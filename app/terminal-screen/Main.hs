@@ -18,9 +18,15 @@ main = withTerminal $ runTerminalT app
 app :: (MonadTerminal m, MonadMask m) => m ()
 app = do
     lw <- getLineWidth
+    window <- getWindowSize
+    cursor <- getCursorPosition
     putDoc $ mconcat
         [ pretty $ "The line width is " ++ show lw ++ " columns."
-        , hardline 
+        , hardline
+        , pretty $ "The window size is " ++ show window ++ "."
+        , hardline
+        , pretty $ "The cursor position is " ++ show cursor ++ "."
+        , hardline
         , annotate (foreground $ bright blue) "This is blue!"
         , hardline
         , annotate bold ("Just bold!" <+> annotate (background red) "BOLD ON RED BACKGROUND" <+> "..just bold again")
