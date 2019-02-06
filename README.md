@@ -66,9 +66,11 @@ Arguments in favor of _terminfo_:
 
 Arguments against _terminfo_:
 
-  - The _terminfo_ binding library is not threadsafe. This is not so much
-    of a problem when serving a single local terminal, but it might be a problem
-    when writing something like an SSH daemon in Haskell.
+  - Static linking and stand-alone binaries:
+    Apart from eventual linking issues, _terminfo_ has a runtime dependency on the
+    terminfo database. This might be an issue when the environment is restricted
+    (`chroot` environment or if the process shall not be allowed to interact with the file
+    system for security reasons).
   - _terminfo_ offers more than 500 capabilities. Only a very small part of it
     is actually needed and since there is no legacy code to support there is no
     real reason to expose more than a small subset of capabilities that is supported
