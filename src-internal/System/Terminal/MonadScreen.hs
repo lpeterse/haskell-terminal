@@ -22,23 +22,13 @@ class (MonadPrinter m) => MonadScreen m where
     -- | Move the cursor `n` columns to the left. Do not change line.
     moveCursorBackward          :: Cols -> m ()
 
-    -- | Get the current cursor position as tracked internally.
-    --
-    -- * `(0,0) is the upper left of the window.
-    -- * The cursor is always within window bounds.
-    -- * This operation shall not cause a round-trip to the terminal and
-    --   may be called as often as desired.
-    -- * Deviations from reality might occur after window resize (use `getCursorPositionReport`
-    --   to get the actual position and resync tracking state).
-    getCursorPosition           :: m (Row, Col)
     -- | Get the current cursor position as reported by the terminal.
     --
     -- * `(0,0) is the upper left of the window.
     -- * The cursor is always within window bounds.
     -- * This operation causes a round-trip to the terminal and
     --   shall be used sparely (e.g. on window size change).
-    -- * It automaticaly updates the internal tracking state when called.
-    getCursorPositionReport     :: m (Row, Col)
+    getCursorPosition           :: m (Row, Col)
     -- | Set the cursor position.
     --
     -- * `(0,0)` is the upper left of the window.
@@ -61,18 +51,6 @@ class (MonadPrinter m) => MonadScreen m where
     --   window does not scroll between `saveCursor` and `restoreCursor`!
     --   Use `saveCursorPosition` and `loadCursorPosition` else.
     restoreCursor               :: m ()
-    -- | Save cursor position (immune to scrolling, no attributes).
-    saveCursorPosition          :: m ()
-    -- | Load cursor position (immune to scrolling, no attributes).
-    --
-    -- * Returns the cursor position relative to the visible window,
-    --   but takes scrolling into account. This is useful when trying
-    --   to memorize a certain text position.
-    -- * The resulting coordinates might be negative or greater
-    --   than the window dimensions meaning that the
-    --   saved position is now outside the visible window. The user
-    --   is advised to check for these conditions.
-    loadCursorPosition          :: m (Row, Col)
 
     insertChars                 :: Int -> m ()
     deleteChars                 :: Int -> m ()

@@ -50,7 +50,7 @@ instance Terminal LocalTerminal where
     termType              = localType
     termEvent             = localEvent
     termInterrupt         = localInterrupt
-    termCommand _ c       = Text.hPutStr IO.stdout (ansiEncode c)
+    termCommand _ c       = Text.hPutStr IO.stdout (defaultEncode c)
     termFlush _           = IO.hFlush IO.stdout
     termGetWindowSize     = localGetWindowSize
     termGetCursorPosition = localGetCursorPosition
@@ -60,33 +60,37 @@ withTerminal action = do
     term           <- BS8.pack . fromMaybe "xterm" <$> liftIO (lookupEnv "TERM")
     mainThread     <- liftIO myThreadId
     interrupt      <- liftIO (newTVarIO False)
-    events         <- liftIO newTChanIO
+    events         <- liftIO newEmptyTMVarIO
     windowSize     <- liftIO (newTVarIO =<< getWindowSize)
+    windowChanged  <- liftIO (newTVarIO False)
     cursorPosition <- liftIO newEmptyTMVarIO
     withTermiosSettings $ \termios->
         withInterruptHandler (handleInterrupt mainThread interrupt) $
-        withResizeHandler (handleResize windowSize events) $
-        withInputProcessing mainThread termios cursorPosition interrupt events $ 
+        withResizeHandler (handleResize windowSize windowChanged) $
+        withInputProcessing termios cursorPosition events $ 
         action LocalTerminal
             { localType              = term
-            , localEvent             = readTChan events
+            , localEvent             = do
+                changed <- swapTVar windowChanged False
+                if changed
+                  then WindowEvent . WindowSizeChanged <$> readTVar windowSize
+                  else takeTMVar events
             , localInterrupt         = swapTVar interrupt False >>= check >> pure Interrupt
             , localGetWindowSize     = atomically (readTVar windowSize)
             , localGetCursorPosition = do
                 -- Empty the result variable.
                 atomically (void (takeTMVar cursorPosition) <|> pure ())
                 -- Send cursor position report request.
-                Text.hPutStr IO.stdout (ansiEncode GetCursorPosition)
+                Text.hPutStr IO.stdout (defaultEncode GetCursorPosition)
                 IO.hFlush IO.stdout
                 -- Wait for the result variable to be filled by the input processor.
                 atomically (takeTMVar cursorPosition)
             }
     where
-        handleResize windowSize events = do
+        handleResize :: TVar (Rows,Cols) -> TVar Bool -> IO ()
+        handleResize windowSize windowChanged = do
             ws <- getWindowSize
-            atomically do
-                writeTVar windowSize ws
-                writeTChan events (WindowEvent $ WindowSizeChanged ws)
+            atomically (writeTVar windowSize ws)
         -- This function is responsible for passing interrupt signals and
         -- eventually throwing an exception to the main thread in case it
         -- detects that the main thread is not serving its duty to process
@@ -145,8 +149,8 @@ withInterruptHandler handler = bracket installHandler restoreHandler . const
       pure ()
 
 withInputProcessing :: (MonadIO m, MonadMask m) =>
-    ThreadId -> Termios -> TMVar (Row, Col) -> TVar Bool -> TChan Event -> m a -> m a
-withInputProcessing mainThread termios cursorPosition interrupt events =
+    Termios -> TMVar (Row, Col) -> TMVar Event -> m a -> m a
+withInputProcessing termios cursorPosition events =
     bracket (liftIO $ A.async $ run decoder) (liftIO . A.cancel) . const
     where
         run :: Decoder -> IO ()
@@ -175,7 +179,7 @@ withInputProcessing mainThread termios cursorPosition interrupt events =
                   run decoder
 
         decoder :: Decoder
-        decoder = ansiDecoder (specialChar termios)
+        decoder = defaultDecoder (specialChar termios)
 
         -- Adds events to the event stream and catches certain events
         -- that require special treatment.
@@ -183,11 +187,11 @@ withInputProcessing mainThread termios cursorPosition interrupt events =
         writeEvent = \case
             ev@(DeviceEvent (CursorPositionReport pos)) -> atomically do
                 -- One of the alternatives will succeed.
-                -- The second one is not strict required but a fail safe in order
+                -- The second one is not strictly required but a fail safe in order
                 -- to never block in case the terminal sends a report without request.
                 putTMVar cursorPosition pos <|> void (swapTMVar cursorPosition pos)
-                writeTChan events ev
-            ev -> atomically (writeTChan events ev)
+                putTMVar events ev
+            ev -> atomically (putTMVar events ev)
 
         -- The timeout duration has been choosen as a tradeoff between correctness
         -- (actual transmission or scheduling delays shall not be misinterpreted) and

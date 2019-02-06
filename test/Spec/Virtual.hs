@@ -1,6 +1,7 @@
 module Spec.Virtual (tests) where
 
 import           Control.Monad
+import           Control.Monad.STM
 import           Control.Concurrent.STM.TVar
 import           Data.Monoid
 
@@ -75,6 +76,14 @@ tests = testGroup "System.Terminal.Virtual"
         , testEraseInDisplay03
         ]
     ]
+
+defaultSettings :: VirtualTerminalSettings
+defaultSettings = VirtualTerminalSettings
+    { virtualType         = "xterm"
+    , virtualWindowSize   = pure (4,10)
+    , virtualEvent        = retry
+    , virtualInterrupt    = retry
+    }
 
 testWithVirtualTerminal01 :: TestTree
 testWithVirtualTerminal01 =
@@ -556,7 +565,7 @@ testDeleteLines01 =
 
 testEraseInLine01 :: TestTree
 testEraseInLine01 =
-    testCase "shall erase left with EraseBackwards" do
+    testCase "shall erase left with EraseBackward" do
         t <- withVirtualTerminal settings $ \t -> do
             termCommand t (PutText "1234567890")
             termCommand t (PutText "1234567890")
@@ -622,7 +631,7 @@ testEraseInLine03 =
 
 testEraseInDisplay01 :: TestTree
 testEraseInDisplay01 =
-    testCase "shall erase left with EraseBackwards" do
+    testCase "shall erase left with EraseBackward" do
         t <- withVirtualTerminal settings $ \t -> do
             termCommand t (PutText "1234567890")
             termCommand t (PutText "1234567890")

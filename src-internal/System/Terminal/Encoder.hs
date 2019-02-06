@@ -1,14 +1,33 @@
 module System.Terminal.Encoder where
 
-import           Data.Text (Text, pack)
+import qualified Data.Text as T
 
 import           System.Terminal.Terminal
 import           System.Terminal.MonadScreen
 
-ansiEncode :: Command -> Text
-ansiEncode = \case
+-- | See https://en.wikipedia.org/wiki/List_of_Unicode_characters
+safeChar :: Char -> Bool
+safeChar c
+  | c  < '\SP'  = False -- All other C0 control characters.
+  | c  < '\DEL' = True  -- Printable remainder of ASCII. Start of C1.
+  | c  < '\xa0' = False -- C1 up to start of Latin-1.
+  | otherwise   = True
+{-# INLINE safeChar #-}
+
+sanitizeChar :: Char -> Char
+sanitizeChar c = if safeChar c then c else '�'
+{-# INLINE sanitizeChar #-}
+
+sanitizeText :: T.Text -> T.Text
+sanitizeText t
+    | T.any (not . safeChar) t = T.map sanitizeChar t
+    | otherwise                = t
+{-# INLINE sanitizeText #-}
+
+defaultEncode :: Command -> T.Text
+defaultEncode = \case
     PutLn                                    -> "\n"
-    PutText t                                -> t
+    PutText t                                -> sanitizeText t
     SetAttribute Bold                        -> "\ESC[1m"
     SetAttribute Italic                      -> ""
     SetAttribute Underlined                  -> "\ESC[4m"
@@ -56,26 +75,29 @@ ansiEncode = \case
     HideCursor                               -> "\ESC[?25l"
     SaveCursor                               -> "\ESC7"
     RestoreCursor                            -> "\ESC8"
-    MoveCursorUp i                           -> "\ESC[" <> pack (show i) <> "A"
-    MoveCursorDown i                         -> "\ESC[" <> pack (show i) <> "B"
-    MoveCursorLeft i                         -> "\ESC[" <> pack (show i) <> "D"
-    MoveCursorRight i                        -> "\ESC[" <> pack (show i) <> "C"
+    MoveCursorUp i                           -> "\ESC[" <> T.pack (show i) <> "A"
+    MoveCursorDown i                         -> "\ESC[" <> T.pack (show i) <> "B"
+    MoveCursorLeft i                         -> "\ESC[" <> T.pack (show i) <> "D"
+    MoveCursorRight i                        -> "\ESC[" <> T.pack (show i) <> "C"
     GetCursorPosition                        -> "\ESC[6n"
-    SetCursorPosition (x,y)                  -> "\ESC[" <> pack (show $ x + 1) <> ";" <> pack (show $ y + 1) <> "H"
-    SetCursorVertical i                      -> "\ESC[" <> pack (show $ i + 1) <> "d"
-    SetCursorHorizontal i                    -> "\ESC[" <> pack (show $ i + 1) <> "G"
+    SetCursorPosition (x,y)                  -> "\ESC[" <> T.pack (show $ x + 1) <> ";" <> T.pack (show $ y + 1) <> "H"
+    SetCursorVertical i                      -> "\ESC[" <> T.pack (show $ i + 1) <> "d"
+    SetCursorHorizontal i                    -> "\ESC[" <> T.pack (show $ i + 1) <> "G"
     InsertChars i   | i == 0                 -> ""
                     | i == 1                 -> "\ESC[@"
-                    | otherwise              -> "\ESC[" <> pack (show i) <> "@"
+                    | otherwise              -> "\ESC[" <> T.pack (show i) <> "@"
     DeleteChars i   | i == 0                 -> ""
                     | i == 1                 -> "\ESC[P"
-                    | otherwise              -> "\ESC[" <> pack (show i) <> "P"
+                    | otherwise              -> "\ESC[" <> T.pack (show i) <> "P"
+    EraseChars  i   | i == 0                 -> ""
+                    | i == 1                 -> "\ESC[X"
+                    | otherwise              -> "\ESC[" <> T.pack (show i) <> "X"
     InsertLines i   | i == 0                 -> ""
                     | i == 1                 -> "\ESC[L"
-                    | otherwise              -> "\ESC[" <> pack (show i) <> "L"
+                    | otherwise              -> "\ESC[" <> T.pack (show i) <> "L"
     DeleteLines i   | i == 0                 -> ""
                     | i == 1                 -> "\ESC[M"
-                    | otherwise              -> "\ESC[" <> pack (show i) <> "M"
+                    | otherwise              -> "\ESC[" <> T.pack (show i) <> "M"
     EraseInLine     EraseForward             -> "\ESC[0K"
     EraseInLine     EraseBackward            -> "\ESC[1K"
     EraseInLine     EraseAll                 -> "\ESC[2K"

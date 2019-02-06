@@ -5,7 +5,6 @@ import           Control.Monad (when)
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
 import           Data.Bits
-import qualified Data.ByteString as BS
 import           Data.List
 
 type Row  = Int
@@ -43,7 +42,7 @@ class (MonadIO m) => MonadInput m where
     --   of events is available.
     -- * The mapper may also be used in order to additionally wait on external
     --   events (like an `Control.Monad.Async.Async` to complete).
-    waitWithInterruptOrEvent :: (STM Interrupt -> STM Event -> STM a) -> m a
+    waitWith :: (STM Interrupt -> STM Event -> STM a) -> m a
 
 -- | Wait for the next event.
 --
@@ -51,11 +50,11 @@ class (MonadIO m) => MonadInput m where
 -- * This operation resets the interrupt flag, signaling responsiveness to
 --   the execution environment.
 waitEvent :: MonadInput m => m (Either Interrupt Event)
-waitEvent = waitWithInterruptOrEvent $ \intr ev -> do
+waitEvent = waitWith$ \intr ev -> do
     (Left <$> intr) <|> (Right <$> ev)
 
 dropPendingEvents :: MonadInput m => m ()
-dropPendingEvents = waitWithInterruptOrEvent $ const $ dropWhileEvent
+dropPendingEvents = waitWith $ const $ dropWhileEvent
     where
         dropWhileEvent ev = do
             more <- (ev >> pure True) <|> pure False
@@ -66,7 +65,7 @@ dropPendingEvents = waitWithInterruptOrEvent $ const $ dropWhileEvent
 -- * This operation resets the interrupt flag, signaling responsiveness
 --   to the execution environment.
 checkInterrupt :: MonadInput m => m Bool
-checkInterrupt = waitWithInterruptOrEvent $ \intr ev -> do
+checkInterrupt = waitWith $ \intr _ -> do
     (intr >> pure True) <|> pure False
 
 data Event

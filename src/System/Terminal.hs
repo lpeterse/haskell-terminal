@@ -51,16 +51,19 @@ module System.Terminal
   , WindowEvent (..)
     -- *** Device Events
   , DeviceEvent (..)
-    -- * Low-Level
+    -- * Low-Level / Misc
+  , Row, Rows, Col, Cols
     -- ** Terminal
   , Terminal (..)
-  , System.Terminal.Platform.LocalTerminal ()
-    -- ** Misc
-  , Row, Rows, Col, Cols
   , Command (..)
   , Decoder (..)
-  , ansiDecoder
-  , ansiEncode
+  , defaultDecoder
+  , defaultEncode
+    -- ** LocalTerminal
+  , System.Terminal.Platform.LocalTerminal ()
+    -- ** VirtualTerminal (for testing)
+  , VirtualTerminal (..)
+  , VirtualTerminalSettings (..)
   ) where
 
 import           Control.Monad.Catch
@@ -76,6 +79,7 @@ import           System.Terminal.Pretty
 import           System.Terminal.Terminal
 import           System.Terminal.TerminalT
 import qualified System.Terminal.Platform
+import           System.Terminal.Virtual
 
 -- | Run the given handler with the locally connected terminal (`System.IO.stdin` / `System.IO.stdout`).
 --

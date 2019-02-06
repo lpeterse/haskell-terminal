@@ -11,7 +11,6 @@ import           Control.Monad.IO.Class
 import           Control.Monad.STM
 import           Control.Monad.Trans.Class
 import           Control.Monad.Trans.Reader
-import           Control.Monad.Trans.State
 import           Data.Foldable                      (forM_)
 import qualified Data.Text                       as Text
 import           Prelude                     hiding (putChar)
@@ -20,7 +19,6 @@ import           System.Terminal.MonadInput
 import           System.Terminal.MonadPrinter
 import           System.Terminal.MonadScreen
 import           System.Terminal.MonadTerminal
-import           System.Terminal.ScreenState
 import qualified System.Terminal.Terminal        as T
 
 -- | This monad transformer represents terminal applications.
@@ -44,45 +42,37 @@ import qualified System.Terminal.Terminal        as T
 --     `flush`
 -- @
 newtype TerminalT t m a
-    = TerminalT (StateT ScreenState (ReaderT t m) a)
+    = TerminalT (ReaderT t m a)
     deriving (Functor, Applicative, Monad, MonadIO, MonadThrow, MonadCatch, MonadMask)
 
 -- | Run a `TerminalT` application on the given terminal.
 runTerminalT :: (MonadIO m, MonadMask m, T.Terminal t) => TerminalT t m a -> t -> m a
-runTerminalT tma t = runReaderT (evalStateT ma ssDefault) t
+runTerminalT tma t = runReaderT ma t
     where
-        TerminalT ma = do
-            size <- liftIO (T.termGetWindowSize t)
-            modState (ssSetWindowSize size)
-            tma
+        TerminalT ma = tma
 
 instance MonadTrans (TerminalT t) where
-    lift = TerminalT . lift . lift
+    lift = TerminalT . lift
 
 instance (MonadIO m, T.Terminal t) => MonadInput (TerminalT t m) where
-    waitWithInterruptOrEvent f = TerminalT do
-        t <- lift ask
+    waitWith f = TerminalT do
+        t <- ask
         liftIO $ atomically $ f (T.termInterrupt t) (T.termEvent t)
 
 instance (MonadIO m, MonadThrow m, T.Terminal t) => MonadPrinter (TerminalT t m) where
-    putLn = do
+    putLn =
         command T.PutLn
-        modState ssPutLn
-    putChar c = do
-        command (T.PutText $ Text.singleton $ sanitizeChar c)
-        modState (ssPutText 1)
-    putString cs = do
-        forM_ cs (command . T.PutText . Text.singleton . sanitizeChar)
-        modState (ssPutText $ length cs)
-    putText t = do
-        let st = sanitizeText t
-        command (T.PutText st)
-        modState (ssPutText $ Text.length st)
+    putChar c =
+        command (T.PutText $ Text.singleton c)
+    putString cs =
+        forM_ cs (command . T.PutText . Text.singleton)
+    putText t = 
+        command (T.PutText t)
     flush = TerminalT do
-        t <- lift ask
+        t <- ask
         liftIO $ T.termFlush t
     getLineWidth = TerminalT do
-        t <- lift ask
+        t <- ask
         liftIO (snd <$> T.termGetWindowSize t)
 
 instance (MonadIO m, MonadThrow m, T.Terminal t) => MonadMarkupPrinter (TerminalT t m) where
@@ -127,95 +117,65 @@ instance (MonadIO m, MonadThrow m, T.Terminal t) => MonadColorPrinter (TerminalT
     background (ColorT c)      = AttributeT (T.Background c)
 
 instance (MonadIO m, MonadThrow m, T.Terminal t) => MonadScreen (TerminalT t m) where
-    getWindowSize = getState ssGetWindowSize
+    getWindowSize =
+        TerminalT (liftIO . T.termGetWindowSize =<< ask)
 
     moveCursorUp i
-        | i > 0     = command (T.MoveCursorUp i) >> modState (ssMoveUp i)
+        | i > 0     = command (T.MoveCursorUp i)
         | i < 0     = moveCursorDown i
         | otherwise = pure ()
     moveCursorDown i
-        | i > 0     = command (T.MoveCursorDown i) >> modState (ssMoveDown i)
+        | i > 0     = command (T.MoveCursorDown i)
         | i < 0     = moveCursorUp i
         | otherwise = pure ()
     moveCursorBackward i
-        | i > 0     = command (T.MoveCursorLeft i) >> modState (ssMoveLeft i)
+        | i > 0     = command (T.MoveCursorLeft i)
         | i < 0     = moveCursorForward i
         | otherwise = pure ()
     moveCursorForward i
-        | i > 0     = command (T.MoveCursorRight i) >> modState (ssMoveRight i)
+        | i > 0     = command (T.MoveCursorRight i)
         | i < 0     = moveCursorBackward i
         | otherwise = pure ()
 
-    getCursorPosition = do
-        getState ssGetCursorPosition
-    getCursorPositionReport = do
-        pos <- TerminalT (liftIO . T.termGetCursorPosition =<< lift ask)
-        size <- TerminalT (liftIO . T.termGetWindowSize =<< lift ask)
-        modState (ssResetPositions size pos)
-        pure pos
-    setCursorPosition pos = do
+    getCursorPosition =
+        TerminalT (liftIO . T.termGetCursorPosition =<< ask)
+    setCursorPosition pos =
         command (T.SetCursorPosition pos)
-        modState (ssSetCursorPosition pos)
 
-    saveCursor = do
+    saveCursor =
         command T.SaveCursor
-        modState ssSaveCursor
-    restoreCursor = do
+    restoreCursor =
         command T.RestoreCursor
-        modState ssRestoreCursor
-    
-    saveCursorPosition = do
-        modState ssSaveCursorPosition
-    loadCursorPosition = do
-        getState ssLoadCursorPosition
 
     insertChars i = do
         command (T.InsertChars i)
     deleteChars i = do
         command (T.DeleteChars i)
+    eraseChars  i = do
+        command (T.EraseChars  i)
     insertLines i = do
         command (T.InsertLines i)
     deleteLines i = do
         command (T.DeleteLines i)
 
-    eraseInLine              = command . T.EraseInLine
-    eraseInDisplay           = command . T.EraseInDisplay
+    eraseInLine =
+        command . T.EraseInLine
+    eraseInDisplay =
+        command . T.EraseInDisplay
 
-    showCursor               = command T.ShowCursor
-    hideCursor               = command T.HideCursor
+    showCursor =
+        command T.ShowCursor
+    hideCursor =
+        command T.HideCursor
 
-    setAutoWrap x = do
+    setAutoWrap x =
         command (T.SetAutoWrap x)
-        modState (ssSetAutoWrap x)
-    setAlternateScreenBuffer x = do
+    setAlternateScreenBuffer x =
         command (T.SetAlternateScreenBuffer x)
-        modState (ssSetAlternateScreenBuffer x)
 
 instance (MonadIO m, MonadThrow m, T.Terminal t) => MonadTerminal (TerminalT t m) where
 
--- | See https://en.wikipedia.org/wiki/List_of_Unicode_characters
-safeChar :: Char -> Bool
-safeChar c
-  | c  < '\SP'  = False -- All other C0 control characters.
-  | c  < '\DEL' = True  -- Printable remainder of ASCII. Start of C1.
-  | c  < '\xa0' = False -- C1 up to start of Latin-1.
-  | otherwise   = True
-
-sanitizeChar :: Char -> Char
-sanitizeChar c = if safeChar c then c else '�'
-
-sanitizeText :: Text.Text -> Text.Text
-sanitizeText t = Text.map sanitizeChar t
---    | Text.any (not . safeChar) t = Text.map sanitizeChar t
---    | otherwise                   = t
-
 command :: (MonadIO m, MonadThrow m, T.Terminal t) => T.Command -> TerminalT t m ()
 command c = TerminalT do
-  t <- lift ask
+  t <- ask
   liftIO $ T.termCommand t c
-
-modState :: Monad m => (ScreenState -> ScreenState) -> TerminalT t m ()
-modState f = TerminalT (modify' f)
-
-getState :: Monad m => (ScreenState -> a) -> TerminalT t m a
-getState f = TerminalT (gets f)

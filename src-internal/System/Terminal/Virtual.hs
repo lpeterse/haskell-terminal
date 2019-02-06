@@ -26,14 +26,6 @@ data VirtualTerminalSettings
     , virtualInterrupt         :: STM Interrupt
     }
 
-defaultSettings :: VirtualTerminalSettings
-defaultSettings = VirtualTerminalSettings
-    { virtualType         = "xterm"
-    , virtualWindowSize   = pure (4,10)
-    , virtualEvent        = retry
-    , virtualInterrupt    = retry
-    }
-
 instance Terminal VirtualTerminal where
     termType              = virtualType      . virtualSettings
     termEvent             = virtualEvent     . virtualSettings

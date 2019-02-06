@@ -11,8 +11,8 @@ import           System.Terminal.MonadInput
 --   See below for an example.
 newtype Decoder = Decoder { feedDecoder :: Modifiers -> Char -> Either Decoder [Event] }
 
-ansiDecoder :: (Modifiers -> Char -> Maybe Event) -> Decoder
-ansiDecoder specialChar = defaultMode
+defaultDecoder :: (Modifiers -> Char -> Maybe Event) -> Decoder
+defaultDecoder specialChar = defaultMode
   where
     -- The default mode is the decoder's entry point.
     defaultMode :: Decoder
