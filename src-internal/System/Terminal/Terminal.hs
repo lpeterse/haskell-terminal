@@ -57,22 +57,22 @@ class Terminal t where
 -- be lost.
 data Command
   = PutLn
-  | PutText Text
-  | SetAttribute Attribute
-  | ResetAttribute Attribute
+  | PutText                  Text
+  | SetAttribute             Attribute
+  | ResetAttribute           Attribute
   | ResetAttributes
-  | MoveCursorUp Int
-  | MoveCursorDown Int
-  | MoveCursorLeft Int
-  | MoveCursorRight Int
+  | MoveCursorUp             Int
+  | MoveCursorDown           Int
+  | MoveCursorForward        Int
+  | MoveCursorBackward       Int
   | ShowCursor
   | HideCursor
   | SaveCursor
   | RestoreCursor
   | GetCursorPosition
-  | SetCursorPosition (Row, Col)
-  | SetCursorVertical   Row
-  | SetCursorHorizontal Col
+  | SetCursorPosition        (Row, Col)
+  | SetCursorVertical        Row
+  | SetCursorHorizontal      Col
   | InsertChars              Int
   | DeleteChars              Int
   | EraseChars               Int

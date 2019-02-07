@@ -32,7 +32,6 @@ module System.Terminal
     -- *** waitEvent
   , waitEvent
   , checkInterrupt
-  , dropPendingEvents
     -- ** Events
   , Event (..)
   , Interrupt (..)

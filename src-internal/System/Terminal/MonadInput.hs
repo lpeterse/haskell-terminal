@@ -1,7 +1,6 @@
 module System.Terminal.MonadInput where
 
 import           Control.Applicative ((<|>))
-import           Control.Monad (when)
 import           Control.Monad.IO.Class
 import           Control.Monad.STM
 import           Data.Bits
@@ -46,22 +45,15 @@ class (MonadIO m) => MonadInput m where
 -- * This operation resets the interrupt flag, signaling responsiveness to
 --   the execution environment.
 waitEvent :: MonadInput m => m (Either Interrupt Event)
-waitEvent = waitWith$ \intr ev -> do
+waitEvent = waitWith$ \intr ev ->
     (Left <$> intr) <|> (Right <$> ev)
-
-dropPendingEvents :: MonadInput m => m ()
-dropPendingEvents = waitWith $ const $ dropWhileEvent
-    where
-        dropWhileEvent ev = do
-            more <- (ev >> pure True) <|> pure False
-            when more (dropWhileEvent ev)
 
 -- | Check whether an interrupt is pending.
 --
 -- * This operation resets the interrupt flag, signaling responsiveness
 --   to the execution environment.
 checkInterrupt :: MonadInput m => m Bool
-checkInterrupt = waitWith $ \intr _ -> do
+checkInterrupt = waitWith $ \intr _ ->
     (intr >> pure True) <|> pure False
 
 data Event

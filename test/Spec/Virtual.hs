@@ -278,7 +278,7 @@ testMoveCursor03 =
     testCase "shall move forward" do
         t <- withVirtualTerminal settings $ \t -> do
             termCommand t (PutText "123456789012345")
-            termCommand t (MoveCursorRight 2)
+            termCommand t (MoveCursorForward 2)
             pure t
         assertEqual "window" expWindow =<< readTVarIO (virtualWindow t)
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
@@ -297,7 +297,7 @@ testMoveCursor04 =
     testCase "shall move backward" do
         t <- withVirtualTerminal settings $ \t -> do
             termCommand t (PutText "123456789012345")
-            termCommand t (MoveCursorLeft 2)
+            termCommand t (MoveCursorBackward 2)
             pure t
         assertEqual "window" expWindow =<< readTVarIO (virtualWindow t)
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)

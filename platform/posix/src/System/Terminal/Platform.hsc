@@ -1,8 +1,7 @@
-{-# LANGUAGE LambdaCase, RankNTypes #-}
 module System.Terminal.Platform
-  ( withTerminal
-  , LocalTerminal ()
-  ) where
+    ( withTerminal
+    , LocalTerminal ()
+    ) where
 
 import           Control.Applicative
 import           Control.Concurrent
@@ -41,7 +40,6 @@ data LocalTerminal
     { localType              :: BS.ByteString
     , localEvent             :: STM Event
     , localInterrupt         :: STM Interrupt
-    , localGetWindowSize     :: IO (Rows, Cols)
     , localGetCursorPosition :: IO (Row, Col)
     }
 
@@ -51,7 +49,7 @@ instance Terminal LocalTerminal where
     termInterrupt         = localInterrupt
     termCommand _ c       = Text.hPutStr IO.stdout (defaultEncode c)
     termFlush _           = IO.hFlush IO.stdout
-    termGetWindowSize     = getWindowSize
+    termGetWindowSize _   = getWindowSize
     termGetCursorPosition = localGetCursorPosition
 
 withTerminal :: (MonadIO m, MonadMask m) => (LocalTerminal -> m a) -> m a
@@ -64,7 +62,7 @@ withTerminal action = do
     cursorPosition <- liftIO newEmptyTMVarIO
     withTermiosSettings $ \termios->
         withInterruptHandler (handleInterrupt mainThread interrupt) $
-        withResizeHandler (handleResize windowSize windowChanged) $
+        withResizeHandler (handleResize windowChanged) $
         withInputProcessing termios cursorPosition events $ 
         action LocalTerminal
             { localType = term
@@ -85,7 +83,8 @@ withTerminal action = do
             }
     where
         handleResize :: TVar Bool -> IO ()
-        handleResize windowChanged = atomically (writeTVar windowChanged True)
+        handleResize windowChanged =
+            atomically (writeTVar windowChanged True)
         -- This function is responsible for passing interrupt signals and
         -- eventually throwing an exception to the main thread in case it
         -- detects that the main thread is not serving its duty to process
@@ -103,6 +102,7 @@ specialChar t mods = \case
       | c == '\n'            -> Just $ KeyEvent EnterKey     mods
       | c == '\t'            -> Just $ KeyEvent TabKey       mods
       | c == '\b'            -> Just $ KeyEvent DeleteKey    mods
+      | c == '\SP'           -> Just $ KeyEvent SpaceKey     mods
       | c == '\DEL'          -> Just $ KeyEvent DeleteKey    mods
       | otherwise            -> Nothing
 

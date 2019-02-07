@@ -128,13 +128,13 @@ instance (MonadIO m, MonadThrow m, T.Terminal t) => MonadScreen (TerminalT t m) 
         | i > 0     = command (T.MoveCursorDown i)
         | i < 0     = moveCursorUp i
         | otherwise = pure ()
-    moveCursorBackward i
-        | i > 0     = command (T.MoveCursorLeft i)
-        | i < 0     = moveCursorForward i
-        | otherwise = pure ()
     moveCursorForward i
-        | i > 0     = command (T.MoveCursorRight i)
+        | i > 0     = command (T.MoveCursorForward i)
         | i < 0     = moveCursorBackward i
+        | otherwise = pure ()
+    moveCursorBackward i
+        | i > 0     = command (T.MoveCursorBackward i)
+        | i < 0     = moveCursorForward i
         | otherwise = pure ()
 
     getCursorPosition =

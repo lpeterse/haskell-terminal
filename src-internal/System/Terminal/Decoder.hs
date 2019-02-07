@@ -16,25 +16,22 @@ defaultDecoder specialChar = defaultMode
   where
     -- The default mode is the decoder's entry point.
     defaultMode :: Decoder
-    defaultMode  = Decoder $ \mods c-> case specialChar mods c of
-      Just ev -> Right [ev]
-      Nothing
+    defaultMode  = Decoder $ \mods c-> if
         -- In normal mode a NUL is interpreted as a fill character and skipped.
         | c == '\NUL' -> Right []
         -- ESC might or might not introduce an escape sequence.
         | c == '\ESC' -> Left escapeMode
         -- All other C0 control codes are mapped to their corresponding ASCII character + CTRL modifier.
         -- If the character is a special character, then two events are produced.
-        | c <= '\US'  -> Right [KeyEvent (CharKey (toEnum $ (+64) $ fromEnum c)) (mods <> ctrlKey)]
-        -- Space shall be interpreted as control code and translated to `SpaceKey` to be
-        -- consistent with the handling of `TabKey` and other whitespaces.
-        | c == '\SP'  -> Right [KeyEvent (CharKey ' ') mods, KeyEvent SpaceKey mods]
+        | c <= '\US'  -> Right $ [KeyEvent (CharKey (toEnum $ (+64) $ fromEnum c)) (mods <> ctrlKey)] ++ f mods c
         -- All remaning characters of the Latin-1 block are returned as is.
-        | c <  '\DEL' -> Right [KeyEvent (CharKey c) mods]
-        -- Skip all other C1 control codes and DEL.
-        | c <  '\xA0' -> Right []
+        | c <  '\DEL' -> Right $ [KeyEvent (CharKey c) mods] ++ f mods c
+        -- Skip all other C1 control codes and DEL unless they have special meaning configured.
+        | c <  '\xA0' -> Right $ f mods c
         -- All other Unicode characters are returned as is.
         | otherwise   -> Right [KeyEvent (CharKey c) mods]
+        where
+            f mods c = maybe [] pure (specialChar mods c)
 
     -- This function shall be called if an ESC has been read in default mode
     -- and it is stil unclear whether this is the beginning of an escape sequence or not.

@@ -33,7 +33,7 @@ instance Terminal VirtualTerminal where
     termCommand t c       = atomically (command t c)
     termFlush _           = pure ()
     termGetWindowSize     = atomically . virtualWindowSize . virtualSettings
-    termGetCursorPosition = atomically . readTVar . virtualCursor
+    termGetCursorPosition = readTVarIO . virtualCursor
 
 withVirtualTerminal :: (MonadIO m) => VirtualTerminalSettings -> (VirtualTerminal -> m a) -> m a
 withVirtualTerminal settings handler = do
@@ -53,8 +53,8 @@ command t = \case
     ResetAttributes               -> pure ()
     MoveCursorUp i                -> moveCursorVertical   t (negate i)
     MoveCursorDown i              -> moveCursorVertical   t i
-    MoveCursorLeft i              -> moveCursorHorizontal t (negate i)
-    MoveCursorRight i             -> moveCursorHorizontal t i
+    MoveCursorForward i           -> moveCursorHorizontal t i
+    MoveCursorBackward i          -> moveCursorHorizontal t (negate i)
     ShowCursor                    -> pure ()
     HideCursor                    -> pure ()
     SaveCursor                    -> pure ()
