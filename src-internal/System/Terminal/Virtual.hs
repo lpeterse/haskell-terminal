@@ -7,7 +7,7 @@ import qualified Data.ByteString   as BS
 import qualified Data.Text         as T
 
 import           System.Terminal.MonadInput
-import           System.Terminal.MonadScreen (EraseMode (..))
+import           System.Terminal.MonadScreen (Rows, Row, Cols, Col, EraseMode (..))
 import           System.Terminal.Terminal
 
 data VirtualTerminal

@@ -1,16 +1,20 @@
 module System.Terminal.MonadScreen where
 
-import           System.Terminal.MonadInput
 import           System.Terminal.MonadPrinter
+
+type Row  = Int
+type Rows = Int
+type Col  = Int
+type Cols = Int
+
+data EraseMode
+    = EraseBackward
+    | EraseForward
+    | EraseAll
+    deriving (Eq, Ord, Show)
 
 class (MonadPrinter m) => MonadScreen m where
     -- | Get the dimensions of the visible window.
-    --
-    -- * This operation shall not cause a round-trip to the terminal and
-    --   may be called as often as desired.
-    -- * Deviations from reality might occur during the time when
-    --   the window size was changed up to when the corresponding event
-    --   updates the internal tracking state (this is unavoidable).
     getWindowSize               :: m (Rows, Cols)
 
     -- | Move the cursor `n` lines up. Do not change column.
@@ -24,14 +28,14 @@ class (MonadPrinter m) => MonadScreen m where
 
     -- | Get the current cursor position as reported by the terminal.
     --
-    -- * `(0,0) is the upper left of the window.
+    -- * (0,0) is the upper left of the window.
     -- * The cursor is always within window bounds.
     -- * This operation causes a round-trip to the terminal and
     --   shall be used sparely (e.g. on window size change).
     getCursorPosition           :: m (Row, Col)
     -- | Set the cursor position.
     --
-    -- * `(0,0)` is the upper left of the window.
+    -- * (0,0) is the upper left of the window.
     -- * The resulting cursor position is undefined when it is outside
     --   the window bounds.
     setCursorPosition           :: (Row, Col) -> m ()
@@ -49,7 +53,6 @@ class (MonadPrinter m) => MonadScreen m where
     -- * Only use this when auto-wrap is disabled, alternate screen
     --   buffer is enabled or you can otherwise guarantee that the
     --   window does not scroll between `saveCursor` and `restoreCursor`!
-    --   Use `saveCursorPosition` and `loadCursorPosition` else.
     restoreCursor               :: m ()
 
     insertChars                 :: Int -> m ()
@@ -75,16 +78,3 @@ class (MonadPrinter m) => MonadScreen m where
     --   - The dimensions of the alternate screen buffer are
     --     exactly those of the screen.
     setAlternateScreenBuffer    :: Bool -> m ()
-
--- TODO:
---
--- moveCursorNextLine Cursor down to beginning of <n>th line in the viewport
--- moveCursorPreviousLine Cursor up to beginning of <n>th line in the viewport
--- setCursorVertical
--- setCursorHorizontal
-
-data EraseMode
-    = EraseBackward
-    | EraseForward
-    | EraseAll
-    deriving (Eq, Ord, Show)

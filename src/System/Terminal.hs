@@ -24,6 +24,7 @@ module System.Terminal
   , putSimpleDocStream
     -- ** MonadScreen
   , MonadScreen (..)
+  , Row, Rows, Col, Cols
   , EraseMode (..)
     -- ** MonadTerminal
   , MonadTerminal
@@ -50,11 +51,12 @@ module System.Terminal
   , WindowEvent (..)
     -- *** Device Events
   , DeviceEvent (..)
-    -- * Low-Level / Misc
-  , Row, Rows, Col, Cols
+    -- * Low-Level
     -- ** Terminal
   , Terminal (..)
   , Command (..)
+  , Attribute (..)
+  , Color (..)
   , Decoder (..)
   , defaultDecoder
   , defaultEncode
@@ -87,7 +89,10 @@ import           System.Terminal.Virtual
 --
 -- main :: IO ()
 -- main = withTerminal $ `runTerminalT` do
---     `putTextLn` "Hello world!"
+--     `putTextLn` "Hello there, please press a button!"
+--     `flush`
+--     ev <- `waitEvent`
+--     `putStringLn` $ "Event was " ++ show ev
 --     `flush`
 -- @
 withTerminal :: (MonadIO m, MonadMask m) => (System.Terminal.Platform.LocalTerminal -> m a) -> m a

@@ -6,10 +6,7 @@ import           Control.Monad.STM
 import           Data.Bits
 import           Data.List
 
-type Row  = Int
-type Rows = Int
-type Col  = Int
-type Cols = Int
+import           System.Terminal.MonadScreen
 
 -- | This monad describes an environment that maintains a stream of `Event`s
 --   and offers out-of-band signaling for interrupts.

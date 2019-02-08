@@ -7,6 +7,10 @@ import           Data.Text
 import           System.Terminal.MonadInput
 import           System.Terminal.MonadScreen
 
+-- | Types that represent terminals need to implement this class in order
+--   to be driven by this library.
+--
+-- This library ships 
 class Terminal t where
   -- | The terminal identification string usually extracted from the
   --   environment variable `TERM`. Should contain values like `xterm`
@@ -84,6 +88,7 @@ data Command
   | SetAlternateScreenBuffer Bool
   deriving (Eq, Ord, Show)
 
+-- | ANSI text attributes.
 data Attribute
   = Bold
   | Italic
@@ -93,6 +98,7 @@ data Attribute
   | Background Color
   deriving (Eq, Ord, Show)
 
+-- | ANSI colors.
 data Color
   = Black
   | Red

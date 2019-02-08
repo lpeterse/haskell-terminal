@@ -29,6 +29,7 @@ import qualified Data.Dynamic                  as Dyn
 
 import           System.Terminal.Terminal
 import           System.Terminal.MonadInput
+import           System.Terminal.MonadScreen hiding (getWindowSize)
 import           System.Terminal.Decoder
 import           System.Terminal.Encoder
 

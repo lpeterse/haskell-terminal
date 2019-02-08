@@ -15,11 +15,11 @@ import           System.Terminal.MonadPrinter
 -- import Data.Text.Prettyprint.Doc
 --
 -- printer :: (`MonadFormatingPrinter` m, `MonadColorPrinter` m) => m ()
--- printer = `putDoc` $ `annotate` (foreground $ `bright` `Blue`) "This is blue!" <> `line`
+-- printer = `putDoc` $ `annotate` (foreground $ `bright` `blue`) "This is blue!" <> `line`
 --                 <> `annotate` `bold` ("Just bold!" <> otherDoc <> "..just bold again")
 --
 -- otherDoc :: (`MonadColorPrinter` m, `Attribute` m ~ ann) => `Doc` ann
--- otherDoc = `annotate` (`background` $ `dull` `Red`) " BOLD ON RED BACKGROUND "
+-- otherDoc = `annotate` (`background` `red`) " BOLD ON RED BACKGROUND "
 -- @
 --
 -- Note the necessary unification of `Attribute` `m` and `ann` in the definition of `otherDoc`!
@@ -35,13 +35,15 @@ putDoc doc = do
 putDocLn :: (MonadMarkupPrinter m) => Doc (Attribute m) -> m ()
 putDocLn doc = putDoc doc >> putLn
 
+-- | Prints types instantiating the `Pretty` class.
 putPretty :: (MonadMarkupPrinter m, Pretty a) => a -> m ()
 putPretty a = putDoc (pretty a)
 
+-- | Prints types instantiating the `Pretty` class and adds an additional newline.
 putPrettyLn :: (MonadMarkupPrinter m, Pretty a) => a -> m ()
 putPrettyLn a = putPretty a >> putLn
 
--- | TODO: documentation
+-- | Prints `SimpleDocStream`s (rather internal and not for the average user).
 putSimpleDocStream :: (MonadMarkupPrinter m) => SimpleDocStream (Attribute m) -> m ()
 putSimpleDocStream sdoc = do
     resetAttributes
