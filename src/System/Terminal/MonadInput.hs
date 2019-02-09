@@ -128,11 +128,11 @@ metaKey  = Modifiers 8
 --
 -- * Mouse event reporting must be activated before (TODO).
 data MouseEvent
-    = MouseMoved          (Row,Col)
-    | MouseButtonPressed  (Row,Col) MouseButton
-    | MouseButtonReleased (Row,Col) MouseButton
-    | MouseButtonClicked  (Row,Col) MouseButton
-    | MouseWheeled        (Row,Col) Direction
+    = MouseMoved          Position
+    | MouseButtonPressed  Position MouseButton
+    | MouseButtonReleased Position MouseButton
+    | MouseButtonClicked  Position MouseButton
+    | MouseWheeled        Position Direction
     deriving (Eq,Ord,Show)
 
 data MouseButton
@@ -156,7 +156,7 @@ data WindowEvent
 
 data DeviceEvent
     = DeviceAttributesReport String
-    | CursorPositionReport (Row, Col)
+    | CursorPositionReport Position
     deriving (Eq, Ord, Show)
 
 -- | Interrupt is a special type of event that needs

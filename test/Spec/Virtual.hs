@@ -79,7 +79,7 @@ tests = testGroup "System.Terminal.Virtual"
 defaultSettings :: VirtualTerminalSettings
 defaultSettings = VirtualTerminalSettings
     { virtualType         = "xterm"
-    , virtualWindowSize   = pure (4,10)
+    , virtualWindowSize   = pure (Size 4 10)
     , virtualEvent        = retry
     , virtualInterrupt    = retry
     }
@@ -92,9 +92,9 @@ testWithVirtualTerminal01 =
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (0,0)
+        expCursor = Position 0 0
         expWindow =
             [ "          "
             , "          "
@@ -110,9 +110,9 @@ testPutLn01 =
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (1,0)
+        expCursor = Position 1 0
         expWindow =
             [ "          "
             , "          "
@@ -128,9 +128,9 @@ testPutLn02 =
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (2,0)
+        expCursor = Position 2 0
         expWindow =
             [ "          "
             , "          "
@@ -150,9 +150,9 @@ testPutLn03 =
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (2,0)
+        expCursor = Position 2 0
         expWindow =
             [ "123       "
             , "          "
@@ -168,9 +168,9 @@ testPutText01 =
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (0,3)
+        expCursor = Position 0 3
         expWindow =
             [ "ABC       "
             , "          "
@@ -188,9 +188,9 @@ testPutText02 =
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (1,2)
+        expCursor = Position 1 2
         expWindow =
             [ "ABC1234567"
             , "89        "
@@ -208,9 +208,9 @@ testPutText03 =
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (0,9)
+        expCursor = Position 0 9
         expWindow =
             [ "ABC1234567"
             , "          "
@@ -226,9 +226,9 @@ testPutText04 =
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (2,1)
+        expCursor = Position 2 1
         expWindow =
             [ "ABCDEFGHIJ"
             , "abcdefghij"
@@ -245,9 +245,9 @@ testMoveCursor01 =
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (0,5)
+        expCursor = Position 0 5
         expWindow =
             [ "1234567890"
             , "12345     "
@@ -264,9 +264,9 @@ testMoveCursor02 =
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (2,5)
+        expCursor = Position 2 5
         expWindow =
             [ "1234567890"
             , "12345     "
@@ -283,9 +283,9 @@ testMoveCursor03 =
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (1,7)
+        expCursor = Position 1 7
         expWindow =
             [ "1234567890"
             , "12345     "
@@ -302,9 +302,9 @@ testMoveCursor04 =
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (1,3)
+        expCursor = Position 1 3
         expWindow =
             [ "1234567890"
             , "12345     "
@@ -319,24 +319,24 @@ testGetCursorPosition01 =
         assertEqual "cursor" expCursor pos
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (1,5)
+        expCursor = Position 1 5
 
 testSetCursorPosition01 :: TestTree
 testSetCursorPosition01 =
     testCase "shall set cursor position" do
         t <- withVirtualTerminal settings $ \t -> do
             termCommand t (PutText "123456789012345")
-            termCommand t (SetCursorPosition (2,8))
+            termCommand t (SetCursorPosition (Position 2 8))
             pure t
         assertEqual "window" expWindow =<< readTVarIO (virtualWindow t)
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (2,8)
+        expCursor = Position 2 8
         expWindow =
             [ "1234567890"
             , "12345     "
@@ -347,15 +347,15 @@ testSetCursorPosition02 =
     testCase "shall set cursor position (limit top margin)" do
         t <- withVirtualTerminal settings $ \t -> do
             termCommand t (PutText "123456789012345")
-            termCommand t (SetCursorPosition (-1,8))
+            termCommand t (SetCursorPosition $ Position (-1) 8)
             pure t
         assertEqual "window" expWindow =<< readTVarIO (virtualWindow t)
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (0,8)
+        expCursor = Position 0 8
         expWindow =
             [ "1234567890"
             , "12345     "
@@ -366,15 +366,15 @@ testSetCursorPosition03 =
     testCase "shall set cursor position (limit bottom margin)" do
         t <- withVirtualTerminal settings $ \t -> do
             termCommand t (PutText "123456789012345")
-            termCommand t (SetCursorPosition (5,8))
+            termCommand t (SetCursorPosition (Position 5 8))
             pure t
         assertEqual "window" expWindow =<< readTVarIO (virtualWindow t)
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (2,8)
+        expCursor = Position 2 8
         expWindow =
             [ "1234567890"
             , "12345     "
@@ -385,15 +385,15 @@ testSetCursorPosition04 =
     testCase "shall set cursor position (limit left margin)" do
         t <- withVirtualTerminal settings $ \t -> do
             termCommand t (PutText "123456789012345")
-            termCommand t (SetCursorPosition (1,-1))
+            termCommand t (SetCursorPosition $ Position 1 (-1))
             pure t
         assertEqual "window" expWindow =<< readTVarIO (virtualWindow t)
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (1,0)
+        expCursor = Position 1 0
         expWindow =
             [ "1234567890"
             , "12345     "
@@ -404,15 +404,15 @@ testSetCursorPosition05 =
     testCase "shall set cursor position (limit right margin)" do
         t <- withVirtualTerminal settings $ \t -> do
             termCommand t (PutText "123456789012345")
-            termCommand t (SetCursorPosition (1,11))
+            termCommand t (SetCursorPosition (Position 1 11))
             pure t
         assertEqual "window" expWindow =<< readTVarIO (virtualWindow t)
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (1,9)
+        expCursor = Position 1 9
         expWindow =
             [ "1234567890"
             , "12345     "
@@ -429,9 +429,9 @@ testSetCursorVertical01 =
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (2,5)
+        expCursor = Position 2 5
         expWindow =
             [ "1234567890"
             , "12345     "
@@ -448,9 +448,9 @@ testSetCursorHorizontal01 =
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (1,8)
+        expCursor = Position 1 8
         expWindow =
             [ "1234567890"
             , "12345     "
@@ -461,16 +461,16 @@ testInsertChars01 =
     testCase "shall insert space and shift out existing chars" do
         t <- withVirtualTerminal settings $ \t -> do
             termCommand t (PutText "1234567890")
-            termCommand t (SetCursorPosition (0,4))
+            termCommand t (SetCursorPosition (Position 0 4))
             termCommand t (InsertChars 3)
             pure t
         assertEqual "window" expWindow =<< readTVarIO (virtualWindow t)
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (0,4)
+        expCursor = (Position 0 4)
         expWindow =
             [ "1234   567"
             , "          "
@@ -481,16 +481,16 @@ testDeleteChars01 =
     testCase "shall shift chars from right and fill with whitespace" do
         t <- withVirtualTerminal settings $ \t -> do
             termCommand t (PutText "1234567890")
-            termCommand t (SetCursorPosition (0,4))
+            termCommand t (SetCursorPosition (Position 0 4))
             termCommand t (DeleteChars 3)
             pure t
         assertEqual "window" expWindow =<< readTVarIO (virtualWindow t)
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (0,4)
+        expCursor = (Position 0 4)
         expWindow =
             [ "1234890   "
             , "          "
@@ -501,16 +501,16 @@ testEraseChars01 =
     testCase "shall override chars with spaces" do
         t <- withVirtualTerminal settings $ \t -> do
             termCommand t (PutText "1234567890")
-            termCommand t (SetCursorPosition (0,4))
+            termCommand t (SetCursorPosition (Position 0 4))
             termCommand t (EraseChars 3)
             pure t
         assertEqual "window" expWindow =<< readTVarIO (virtualWindow t)
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (0,4)
+        expCursor = (Position 0 4)
         expWindow =
             [ "1234   890"
             , "          "
@@ -523,16 +523,16 @@ testInsertLines01 =
             termCommand t (PutText "1234567890")
             termCommand t (PutText "ABCDEFGHIJ")
             termCommand t (PutText "QRSTUVWXYZ")
-            termCommand t (SetCursorPosition (1,4))
+            termCommand t (SetCursorPosition (Position 1 4))
             termCommand t (InsertLines 1)
             pure t
         assertEqual "window" expWindow =<< readTVarIO (virtualWindow t)
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (4,10)
+            { virtualWindowSize = pure (Size 4 10)
             }
-        expCursor = (1,4)
+        expCursor = (Position 1 4)
         expWindow =
             [ "1234567890"
             , "          "
@@ -546,16 +546,16 @@ testDeleteLines01 =
             termCommand t (PutText "1234567890")
             termCommand t (PutText "ABCDEFGHIJ")
             termCommand t (PutText "QRSTUVWXYZ")
-            termCommand t (SetCursorPosition (1,4))
+            termCommand t (SetCursorPosition (Position 1 4))
             termCommand t (InsertLines 1)
             pure t
         assertEqual "window" expWindow =<< readTVarIO (virtualWindow t)
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (4,10)
+            { virtualWindowSize = pure (Size 4 10)
             }
-        expCursor = (1,4)
+        expCursor = (Position 1 4)
         expWindow =
             [ "1234567890"
             , "          "
@@ -569,16 +569,16 @@ testEraseInLine01 =
             termCommand t (PutText "1234567890")
             termCommand t (PutText "1234567890")
             termCommand t (PutText "1234567890")
-            termCommand t (SetCursorPosition (1,4))
+            termCommand t (SetCursorPosition (Position 1 4))
             termCommand t (EraseInLine EraseBackward)
             pure t
         assertEqual "window" expWindow =<< readTVarIO (virtualWindow t)
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (1,4)
+        expCursor = (Position 1 4)
         expWindow =
             [ "1234567890"
             , "     67890"
@@ -591,16 +591,16 @@ testEraseInLine02 =
             termCommand t (PutText "1234567890")
             termCommand t (PutText "1234567890")
             termCommand t (PutText "1234567890")
-            termCommand t (SetCursorPosition (1,4))
+            termCommand t (SetCursorPosition (Position 1 4))
             termCommand t (EraseInLine EraseForward)
             pure t
         assertEqual "window" expWindow =<< readTVarIO (virtualWindow t)
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (1,4)
+        expCursor = (Position 1 4)
         expWindow =
             [ "1234567890"
             , "1234      "
@@ -613,16 +613,16 @@ testEraseInLine03 =
             termCommand t (PutText "1234567890")
             termCommand t (PutText "1234567890")
             termCommand t (PutText "1234567890")
-            termCommand t (SetCursorPosition (1,4))
+            termCommand t (SetCursorPosition (Position 1 4))
             termCommand t (EraseInLine EraseAll)
             pure t
         assertEqual "window" expWindow =<< readTVarIO (virtualWindow t)
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (1,4)
+        expCursor = (Position 1 4)
         expWindow =
             [ "1234567890"
             , "          "
@@ -635,16 +635,16 @@ testEraseInDisplay01 =
             termCommand t (PutText "1234567890")
             termCommand t (PutText "1234567890")
             termCommand t (PutText "1234567890")
-            termCommand t (SetCursorPosition (1,4))
+            termCommand t (SetCursorPosition (Position 1 4))
             termCommand t (EraseInDisplay EraseBackward)
             pure t
         assertEqual "window" expWindow =<< readTVarIO (virtualWindow t)
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (1,4)
+        expCursor = (Position 1 4)
         expWindow =
             [ "          "
             , "1234567890"
@@ -657,16 +657,16 @@ testEraseInDisplay02 =
             termCommand t (PutText "1234567890")
             termCommand t (PutText "1234567890")
             termCommand t (PutText "1234567890")
-            termCommand t (SetCursorPosition (1,4))
+            termCommand t (SetCursorPosition (Position 1 4))
             termCommand t (EraseInDisplay EraseForward)
             pure t
         assertEqual "window" expWindow =<< readTVarIO (virtualWindow t)
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (1,4)
+        expCursor = (Position 1 4)
         expWindow =
             [ "1234567890"
             , "1234567890"
@@ -679,16 +679,16 @@ testEraseInDisplay03 =
             termCommand t (PutText "1234567890")
             termCommand t (PutText "1234567890")
             termCommand t (PutText "1234567890")
-            termCommand t (SetCursorPosition (1,4))
+            termCommand t (SetCursorPosition (Position 1 4))
             termCommand t (EraseInDisplay EraseAll)
             pure t
         assertEqual "window" expWindow =<< readTVarIO (virtualWindow t)
         assertEqual "cursor" expCursor =<< readTVarIO (virtualCursor t)
     where
         settings = defaultSettings
-            { virtualWindowSize = pure (3,10)
+            { virtualWindowSize = pure $ Size 3 10
             }
-        expCursor = (1,4)
+        expCursor = (Position 1 4)
         expWindow =
             [ "          "
             , "          "

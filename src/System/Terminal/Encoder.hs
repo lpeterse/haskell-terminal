@@ -88,7 +88,7 @@ defaultEncode = \case
                             | i == 0         -> "\ESC[D"
                             | otherwise      -> "\ESC[" <> T.pack (show i) <> "D"
     GetCursorPosition                        -> "\ESC[6n"
-    SetCursorPosition (x,y)                  -> "\ESC[" <> T.pack (show $ x + 1) <> ";" <> T.pack (show $ y + 1) <> "H"
+    SetCursorPosition (Position x y)         -> "\ESC[" <> T.pack (show $ x + 1) <> ";" <> T.pack (show $ y + 1) <> "H"
     SetCursorVertical i                      -> "\ESC[" <> T.pack (show $ i + 1) <> "d"
     SetCursorHorizontal i                    -> "\ESC[" <> T.pack (show $ i + 1) <> "G"
     InsertChars i   | i <= 0                 -> ""

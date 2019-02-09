@@ -22,7 +22,8 @@ module System.Terminal
   , putSimpleDocStream
     -- ** MonadScreen
   , MonadScreen (..)
-  , Row, Rows, Col, Cols
+  , Size (..)
+  , Position (..)
   , EraseMode (..)
     -- ** MonadTerminal
   , MonadTerminal

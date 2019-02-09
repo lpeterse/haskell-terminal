@@ -4,6 +4,7 @@ import           Data.Char
 import           Data.Monoid                  ((<>))
 
 import           System.Terminal.MonadInput
+import           System.Terminal.MonadScreen (Position (..))
 
 -- | The type `Decoder` is a finite state transducer.
 --
@@ -139,7 +140,7 @@ interpretCSI params _intermediates = \case
   -- well as a cursor position report. There is no real solution to disambiguate these two
   -- other than context of expectation (cursor position report has probably been requested).
   -- This decoder shall simply emit both events and the user shall ignore unexpected events.
-  'R'        -> modified (FunctionKey  3) ++ [DeviceEvent $ CursorPositionReport (fstNumber 1 - 1, sndNumber 1 - 1)]
+  'R'        -> modified (FunctionKey  3) ++ [DeviceEvent $ CursorPositionReport $ Position (fstNumber 1 - 1) (sndNumber 1 - 1)]
   'S'        -> modified (FunctionKey  4)
   'T'        -> []
   'U'        -> []

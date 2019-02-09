@@ -73,7 +73,7 @@ instance (MonadIO m, MonadThrow m, T.Terminal t) => MonadPrinter (TerminalT t m)
         liftIO $ T.termFlush t
     getLineWidth = TerminalT do
         t <- ask
-        liftIO (snd <$> T.termGetWindowSize t)
+        liftIO (width <$> T.termGetWindowSize t)
 
 instance (MonadIO m, MonadThrow m, T.Terminal t) => MonadMarkupPrinter (TerminalT t m) where
     data Attribute (TerminalT t m) = AttributeT T.Attribute deriving (Eq, Ord, Show)

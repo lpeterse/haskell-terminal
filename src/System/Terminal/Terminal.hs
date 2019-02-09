@@ -5,7 +5,7 @@ import           Data.ByteString
 import           Data.Text
 
 import           System.Terminal.MonadInput
-import           System.Terminal.MonadScreen (Rows, Cols, Row, Col, EraseMode (..))
+import           System.Terminal.MonadScreen (Size (..), Position (..), EraseMode (..))
 
 -- | Types that represent terminals need to implement this class in order
 --   to be driven by this library.
@@ -52,11 +52,11 @@ class Terminal t where
   termFlush             :: t -> IO ()
   -- | This operation shall return the latest known window size without
   --   blocking.
-  termGetWindowSize     :: t -> IO (Rows, Cols)
+  termGetWindowSize     :: t -> IO Size
   -- | This operation shall return the current cursor position.
   --   It may block as depending on implementation it usually requires an
   --   in-band roundtrip to the terminal. Use it wisely.
-  termGetCursorPosition :: t -> IO (Row, Col)
+  termGetCursorPosition :: t -> IO Position
 
 -- | The commands every terminal needs to understand.
 --
@@ -78,9 +78,9 @@ data Command
   | SaveCursor
   | RestoreCursor
   | GetCursorPosition
-  | SetCursorPosition        (Row, Col)
-  | SetCursorVertical        Row
-  | SetCursorHorizontal      Col
+  | SetCursorPosition        Position
+  | SetCursorVertical        Int
+  | SetCursorHorizontal      Int
   | InsertChars              Int
   | DeleteChars              Int
   | EraseChars               Int

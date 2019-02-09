@@ -7,13 +7,13 @@ import qualified Data.ByteString   as BS
 import qualified Data.Text         as T
 
 import           System.Terminal.MonadInput
-import           System.Terminal.MonadScreen (Rows, Row, Cols, Col, EraseMode (..))
+import           System.Terminal.MonadScreen (Size (..), Position (..), EraseMode (..))
 import           System.Terminal.Terminal
 
 data VirtualTerminal
     = VirtualTerminal
     { virtualSettings          :: VirtualTerminalSettings
-    , virtualCursor            :: TVar (Row, Col)
+    , virtualCursor            :: TVar Position
     , virtualWindow            :: TVar [String]
     , virtualAutoWrap          :: TVar Bool
     }
@@ -21,7 +21,7 @@ data VirtualTerminal
 data VirtualTerminalSettings
     = VirtualTerminalSettings
     { virtualType              :: BS.ByteString
-    , virtualWindowSize        :: STM (Rows,Cols)
+    , virtualWindowSize        :: STM Size
     , virtualEvent             :: STM Event
     , virtualInterrupt         :: STM Interrupt
     }
@@ -39,8 +39,8 @@ withVirtualTerminal :: (MonadIO m) => VirtualTerminalSettings -> (VirtualTermina
 withVirtualTerminal settings handler = do
     size <- liftIO $ atomically $ virtualWindowSize settings
     term <- liftIO $ atomically $ VirtualTerminal settings
-        <$> newTVar (0,0)
-        <*> newTVar (replicate (fst size) (replicate (snd size) ' '))
+        <$> newTVar (Position 0 0)
+        <*> newTVar (replicate (height size) (replicate (width size) ' '))
         <*> newTVar True
     handler term
 
@@ -75,28 +75,28 @@ command t = \case
     SetAlternateScreenBuffer Bool
 -}
 
-scrollDown :: Cols -> [String] -> [String]
-scrollDown width window =
-    drop 1 window ++ [replicate width ' ']
+scrollDown :: Int -> [String] -> [String]
+scrollDown w window =
+    drop 1 window ++ [replicate w ' ']
 
 putLn :: VirtualTerminal -> STM ()
 putLn t = do
-    (h,w)  <- virtualWindowSize (virtualSettings t)
-    (r,_)  <- readTVar (virtualCursor t)
+    Size h w <- virtualWindowSize (virtualSettings t)
+    Position r _ <- readTVar (virtualCursor t)
     window <- readTVar (virtualWindow t)
     if r + 1 == h
         then do
-            writeTVar (virtualCursor t) (r, 0)
+            writeTVar (virtualCursor t) $ Position r 0
             writeTVar (virtualWindow t) (scrollDown w window)
         else do
-            writeTVar (virtualCursor t) (r + 1, 0)
+            writeTVar (virtualCursor t) $ Position (r + 1) 0
 
 putString :: VirtualTerminal -> String -> STM ()
 putString t s = do
-    (h,w)    <- virtualWindowSize (virtualSettings t)
+    Size h w <- virtualWindowSize (virtualSettings t)
     autoWrap <- readTVar (virtualAutoWrap t)
-    (r,c)    <- readTVar (virtualCursor t)
-    wndw     <- readTVar (virtualWindow t)
+    Position r c <- readTVar (virtualCursor t)
+    wndw <- readTVar (virtualWindow t)
     let cl = w - c -- space in cursor line
         f "" ls     = ls
         f x  []     = let k = (take w x) in (k <> replicate (w - length k) ' ') : f (drop w x) []
@@ -113,47 +113,47 @@ putString t s = do
     if autoWrap
         then do
             let (r',c') = quotRem (r * w + c + length s) w
-            writeTVar (virtualCursor t) (min r' (h - 1), c')
+            writeTVar (virtualCursor t) $ Position (min r' (h - 1)) c'
         else do
             let (r', c') = (r, min (w - 1) (c + length s))
-            writeTVar (virtualCursor t) (r', c')
+            writeTVar (virtualCursor t) $ Position r' c'
 
-moveCursorHorizontal :: VirtualTerminal -> Cols -> STM ()
+moveCursorHorizontal :: VirtualTerminal -> Int -> STM ()
 moveCursorHorizontal t i = do
-    (_,w)    <- virtualWindowSize (virtualSettings t)
-    (r,c)    <- readTVar (virtualCursor t)
-    writeTVar (virtualCursor t) (r, max 0 $ min (w - 1) $ c + i)
+    Size _ w <- virtualWindowSize (virtualSettings t)
+    Position r c <- readTVar (virtualCursor t)
+    writeTVar (virtualCursor t) $ Position r (max 0 $ min (w - 1) $ c + i)
 
-moveCursorVertical :: VirtualTerminal -> Cols -> STM ()
+moveCursorVertical :: VirtualTerminal -> Int -> STM ()
 moveCursorVertical t i = do
-    (h,_)    <- virtualWindowSize (virtualSettings t)
-    (r,c)    <- readTVar (virtualCursor t)
-    writeTVar (virtualCursor t) (max 0 $ min (h - 1) $ r + i, c)
+    Size h _ <- virtualWindowSize (virtualSettings t)
+    Position r c <- readTVar (virtualCursor t)
+    writeTVar (virtualCursor t) $ Position (max 0 $ min (h - 1) $ r + i) c
 
 getCursorPosition :: VirtualTerminal -> STM ()
 getCursorPosition _ = pure ()
 
-setCursorPosition :: VirtualTerminal -> (Row, Col) -> STM ()
-setCursorPosition t (r,c) = do
-    (h,w) <- virtualWindowSize (virtualSettings t)
-    writeTVar (virtualCursor t) (max 0 (min (h - 1) r), max 0 (min (w - 1) c))
+setCursorPosition :: VirtualTerminal -> Position -> STM ()
+setCursorPosition t (Position r c) = do
+    Size h w <- virtualWindowSize (virtualSettings t)
+    writeTVar (virtualCursor t) $ Position (max 0 (min (h - 1) r)) (max 0 (min (w - 1) c))
 
-setCursorVertical :: VirtualTerminal -> Row -> STM ()
+setCursorVertical :: VirtualTerminal -> Int -> STM ()
 setCursorVertical t r = do
-    (h,_) <- virtualWindowSize (virtualSettings t)
-    (_,c) <- readTVar (virtualCursor t)
-    writeTVar (virtualCursor t) (max 0 (min (h - 1) r), c)
+    Size h _ <- virtualWindowSize (virtualSettings t)
+    Position _ c <- readTVar (virtualCursor t)
+    writeTVar (virtualCursor t) $ Position (max 0 (min (h - 1) r)) c
 
-setCursorHorizontal :: VirtualTerminal -> Col -> STM ()
+setCursorHorizontal :: VirtualTerminal -> Int -> STM ()
 setCursorHorizontal t c = do
-    (_,w) <- virtualWindowSize (virtualSettings t)
-    (r,_) <- readTVar (virtualCursor t)
-    writeTVar (virtualCursor t) (r, max 0 (min (w - 1) c))
+    Size _ w <- virtualWindowSize (virtualSettings t)
+    Position r _ <- readTVar (virtualCursor t)
+    writeTVar (virtualCursor t) $ Position r (max 0 (min (w - 1) c))
 
 insertChars :: VirtualTerminal -> Int -> STM ()
 insertChars t i = do
-    (_,w) <- virtualWindowSize (virtualSettings t)
-    (r,c) <- readTVar (virtualCursor t)
+    Size _ w <- virtualWindowSize (virtualSettings t)
+    Position r c <- readTVar (virtualCursor t)
     wndw  <- readTVar (virtualWindow t)
     let l  = wndw !! r
         w1 = take r wndw
@@ -163,7 +163,7 @@ insertChars t i = do
 
 deleteChars :: VirtualTerminal -> Int -> STM ()
 deleteChars t i = do
-    (r,c) <- readTVar (virtualCursor t)
+    Position r c <- readTVar (virtualCursor t)
     wndw  <- readTVar (virtualWindow t)
     let l  = wndw !! r
         w1 = take r wndw
@@ -173,7 +173,7 @@ deleteChars t i = do
 
 eraseChars :: VirtualTerminal -> Int -> STM ()
 eraseChars t i = do
-    (r,c) <- readTVar (virtualCursor t)
+    Position r c <- readTVar (virtualCursor t)
     wndw  <- readTVar (virtualWindow t)
     let l  = wndw !! r
         w1 = take r wndw
@@ -183,8 +183,8 @@ eraseChars t i = do
 
 insertLines :: VirtualTerminal -> Int -> STM ()
 insertLines t i = do
-    (h,w) <- virtualWindowSize (virtualSettings t)
-    (r,_) <- readTVar (virtualCursor t)
+    Size h w <- virtualWindowSize (virtualSettings t)
+    Position r _ <- readTVar (virtualCursor t)
     wndw  <- readTVar (virtualWindow t)
     let w1 = take r wndw
         w2 = replicate i (replicate w ' ')
@@ -193,8 +193,8 @@ insertLines t i = do
 
 deleteLines :: VirtualTerminal -> Int -> STM ()
 deleteLines t i = do
-    (h,w) <- virtualWindowSize (virtualSettings t)
-    (r,_) <- readTVar (virtualCursor t)
+    Size h w <- virtualWindowSize (virtualSettings t)
+    Position r _ <- readTVar (virtualCursor t)
     wndw  <- readTVar (virtualWindow t)
     let w1 = take r wndw
         w2 = take (h - r - i) $ drop r wndw
@@ -203,8 +203,8 @@ deleteLines t i = do
 
 eraseInLine :: VirtualTerminal -> EraseMode -> STM ()
 eraseInLine t m = do
-    (_,w) <- virtualWindowSize (virtualSettings t)
-    (r,c) <- readTVar (virtualCursor t)
+    Size _ w <- virtualWindowSize (virtualSettings t)
+    Position r c <- readTVar (virtualCursor t)
     wndw  <- readTVar (virtualWindow t)
     let l  = wndw !! r
         w1 = take r wndw
@@ -217,8 +217,8 @@ eraseInLine t m = do
 
 eraseInDisplay :: VirtualTerminal -> EraseMode -> STM ()
 eraseInDisplay t m = do
-    (h,w) <- virtualWindowSize (virtualSettings t)
-    (r,_) <- readTVar (virtualCursor t)
+    Size h w <- virtualWindowSize (virtualSettings t)
+    Position r _ <- readTVar (virtualCursor t)
     wndw  <- readTVar (virtualWindow t)
     let w1  = take r wndw
         w1E = replicate r (replicate w ' ') 

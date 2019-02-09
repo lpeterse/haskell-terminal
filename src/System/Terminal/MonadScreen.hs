@@ -2,10 +2,15 @@ module System.Terminal.MonadScreen where
 
 import           System.Terminal.MonadPrinter
 
-type Row  = Int
-type Rows = Int
-type Col  = Int
-type Cols = Int
+data Size = Size
+    { height :: {-# UNPACK #-} !Int
+    , width  :: {-# UNPACK #-} !Int
+    } deriving (Eq, Ord, Show)
+
+data Position = Position
+    { row    :: {-# UNPACK #-} !Int
+    , col    :: {-# UNPACK #-} !Int
+    } deriving (Eq, Ord, Show)
 
 data EraseMode
     = EraseBackward
@@ -15,30 +20,30 @@ data EraseMode
 
 class (MonadPrinter m) => MonadScreen m where
     -- | Get the dimensions of the visible window.
-    getWindowSize               :: m (Rows, Cols)
+    getWindowSize               :: m Size
 
     -- | Move the cursor `n` lines up. Do not change column.
-    moveCursorUp                :: Rows -> m ()
+    moveCursorUp                :: Int -> m ()
     -- | Move the cursor `n` lines down. Do not change column.
-    moveCursorDown              :: Rows -> m ()
+    moveCursorDown              :: Int -> m ()
     -- | Move the cursor `n` columns to the right. Do not change line.
-    moveCursorForward           :: Cols -> m ()
+    moveCursorForward           :: Int -> m ()
     -- | Move the cursor `n` columns to the left. Do not change line.
-    moveCursorBackward          :: Cols -> m ()
+    moveCursorBackward          :: Int -> m ()
 
     -- | Get the current cursor position as reported by the terminal.
     --
-    -- * (0,0) is the upper left of the window.
+    -- * @Position 0 0@ is the upper left of the window.
     -- * The cursor is always within window bounds.
     -- * This operation causes a round-trip to the terminal and
     --   shall be used sparely (e.g. on window size change).
-    getCursorPosition           :: m (Row, Col)
+    getCursorPosition           :: m Position
     -- | Set the cursor position.
     --
-    -- * (0,0) is the upper left of the window.
+    -- * @Position 0 0@ is the upper left of the window.
     -- * The resulting cursor position is undefined when it is outside
     --   the window bounds.
-    setCursorPosition           :: (Row, Col) -> m ()
+    setCursorPosition           :: Position -> m ()
 
     -- | Save cursor position and attributes.
     saveCursor                  :: m ()

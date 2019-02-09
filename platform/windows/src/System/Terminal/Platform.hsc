@@ -25,6 +25,7 @@ import qualified System.IO                     as IO
 import qualified System.IO.Error               as IO
 
 import           System.Terminal.MonadInput
+import           System.Terminal.MonadScreen
 import           System.Terminal.Terminal
 import           System.Terminal.Decoder
 import           System.Terminal.Encoder
@@ -209,28 +210,33 @@ withInputProcessing mainThread interrupt windowChanged events ma = do
                                 Right evs     -> forM_ evs pushEvent >> continue decoder0
                         | otherwise -> continue decoder -- All other key events shall be ignored.
                     ConsoleMouseEvent mouseEvent -> case mouseEvent of
-                        MouseButtonPressed (r,c) btn -> do
+                        MouseButtonPressed (Position r c) btn -> do
                             csbi <- readTVarIO latestScreenBufferInfo
                             atomically (writeTVar latestMouseButton btn)
-                            pushEvent $ MouseEvent $ MouseButtonPressed (r - srWindowTop csbi - 1, c - srWindowLeft csbi - 1) btn
+                            let pos = Position (r - srWindowTop csbi - 1) (c - srWindowLeft csbi - 1)
+                            pushEvent $ MouseEvent $ MouseButtonPressed pos btn
                             continue decoder
-                        MouseButtonReleased (r,c) _ -> do
+                        MouseButtonReleased (Position r c) _ -> do
                             csbi <- readTVarIO latestScreenBufferInfo
                             btn <- readTVarIO latestMouseButton
-                            pushEvent $ MouseEvent $ MouseButtonReleased (r - srWindowTop csbi - 1, c - srWindowLeft csbi - 1) btn
-                            pushEvent $ MouseEvent $ MouseButtonClicked  (r - srWindowTop csbi - 1, c - srWindowLeft csbi - 1) btn
+                            let pos = Position (r - srWindowTop csbi - 1) (c - srWindowLeft csbi - 1)
+                            pushEvent $ MouseEvent $ MouseButtonReleased pos btn
+                            pushEvent $ MouseEvent $ MouseButtonClicked  pos btn
                             continue decoder
-                        MouseButtonClicked (r,c) btn -> do
+                        MouseButtonClicked (Position r c) btn -> do
                             csbi <- readTVarIO latestScreenBufferInfo
-                            pushEvent $ MouseEvent $ MouseButtonClicked (r - srWindowTop csbi - 1, c - srWindowLeft csbi - 1) btn
+                            let pos = Position (r - srWindowTop csbi - 1) (c - srWindowLeft csbi - 1)
+                            pushEvent $ MouseEvent $ MouseButtonClicked pos btn
                             continue decoder
-                        MouseWheeled (r,c) dir -> do
+                        MouseWheeled (Position r c) dir -> do
                             csbi <- readTVarIO latestScreenBufferInfo
-                            pushEvent $ MouseEvent $ MouseWheeled (r - srWindowTop csbi - 1, c - srWindowLeft csbi - 1) dir
+                            let pos = Position (r - srWindowTop csbi - 1) (c - srWindowLeft csbi - 1)
+                            pushEvent $ MouseEvent $ MouseWheeled pos dir
                             continue decoder
-                        MouseMoved (r,c) -> do
+                        MouseMoved (Position r c) -> do
                             csbi <- readTVarIO latestScreenBufferInfo
-                            pushEvent $ MouseEvent $ MouseMoved (r - srWindowTop csbi - 1, c - srWindowLeft csbi - 1)
+                            let pos = Position (r - srWindowTop csbi - 1) (c - srWindowLeft csbi - 1)
+                            pushEvent $ MouseEvent $ MouseMoved pos
                             continue decoder
                     ConsoleWindowEvent wev -> case wev of
                         WindowSizeChanged -> do
@@ -271,15 +277,15 @@ getConsoleScreenBufferInfo = alloca $ \ptr->
     0 -> E.throwIO (IO.userError "getConsoleScreenBufferInfo: not a tty?")
     _ -> peek ptr
 
-getConsoleWindowSize :: IO (Rows, Cols)
+getConsoleWindowSize :: IO Size
 getConsoleWindowSize = do
   csbi <- getConsoleScreenBufferInfo
-  pure (srWindowBottom csbi - srWindowTop csbi + 1, srWindowRight csbi - srWindowLeft csbi + 1)
+  pure $ Size (srWindowBottom csbi - srWindowTop csbi + 1) (srWindowRight csbi - srWindowLeft csbi + 1)
 
-getConsoleCursorPosition :: IO (Row, Col)
+getConsoleCursorPosition :: IO Position
 getConsoleCursorPosition = do
   sbi <- getConsoleScreenBufferInfo
-  pure (cpY sbi - srWindowTop sbi, cpX sbi - srWindowLeft sbi)
+  pure $ Position (cpY sbi - srWindowTop sbi) (cpX sbi - srWindowLeft sbi)
 
 data ConsoleInputEvent
   = ConsoleKeyEvent
@@ -321,7 +327,7 @@ instance Storable ConsoleInputEvent where
       <*> (toEnum . fromIntegral <$> peek ptrKeyUnicodeChar)
       <*> (modifiersFromControlKeyState <$> peek ptrKeyControlKeyState)
     (#const MOUSE_EVENT) -> ConsoleMouseEvent <$> do
-      pos <- peek ptrMousePositionX >>= \x-> peek ptrMousePositionY >>= \y-> pure (fromIntegral y, fromIntegral x)
+      pos <- peek ptrMousePositionX >>= \x-> peek ptrMousePositionY >>= \y-> pure $ Position (fromIntegral y) (fromIntegral x)
       btn <- peek ptrMouseButtonState
       peek ptrMouseEventFlags >>= \case
         (#const MOUSE_MOVED)    -> pure (MouseMoved   pos)
