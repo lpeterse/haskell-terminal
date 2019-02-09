@@ -8,9 +8,8 @@ import           Data.Monoid
 import           Test.Tasty
 import           Test.Tasty.HUnit
 
-import           System.Terminal.MonadScreen (EraseMode (..))
-import           System.Terminal.Terminal
-import           System.Terminal.Virtual
+import           System.Terminal
+import           System.Terminal.Internal
 
 tests :: TestTree
 tests = testGroup "System.Terminal.Virtual"

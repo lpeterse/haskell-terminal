@@ -69,11 +69,9 @@ class MonadPrinter m => MonadMarkupPrinter m where
     --   instances are generally advised to not expose value constructors for
     --   this type.
     --
-    --   Instead, subclasses like `MonadFormatPrinter` and `MonadColorPrinter`
+    --   Instead, subclasses like `MonadFormattingPrinter` and `MonadColorPrinter`
     --   offer abstract value constructors like `bold`, `underlined`, `inverted`
-    --   which are then given meaning by the concrete class instance. The
-    --   environment `System.Terminal.Ansi.AnsiTerminalT` for example
-    --   implements all of these classes.
+    --   which are then given meaning by the concrete class instance.
     data Attribute m
     setAttribute :: Attribute m -> m ()
     setAttribute _ = pure ()
@@ -85,16 +83,16 @@ class MonadPrinter m => MonadMarkupPrinter m where
     --   as equal, so that
     --
     --   @
-    --   `setAttribute` (`foreground` $ `bright` `Blue`) >> `resetAttribute` (`foreground` $ `dull` `Red`)
+    --   `setAttribute` (`foreground` $ `bright` `blue`) >> `resetAttribute` (`foreground` `red`)
     --   @
     --
     --   results in the foreground color attribute reset afterwards whereas after
     --
     --   @
-    --   `setAttribute` (`foreground` $ `bright` `Blue`) >> `resetAttribute` (`background` $ `dull` `Red`)
+    --   `setAttribute` (`foreground` $ `bright` `blue`) >> `resetAttribute` (`background` `red`)
     --   @
     --
-    --   the foreground color is still set as `bright` `Blue`.
+    --   the foreground color is still set as `bright` `blue`.
     --
     resetAttribute  :: Attribute m -> m ()
     -- | Reset all attributes to their default.

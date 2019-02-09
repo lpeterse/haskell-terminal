@@ -42,44 +42,39 @@ default-extensions:
 library:
   ghc-options: -Wall -fwarn-incomplete-patterns
   source-dirs: src
-  dependencies:
-    - terminal-internal
   exposed-modules:
     - System.Terminal
-
-internal-libraries:
-  terminal-internal:
-    ghc-options: -Wall -fwarn-incomplete-patterns
-    exposed-modules:
-      - System.Terminal.Decoder
-      - System.Terminal.Encoder
-      - System.Terminal.MonadInput
-      - System.Terminal.MonadPrinter
-      - System.Terminal.MonadScreen
-      - System.Terminal.MonadTerminal
-      - System.Terminal.Pretty
-      - System.Terminal.Terminal
-      - System.Terminal.TerminalT
-      - System.Terminal.Platform
-      - System.Terminal.Virtual
-    when:
-      - condition: os(windows)
-        then:
-          source-dirs:
-            - src-internal
-            - platform/windows/src
-          include-dirs:
-            - platform/windows/include
-          c-sources:
-            - platform/windows/cbits/hs_terminal.c
-        else:
-          source-dirs:
-            - src-internal
-            - platform/posix/src
-          include-dirs:
-            - platform/posix/include
-          c-sources:
-            - platform/posix/cbits/hs_terminal.c
+    - System.Terminal.Internal
+  other-modules:
+    - System.Terminal.Decoder
+    - System.Terminal.Encoder
+    - System.Terminal.MonadInput
+    - System.Terminal.MonadPrinter
+    - System.Terminal.MonadScreen
+    - System.Terminal.MonadTerminal
+    - System.Terminal.Pretty
+    - System.Terminal.Terminal
+    - System.Terminal.TerminalT
+    - System.Terminal.Platform
+    - System.Terminal.Virtual
+  when:
+  - condition: os(windows)
+    then:
+      source-dirs:
+        - src
+        - platform/windows/src
+      include-dirs:
+        - platform/windows/include
+      c-sources:
+        - platform/windows/cbits/hs_terminal.c
+    else:
+      source-dirs:
+        - src
+        - platform/posix/src
+      include-dirs:
+        - platform/posix/include
+      c-sources:
+        - platform/posix/cbits/hs_terminal.c
 
 tests:
   terminal-test:
@@ -92,7 +87,6 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - terminal
-    - terminal-internal
     - tasty
     - tasty-hunit
     - tasty-quickcheck

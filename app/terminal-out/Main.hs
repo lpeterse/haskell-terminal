@@ -19,6 +19,6 @@ main = withTerminal $ runTerminalT do
     putLn
     flush
     liftIO (threadDelay 5000000)
-    ev <- waitEvent
+    ev <- awaitEvent
     putPrettyLn (show ev)
     flush

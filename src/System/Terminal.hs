@@ -1,5 +1,3 @@
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE RankNTypes   #-}
 module System.Terminal
   ( -- * Getting started
     -- ** withTerminal
@@ -30,20 +28,21 @@ module System.Terminal
   , MonadTerminal
     -- * Event Processing
   , MonadInput (..)
-    -- *** waitEvent
-  , waitEvent
+    -- *** awaitEvent
+  , awaitEvent
+    -- *** checkInterrupt
   , checkInterrupt
     -- ** Events
   , Event (..)
   , Interrupt (..)
     -- *** Keys & Modifiers
   , Key (..)
-  , Direction (..)
   , Modifiers ()
   , shiftKey
   , ctrlKey
   , altKey
   , metaKey
+  , Direction (..)
     -- *** Mouse Events
   , MouseEvent (..)
   , MouseButton (..)
@@ -51,36 +50,18 @@ module System.Terminal
   , WindowEvent (..)
     -- *** Device Events
   , DeviceEvent (..)
-    -- * Low-Level
-    -- ** Terminal
-  , Terminal (..)
-  , Command (..)
-  , Attribute (..)
-  , Color (..)
-  , Decoder (..)
-  , defaultDecoder
-  , defaultEncode
-    -- ** LocalTerminal
-  , System.Terminal.Platform.LocalTerminal ()
-    -- ** VirtualTerminal (for testing)
-  , VirtualTerminal (..)
-  , VirtualTerminalSettings (..)
   ) where
 
 import           Control.Monad.Catch
 import           Control.Monad.IO.Class
 
-import           System.Terminal.Decoder
-import           System.Terminal.Encoder
 import           System.Terminal.MonadInput
 import           System.Terminal.MonadPrinter
 import           System.Terminal.MonadScreen
 import           System.Terminal.MonadTerminal
 import           System.Terminal.Pretty
-import           System.Terminal.Terminal
 import           System.Terminal.TerminalT
 import qualified System.Terminal.Platform
-import           System.Terminal.Virtual
 
 -- | Run the given handler with the locally connected terminal (`System.IO.stdin` / `System.IO.stdout`).
 --

@@ -12,7 +12,7 @@ import           System.Terminal
 
 main :: IO ()
 main = withTerminal $ runTerminalT $ fix $ \loop-> do
-  waitEvent >>= \case
+  awaitEvent >>= \case
     Left Interrupt -> do
       putDocLn $ annotate (foreground red) "*** Interrupted"
       flush

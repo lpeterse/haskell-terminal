@@ -5,16 +5,21 @@ import           Data.ByteString
 import           Data.Text
 
 import           System.Terminal.MonadInput
-import           System.Terminal.MonadScreen
+import           System.Terminal.MonadScreen (Rows, Cols, Row, Col, EraseMode (..))
 
 -- | Types that represent terminals need to implement this class in order
 --   to be driven by this library.
 --
--- This library ships 
+-- This library ships with two instances:
+--
+-- * `System.Terminal.Platform.LocalTerminal` represents the local
+--   terminal wired to the process.
+-- * `System.Terminal.Virtual.VirtualTerminal` is a minimal in-process
+--   terminal emulator designed to be used for unit-testing terminal applications. 
 class Terminal t where
   -- | The terminal identification string usually extracted from the
-  --   environment variable `TERM`. Should contain values like `xterm`
-  --   or `rxvt-unicode`.
+  --   environment variable @TERM@. Should contain values like @xterm@
+  --   or @rxvt-unicode@.
   termType              :: t -> ByteString
   -- | A stream of input events. The transaction will succeed as soon as the
   --   next input event becomes available.
@@ -32,14 +37,13 @@ class Terminal t where
   --   advised to throw an `System.IO.Error.UserInterrupt` exception as soon as a
   --   second interrupt arrives and it sees a previous one unhandled.
   termInterrupt         :: t -> STM Interrupt
-  -- | This transaction appends a piece of `Data.Text.Text` to the output buffer.
+  -- | This operation shall send a command to the terminal.
   --   It shall block when the buffer exeeded its capacity
   --   and unblock as soon as space becomes available again.
   --
   --   Note: All implementations must limit the size of the output buffer or
   --   the application is at risk of running out of memory when writing much
-  --   faster than the terminal can read. Using a `Control.Concurrent.STM.TMVar.TMVar`
-  --   as a buffer of size 1 is perfectly fine here.
+  --   faster than the terminal can read.
   termCommand           :: t -> Command -> IO ()
   -- | This operations flushes the output buffer. Whether it blocks or
   --   not until the buffer has actually been flushed shall be undefined

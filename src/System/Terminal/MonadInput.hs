@@ -34,15 +34,15 @@ class (MonadIO m) => MonadInput m where
     --   of events is available.
     -- * The mapper may also be used in order to additionally wait on external
     --   events (like an `Control.Monad.Async.Async` to complete).
-    waitWith :: (STM Interrupt -> STM Event -> STM a) -> m a
+    awaitWith :: (STM Interrupt -> STM Event -> STM a) -> m a
 
 -- | Wait for the next event.
 --
 -- * Returns as soon as an interrupt or a regular event occurs.
 -- * This operation resets the interrupt flag, signaling responsiveness to
 --   the execution environment.
-waitEvent :: MonadInput m => m (Either Interrupt Event)
-waitEvent = waitWith$ \intr ev ->
+awaitEvent :: MonadInput m => m (Either Interrupt Event)
+awaitEvent = awaitWith$ \intr ev ->
     (Left <$> intr) <|> (Right <$> ev)
 
 -- | Check whether an interrupt is pending.
@@ -50,9 +50,24 @@ waitEvent = waitWith$ \intr ev ->
 -- * This operation resets the interrupt flag, signaling responsiveness
 --   to the execution environment.
 checkInterrupt :: MonadInput m => m Bool
-checkInterrupt = waitWith $ \intr _ ->
+checkInterrupt = awaitWith $ \intr _ ->
     (intr >> pure True) <|> pure False
 
+-- | Events emitted by the terminal.
+--
+-- * Event decoding might be ambique. In case of ambiqueness all
+--   possible meaning shall be emitted. The user is advised to only
+--   match on events expected in a certain context and ignore all
+--   others.
+-- * Key events are highly ambique: I.e. when the user presses @space@
+--   it might either be meant as a regular text element (like @a@,@b@,@c@)
+--   or the focus is on the key itself (like in "Press space to continue...").
+-- * The story is even more complicated: Depending on terminal type and
+--   @termios@ settings, certain control codes have special meaning or not
+--   (@Ctrl+C@ sometimes means interrupt, but not if the environment supports
+--   delivering it as a signal). Don't wait for @Ctrl+C@ when you mean `Interrupt`!
+--   Example: The tab key will likely emit @KeyEvent (CharKey 'I') ctrlKey@ and
+--   @KeyEvent TabKey mempty@ in most settings.
 data Event
     = KeyEvent Key Modifiers
     | MouseEvent MouseEvent
@@ -61,6 +76,7 @@ data Event
     | OtherEvent String
     deriving (Eq,Ord,Show)
 
+-- | Events triggered by key press.
 data Key
     = CharKey Char
     | TabKey
@@ -81,6 +97,7 @@ data Key
     | FunctionKey Int
     deriving (Eq,Ord,Show)
 
+-- | Modifier keys.
 newtype Modifiers = Modifiers Int
     deriving (Eq, Ord, Bits)
 
@@ -107,6 +124,9 @@ ctrlKey  = Modifiers 2
 altKey   = Modifiers 4
 metaKey  = Modifiers 8
 
+-- | Events triggered by mouse action.
+--
+-- * Mouse event reporting must be activated before (TODO).
 data MouseEvent
     = MouseMoved          (Row,Col)
     | MouseButtonPressed  (Row,Col) MouseButton
@@ -139,6 +159,9 @@ data DeviceEvent
     | CursorPositionReport (Row, Col)
     deriving (Eq, Ord, Show)
 
+-- | Interrupt is a special type of event that needs
+--   to be treated with priority. It is therefor not
+--   included in the regular event stream.
 data Interrupt
     = Interrupt
     deriving (Eq, Ord, Show)
