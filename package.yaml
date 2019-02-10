@@ -1,6 +1,6 @@
 name:                terminal
 synopsis:            Portable terminal interaction library
-version:             0.1.0.0
+version:             0.2.0.0
 github:              "lpeterse/haskell-terminal"
 license:             BSD3
 author:              "Lars Petersen"

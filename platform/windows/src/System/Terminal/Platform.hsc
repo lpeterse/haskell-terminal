@@ -71,8 +71,10 @@ decoder0 = defaultDecoder f
     where
         f mods = \case
             '\r'   -> Just $ KeyEvent EnterKey     mods
+            '\n'   -> Just $ KeyEvent EnterKey     mods
             '\t'   -> Just $ KeyEvent TabKey       mods
             '\b'   -> Just $ KeyEvent BackspaceKey mods
+            '\SP'  -> Just $ KeyEvent SpaceKey     mods
             '\DEL' -> Just $ KeyEvent BackspaceKey mods
             _      -> Nothing
 

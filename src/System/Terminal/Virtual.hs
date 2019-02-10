@@ -61,8 +61,8 @@ command t = \case
     RestoreCursor                 -> pure ()
     GetCursorPosition             -> getCursorPosition t
     SetCursorPosition pos         -> setCursorPosition t pos
-    SetCursorVertical r           -> setCursorVertical t r
-    SetCursorHorizontal c         -> setCursorHorizontal t c
+    SetCursorRow r                -> setCursorRow t r
+    SetCursorColumn c             -> setCursorColumn t c
     InsertChars i                 -> insertChars       t i
     DeleteChars i                 -> deleteChars       t i
     EraseChars  i                 -> eraseChars        t i
@@ -138,14 +138,14 @@ setCursorPosition t (Position r c) = do
     Size h w <- virtualWindowSize (virtualSettings t)
     writeTVar (virtualCursor t) $ Position (max 0 (min (h - 1) r)) (max 0 (min (w - 1) c))
 
-setCursorVertical :: VirtualTerminal -> Int -> STM ()
-setCursorVertical t r = do
+setCursorRow :: VirtualTerminal -> Int -> STM ()
+setCursorRow t r = do
     Size h _ <- virtualWindowSize (virtualSettings t)
     Position _ c <- readTVar (virtualCursor t)
     writeTVar (virtualCursor t) $ Position (max 0 (min (h - 1) r)) c
 
-setCursorHorizontal :: VirtualTerminal -> Int -> STM ()
-setCursorHorizontal t c = do
+setCursorColumn :: VirtualTerminal -> Int -> STM ()
+setCursorColumn t c = do
     Size _ w <- virtualWindowSize (virtualSettings t)
     Position r _ <- readTVar (virtualCursor t)
     writeTVar (virtualCursor t) $ Position r (max 0 (min (w - 1) c))

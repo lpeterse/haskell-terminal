@@ -79,8 +79,8 @@ data Command
   | RestoreCursor
   | GetCursorPosition
   | SetCursorPosition        Position
-  | SetCursorVertical        Int
-  | SetCursorHorizontal      Int
+  | SetCursorRow             Int
+  | SetCursorColumn          Int
   | InsertChars              Int
   | DeleteChars              Int
   | EraseChars               Int

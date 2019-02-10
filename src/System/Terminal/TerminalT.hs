@@ -141,6 +141,10 @@ instance (MonadIO m, MonadThrow m, T.Terminal t) => MonadScreen (TerminalT t m) 
         TerminalT (liftIO . T.termGetCursorPosition =<< ask)
     setCursorPosition pos =
         command (T.SetCursorPosition pos)
+    setCursorRow i =
+        command (T.SetCursorRow i)
+    setCursorColumn i =
+        command (T.SetCursorColumn i)
 
     saveCursor =
         command T.SaveCursor
