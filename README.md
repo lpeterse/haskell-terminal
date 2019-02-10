@@ -1,4 +1,5 @@
-# terminal
+terminal [![Hackage](https://img.shields.io/github/release/lpeterse/haskell-terminal.svg)](https://github.com/lpeterse/haskell-terminal/releases) [![Travis](https://img.shields.io/travis/lpeterse/haskell-terminal.svg)](https://travis-ci.org/lpeterse/haskell-terminal)
+=======================
 
 _terminal_ is a driver library for ANSI terminals like _xterm_.
 

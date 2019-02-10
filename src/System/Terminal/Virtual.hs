@@ -12,10 +12,11 @@ import           System.Terminal.Terminal
 
 data VirtualTerminal
     = VirtualTerminal
-    { virtualSettings          :: VirtualTerminalSettings
-    , virtualCursor            :: TVar Position
-    , virtualWindow            :: TVar [String]
-    , virtualAutoWrap          :: TVar Bool
+    { virtualSettings              :: VirtualTerminalSettings
+    , virtualCursor                :: TVar Position
+    , virtualWindow                :: TVar [String]
+    , virtualAutoWrap              :: TVar Bool
+    , virtualAlternateScreenBuffer :: TVar Bool
     }
 
 data VirtualTerminalSettings
@@ -42,6 +43,7 @@ withVirtualTerminal settings handler = do
         <$> newTVar (Position 0 0)
         <*> newTVar (replicate (height size) (replicate (width size) ' '))
         <*> newTVar True
+        <*> newTVar False
     handler term
 
 command :: VirtualTerminal -> Command -> STM ()
@@ -71,9 +73,7 @@ command t = \case
     EraseInLine m                 -> eraseInLine       t m
     EraseInDisplay m              -> eraseInDisplay    t m
     SetAutoWrap b                 -> setAutoWrap       t b
-{-
-    SetAlternateScreenBuffer Bool
--}
+    SetAlternateScreenBuffer b    -> setAlternateScreenBuffer t b
 
 scrollDown :: Int -> [String] -> [String]
 scrollDown w window =
@@ -232,5 +232,9 @@ eraseInDisplay t m = do
         EraseAll      -> w1E <> w2E <> w3E
 
 setAutoWrap :: VirtualTerminal -> Bool -> STM ()
-setAutoWrap t x = do
-    writeTVar (virtualAutoWrap t) x
+setAutoWrap t b = do
+    writeTVar (virtualAutoWrap t) b
+
+setAlternateScreenBuffer :: VirtualTerminal -> Bool -> STM ()
+setAlternateScreenBuffer t b = do
+    writeTVar (virtualAlternateScreenBuffer t) b

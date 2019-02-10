@@ -91,44 +91,44 @@ tests:
     - tasty-hunit
     - tasty-quickcheck
 
-executables:
-  terminal-ev:
-    main:                Main.hs
-    source-dirs:         app/terminal-ev
-    ghc-options:
-    - -Werror
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - terminal
-  terminal-out:
-    main:                Main.hs
-    source-dirs:         app/terminal-out
-    ghc-options:
-    - -Werror
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - terminal
-  terminal-printer:
-    main:                Main.hs
-    source-dirs:         app/terminal-printer
-    ghc-options:
-    - -Werror
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - terminal
-  terminal-screen:
-    main:                Main.hs
-    source-dirs:         app/terminal-screen
-    ghc-options:
-    - -Werror
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - terminal
+# executables:
+#   terminal-ev:
+#     main:                Main.hs
+#     source-dirs:         example/terminal-ev
+#     ghc-options:
+#     - -Werror
+#     - -threaded
+#     - -rtsopts
+#     - -with-rtsopts=-N
+#     dependencies:
+#     - terminal
+#   terminal-out:
+#     main:                Main.hs
+#     source-dirs:         example/terminal-out
+#     ghc-options:
+#     - -Werror
+#     - -threaded
+#     - -rtsopts
+#     - -with-rtsopts=-N
+#     dependencies:
+#     - terminal
+#   terminal-printer:
+#     main:                Main.hs
+#     source-dirs:         example/terminal-printer
+#     ghc-options:
+#     - -Werror
+#     - -threaded
+#     - -rtsopts
+#     - -with-rtsopts=-N
+#     dependencies:
+#     - terminal
+#   terminal-screen:
+#     main:                Main.hs
+#     source-dirs:         example/terminal-screen
+#     ghc-options:
+#     - -Werror
+#     - -threaded
+#     - -rtsopts
+#     - -with-rtsopts=-N
+#     dependencies:
+#     - terminal
