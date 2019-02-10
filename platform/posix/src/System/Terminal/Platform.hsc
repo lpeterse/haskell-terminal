@@ -41,7 +41,7 @@ data LocalTerminal
     { localType              :: BS.ByteString
     , localEvent             :: STM Event
     , localInterrupt         :: STM Interrupt
-    , localGetCursorPosition :: IO (Row, Col)
+    , localGetCursorPosition :: IO Position
     }
 
 instance Terminal LocalTerminal where
@@ -145,7 +145,7 @@ withInterruptHandler handler = bracket installHandler restoreHandler . const
       pure ()
 
 withInputProcessing :: (MonadIO m, MonadMask m) =>
-    Termios -> TMVar (Row, Col) -> TMVar Event -> m a -> m a
+    Termios -> TMVar Position -> TMVar Event -> m a -> m a
 withInputProcessing termios cursorPosition events =
     bracket (liftIO $ A.async $ run decoder) (liftIO . A.cancel) . const
     where
@@ -205,11 +205,11 @@ withInputProcessing termios cursorPosition events =
         timeoutMilliseconds :: Int
         timeoutMilliseconds  = 50
 
-getWindowSize :: IO (Rows, Cols)
+getWindowSize :: IO Size
 getWindowSize =
   alloca $ \ptr->
     unsafeIOCtl 0 (#const TIOCGWINSZ) ptr >>= \case
-      0 -> peek ptr >>= \ws-> pure (fromIntegral $ wsRow ws, fromIntegral $ wsCol ws)
+      0 -> peek ptr >>= \ws-> pure $ Size (fromIntegral $ wsRow ws) (fromIntegral $ wsCol ws)
       _ -> undefined
 
 getTermios :: IO Termios
