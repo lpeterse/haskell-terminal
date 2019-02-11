@@ -74,6 +74,7 @@ command t = \case
     EraseInDisplay m              -> eraseInDisplay    t m
     SetAutoWrap b                 -> setAutoWrap       t b
     SetAlternateScreenBuffer b    -> setAlternateScreenBuffer t b
+    SetBracketedPasteMode _       -> pure ()
 
 scrollDown :: Int -> [String] -> [String]
 scrollDown w window =

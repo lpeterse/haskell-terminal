@@ -116,6 +116,8 @@ defaultEncode = \case
     SetAutoWrap False                        -> "\ESC[?7l"
     SetAlternateScreenBuffer True            -> "\ESC[?1049h"
     SetAlternateScreenBuffer False           -> "\ESC[?1049l"
+    SetBracketedPasteMode    True            -> "\ESC[?2004h"
+    SetBracketedPasteMode    False           -> "\ESC[?2004h"
 
 -- http://www.noah.org/python/pexpect/ANSI-X3.64.htm
 -- Erasing parts of the display (EL and ED) in the VT100 is performed thus:

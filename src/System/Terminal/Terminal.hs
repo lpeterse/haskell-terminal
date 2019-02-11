@@ -90,6 +90,7 @@ data Command
   | EraseInDisplay           EraseMode
   | SetAutoWrap              Bool
   | SetAlternateScreenBuffer Bool
+  | SetBracketedPasteMode    Bool
   deriving (Eq, Ord, Show)
 
 -- | ANSI text attributes.

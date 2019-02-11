@@ -122,12 +122,15 @@ testDecoderRxvtUnicode = testGroup "Rxvt Unicode"
   []
 
 assertDecoding :: (Modifiers -> Char -> Maybe Event) -> Modifiers -> String -> [Event] -> Assertion
-assertDecoding specialChars mods input expected
-  = expected @=? decode (defaultDecoder specialChars) input
-  where
-    decode :: Decoder -> String -> [Event]
-    decode decoder = \case
-        [] -> []
-        (x:xs) ->  case feedDecoder decoder mods x of
-            Left decoder' -> decode decoder' xs
-            Right evs     -> evs
+assertDecoding specialChars mods = decode (defaultDecoder specialChars)
+    where
+      decode :: Decoder -> String -> [Event] -> Assertion
+      decode decoder xs es = case xs of 
+          []  | null es -> pure ()
+              | otherwise -> assertFailure $ "missing events " ++ show es
+          (x:xs) -> do 
+              let (decoder', evs) = feedDecoder decoder mods x
+              let len = length evs
+              assertEqual ("events after " ++ show x) (take len es) evs
+              let es' = drop len es
+              decode decoder' xs es'

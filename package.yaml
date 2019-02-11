@@ -91,17 +91,17 @@ tests:
     - tasty-hunit
     - tasty-quickcheck
 
-# executables:
-#   terminal-ev:
-#     main:                Main.hs
-#     source-dirs:         example/terminal-ev
-#     ghc-options:
-#     - -Werror
-#     - -threaded
-#     - -rtsopts
-#     - -with-rtsopts=-N
-#     dependencies:
-#     - terminal
+executables:
+  terminal-ev:
+    main:                Main.hs
+    source-dirs:         example/terminal-ev
+    ghc-options:
+    - -Werror
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - terminal
 #   terminal-out:
 #     main:                Main.hs
 #     source-dirs:         example/terminal-out

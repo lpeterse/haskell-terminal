@@ -35,6 +35,7 @@ class (MonadIO m) => MonadInput m where
     -- * The mapper may also be used in order to additionally wait on external
     --   events (like an `Control.Monad.Async.Async` to complete).
     awaitWith :: (STM Interrupt -> STM Event -> STM a) -> m a
+    setBracketedPasteMode :: Bool -> m ()
 
 -- | Wait for the next event.
 --
@@ -73,6 +74,7 @@ data Event
     | MouseEvent MouseEvent
     | WindowEvent WindowEvent
     | DeviceEvent DeviceEvent
+    | PasteEvent PasteEvent
     | OtherEvent String
     deriving (Eq,Ord,Show)
 
@@ -152,6 +154,12 @@ data WindowEvent
     = WindowLostFocus
     | WindowGainedFocus
     | WindowSizeChanged
+    deriving (Eq, Ord, Show)
+
+data PasteEvent
+    = PasteBegin
+    | Pasted Char
+    | PasteEnd
     deriving (Eq, Ord, Show)
 
 data DeviceEvent

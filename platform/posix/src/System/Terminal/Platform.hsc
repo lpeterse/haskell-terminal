@@ -147,35 +147,34 @@ withInterruptHandler handler = bracket installHandler restoreHandler . const
 withInputProcessing :: (MonadIO m, MonadMask m) =>
     Termios -> TMVar Position -> TMVar Event -> m a -> m a
 withInputProcessing termios cursorPosition events =
-    bracket (liftIO $ A.async $ run decoder) (liftIO . A.cancel) . const
+    bracket (liftIO $ A.async $ run decoder0) (liftIO . A.cancel) . const
     where
         run :: Decoder -> IO ()
         run d = do
             c <- IO.hGetChar IO.stdin
-            case feedDecoder d mempty c of
-              -- The decoder is not in final state.
-              -- There are sequences depending on timing (escape either is literal
-              -- escape or the beginning of a sequence).
-              -- This block evaluates whether more input is available within
-              -- a limited timespan. If this is the case it just recurses 
-              -- with the decoder continuation.
-              -- Otherwise, a NUL character is fed in order to tell the decoder
-              -- that there is no more input belonging to the sequence.
-              Left d' -> IO.hWaitForInput IO.stdin timeoutMilliseconds >>= \case
+            let (d', evs') = feedDecoder d mempty c
+            case evs' of
+              [] -> IO.hWaitForInput IO.stdin timeoutMilliseconds >>= \case
+                  -- The decoder is not in final state.
+                  -- There are sequences depending on timing (escape either is literal
+                  -- escape or the beginning of a sequence).
+                  -- This block evaluates whether more input is available within
+                  -- a limited timespan. If this is the case it just recurses 
+                  -- with the decoder continuation.
+                  -- Otherwise, a NUL character is fed in order to tell the decoder
+                  -- that there is no more input belonging to the sequence.
                   True  -> run d'
-                  False -> case feedDecoder d' mempty '\NUL' of
-                      Left d'' -> run d''
-                      Right evs -> do
-                          forM_ evs writeEvent
-                          run decoder
-              -- The decoder reached a final state.
-              -- All recognized events are appended to the event stream.
-              Right evs -> do
-                  forM_ evs writeEvent
-                  run decoder
+                  False -> do
+                      let (d'', evs'') = feedDecoder d' mempty '\NUL'
+                      forM_ evs'' writeEvent
+                      run d''
+              _ -> do
+                  -- All recognized events are appended to the event stream.
+                  forM_ evs' writeEvent
+                  run d'
 
-        decoder :: Decoder
-        decoder = defaultDecoder (specialChar termios)
+        decoder0 :: Decoder
+        decoder0 = defaultDecoder (specialChar termios)
 
         -- Adds events to the event stream and catches certain events
         -- that require special treatment.

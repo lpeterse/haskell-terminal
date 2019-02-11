@@ -60,7 +60,7 @@ class Monad m => MonadPrinter m where
     {-# MINIMAL putLn, putChar, putText, getLineWidth #-}
 
 -- | This class introduces abstract constructors for text markup.
-class MonadPrinter m => MonadMarkupPrinter m where
+class (MonadPrinter m, Eq (Attribute m)) => MonadMarkupPrinter m where
     -- | This associated type represents all possible attributes that are
     --   available in the current environment.
     --
@@ -97,7 +97,7 @@ class MonadPrinter m => MonadMarkupPrinter m where
     resetAttribute  :: Attribute m -> m ()
     -- | Reset all attributes to their default.
     resetAttributes :: m ()
-    -- | Shall determine wheter two attribute values would override each other
+    -- | Shall determine whether two attribute values would override each other
     --   or can be applied independently.
     --
     -- * Shall obey the laws of equivalence.

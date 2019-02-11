@@ -58,6 +58,8 @@ instance (MonadIO m, T.Terminal t) => MonadInput (TerminalT t m) where
     awaitWith f = TerminalT do
         t <- ask
         liftIO $ atomically $ f (T.termInterrupt t) (T.termEvent t)
+    setBracketedPasteMode b =
+        command (T.SetBracketedPasteMode b)
 
 instance (MonadIO m, MonadThrow m, T.Terminal t) => MonadPrinter (TerminalT t m) where
     putLn =
@@ -179,7 +181,7 @@ instance (MonadIO m, MonadThrow m, T.Terminal t) => MonadScreen (TerminalT t m) 
 
 instance (MonadIO m, MonadThrow m, T.Terminal t) => MonadTerminal (TerminalT t m) where
 
-command :: (MonadIO m, MonadThrow m, T.Terminal t) => T.Command -> TerminalT t m ()
+command :: (MonadIO m, T.Terminal t) => T.Command -> TerminalT t m ()
 command c = TerminalT do
   t <- ask
   liftIO $ T.termCommand t c
