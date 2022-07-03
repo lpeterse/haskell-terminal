@@ -7,7 +7,7 @@ import           Control.Monad.IO.Class
 import           Data.Char
 import           Data.Function             (fix)
 
-import           Data.Text.Prettyprint.Doc
+import           Prettyprinter
 import           System.Terminal
 
 main :: IO ()
@@ -27,7 +27,7 @@ main = withTerminal $ runTerminalT $ do
           KeyEvent {}           -> putDocLn $ annotate (foreground $ bright blue)    (pretty $ show ev)
           WindowEvent {}        -> do
             sz <- getWindowSize
-            putDocLn $ annotate (foreground $ bright magenta) (pretty $ show ev <> ": " <> show sz) 
+            putDocLn $ annotate (foreground $ bright magenta) (pretty $ show ev <> ": " <> show sz)
           _ ->                     putDocLn $ pretty $ show ev
         flush
         loop
