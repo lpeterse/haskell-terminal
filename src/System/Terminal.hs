@@ -4,7 +4,7 @@ module System.Terminal
     withTerminal
     -- ** TerminalT
   , runTerminalT
-  , TerminalT ()
+  , TerminalT (TerminalT)
     -- * Printing & Screen Modification
     -- ** MonadPrinter
   , MonadPrinter (..)
