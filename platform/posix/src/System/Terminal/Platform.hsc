@@ -1,3 +1,4 @@
+{-# LANGUAGE CApiFFI #-}
 module System.Terminal.Platform
     ( withTerminal
     , LocalTerminal ()
@@ -64,7 +65,7 @@ withTerminal action = do
     withTermiosSettings $ \termios->
         withInterruptHandler (handleInterrupt mainThread interrupt) $
         withResizeHandler (handleResize windowChanged) $
-        withInputProcessing termios cursorPosition events $ 
+        withInputProcessing termios cursorPosition events $
         action LocalTerminal
             { localType = term
             , localEvent = do
@@ -159,7 +160,7 @@ withInputProcessing termios cursorPosition events =
                   -- There are sequences depending on timing (escape either is literal
                   -- escape or the beginning of a sequence).
                   -- This block evaluates whether more input is available within
-                  -- a limited timespan. If this is the case it just recurses 
+                  -- a limited timespan. If this is the case it just recurses
                   -- with the decoder continuation.
                   -- Otherwise, a NUL character is fed in order to tell the decoder
                   -- that there is no more input belonging to the sequence.
@@ -212,7 +213,7 @@ getWindowSize =
       _ -> undefined
 
 getTermios :: IO Termios
-getTermios = 
+getTermios =
   alloca $ \ptr->
     unsafeGetTermios 0 ptr >>= \case
       0 -> peek ptr
@@ -222,7 +223,7 @@ setTermios :: Termios -> IO ()
 setTermios t =
   alloca $ \ptr->
     unsafeGetTermios 0 ptr >>= \case
-      0 -> do 
+      0 -> do
         poke ptr t
         unsafeSetTermios 0 (#const TCSANOW) ptr >>= \case
           0 -> pure ()
@@ -277,7 +278,7 @@ instance Storable Termios where
       peekVINTR      = (#peek struct termios, c_cc[VINTR])  ptr :: IO CUChar
       peekVKILL      = (#peek struct termios, c_cc[VKILL])  ptr :: IO CUChar
       peekVQUIT      = (#peek struct termios, c_cc[VQUIT])  ptr :: IO CUChar
-      peekLFlag      = (#peek struct termios, c_lflag)      ptr :: IO CUInt 
+      peekLFlag      = (#peek struct termios, c_lflag)      ptr :: IO CUInt
   poke ptr termios = do
     pokeVEOF   $ fromIntegral $ fromEnum $ termiosVEOF   termios
     pokeVERASE $ fromIntegral $ fromEnum $ termiosVERASE termios
@@ -302,8 +303,8 @@ foreign import ccall unsafe "tcgetattr"
 foreign import ccall unsafe "tcsetattr"
   unsafeSetTermios :: CInt -> CInt -> Ptr Termios -> IO CInt
 
-foreign import ccall unsafe "ioctl"
-  unsafeIOCtl :: CInt -> CInt -> Ptr a -> IO CInt
+foreign import capi unsafe "ioctl"
+  unsafeIOCtl :: CInt -> CULong -> Ptr a -> IO CInt
 
 foreign import ccall unsafe
   stg_sig_install :: CInt -> CInt -> Ptr a -> IO CInt

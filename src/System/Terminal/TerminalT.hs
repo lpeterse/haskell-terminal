@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
 module System.Terminal.TerminalT
-  ( TerminalT ()
+  ( TerminalT (TerminalT)
   , runTerminalT
   )
 where
@@ -68,7 +68,7 @@ instance (MonadIO m, MonadThrow m, T.Terminal t) => MonadPrinter (TerminalT t m)
         command (T.PutText $ Text.singleton c)
     putString cs =
         forM_ cs (command . T.PutText . Text.singleton)
-    putText t = 
+    putText t =
         command (T.PutText t)
     flush = TerminalT do
         t <- ask
@@ -88,7 +88,7 @@ instance (MonadIO m, MonadThrow m, T.Terminal t) => MonadMarkupPrinter (Terminal
     resetsAttribute (AttributeT T.Inverted   {}) (AttributeT T.Inverted   {}) = True
     resetsAttribute (AttributeT T.Foreground {}) (AttributeT T.Foreground {}) = True
     resetsAttribute (AttributeT T.Foreground {}) (AttributeT T.Background {}) = True
-    resetsAttribute _                            _                            = False 
+    resetsAttribute _                            _                            = False
 
 instance (MonadIO m, MonadThrow m, T.Terminal t) => MonadFormattingPrinter (TerminalT t m) where
     bold       = AttributeT T.Bold
