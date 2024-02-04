@@ -180,9 +180,9 @@ withInputProcessing mainThread interrupt windowChanged events ma = do
                     -- to reliably distinguish real escape key presses and escape sequences
                     -- from another. A NUL is added after each timeout potentially
                     -- terminating any ambiguous (escape) sequences.
-                    case feedDecoder decoder mempty '\NUL' of
-                        Left decoder' -> continue decoder'
-                        Right evs     -> forM_ evs pushEvent >> continue decoder0
+                    let (decoder', evs) = feedDecoder decoder mempty '\NUL' in case evs of
+                        [] -> continue decoder'
+                        _  -> forM_ evs pushEvent >> continue decoder0
                 Just ev -> case ev of
                     ConsoleKeyEvent { ceCharKey = c, ceKeyDown = d, ceKeyModifiers = mods }
                         -- In virtual terminal mode, Windows actually sends Ctrl+C and there is no
@@ -193,7 +193,7 @@ withInputProcessing mainThread interrupt windowChanged events ma = do
                         -- to reset the interrupt flag in the meantime. In this specific case
                         -- an asynchronous `E.UserInterrupt` exception is thrown to the main thread
                         -- and either terminates the application or at least the current computation.
-                        | c == '\ETX' && d -> do 
+                        | c == '\ETX' && d -> do
                             unhandledInterrupt <- atomically (swapTVar interrupt True)
                             when unhandledInterrupt (E.throwTo mainThread E.UserInterrupt)
                         -- When the character is ESC and the key is pressed down it might be
@@ -202,14 +202,16 @@ withInputProcessing mainThread interrupt windowChanged events ma = do
                         -- not introduce a sequence.
                         | c == '\ESC' && d -> do
                             latest <- readTVarIO latestCharacter
-                            case feedDecoder decoder mods (if latest == '\ESC' then '\NUL' else '\ESC') of
-                                Left decoder' -> continue decoder'
-                                Right evs     -> forM_ evs pushEvent >> continue decoder0
+                            let (decoder', evs) = feedDecoder decoder mods (if latest == '\ESC' then '\NUL' else '\ESC')
+                            case evs of
+                                [] -> continue decoder'
+                                _  -> forM_ evs pushEvent >> continue decoder0
                         | d -> do
                             atomically (writeTVar latestCharacter c)
-                            case feedDecoder decoder mods c of
-                                Left decoder' -> continue decoder'
-                                Right evs     -> forM_ evs pushEvent >> continue decoder0
+                            let (decoder', evs) = feedDecoder decoder mods c
+                            case evs of
+                                [] -> continue decoder'
+                                _  -> forM_ evs pushEvent >> continue decoder0
                         | otherwise -> continue decoder -- All other key events shall be ignored.
                     ConsoleMouseEvent mouseEvent -> case mouseEvent of
                         MouseButtonPressed (Position r c) btn -> do

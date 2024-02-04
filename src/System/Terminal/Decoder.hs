@@ -30,7 +30,7 @@ defaultDecoder specialChar = defaultMode
         | c == '\ESC' -> (escapeMode, [])
         -- All other C0 control codes are mapped to their corresponding ASCII character + CTRL modifier.
         -- If the character is a special character, then two events are produced.
-        | c <= '\US'  -> emit $ [KeyEvent (CharKey (toEnum $ (+64) $ fromEnum c)) (mods <> ctrlKey)] ++ f mods c
+        | c <= '\US'  -> emit $ maybe [KeyEvent (CharKey (toEnum $ (+64) $ fromEnum c)) (mods <> ctrlKey)] pure (specialChar mods c)
         -- All remaning characters of the Latin-1 block are returned as is.
         | c <  '\DEL' -> emit $ [KeyEvent (CharKey c) mods] ++ f mods c
         -- Skip all other C1 control codes and DEL unless they have special meaning configured.
