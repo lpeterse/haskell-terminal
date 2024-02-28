@@ -6,7 +6,7 @@ import           Control.Concurrent
 import           Control.Monad
 import           Control.Monad.IO.Class
 
-import           Data.Text.Prettyprint.Doc
+import           Prettyprinter
 import           System.Terminal
 
 import           Prelude                   hiding ((<>))

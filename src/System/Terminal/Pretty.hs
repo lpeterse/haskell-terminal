@@ -1,7 +1,7 @@
 module System.Terminal.Pretty where
 
 import           Data.Text                     as T
-import           Data.Text.Prettyprint.Doc
+import           Prettyprinter
 import           Prelude                   hiding (putChar)
 
 import           System.Terminal.MonadPrinter
@@ -12,7 +12,7 @@ import           System.Terminal.MonadPrinter
 --
 -- @
 -- import System.Terminal
--- import Data.Text.Prettyprint.Doc
+-- import Prettyprinter
 --
 -- printer :: (`MonadFormatingPrinter` m, `MonadColorPrinter` m) => m ()
 -- printer = `putDoc` $ `annotate` (foreground $ `bright` `blue`) "This is blue!" <> `line`

@@ -7,7 +7,7 @@ import           Control.Monad.IO.Class
 import           Data.Char
 import           Data.Function             (fix)
 
-import           Data.Text.Prettyprint.Doc
+import           Prettyprinter
 import           System.Terminal
 
 main :: IO ()
