@@ -647,7 +647,7 @@ testEraseInDisplay01 =
         expCursor = (Position 1 4)
         expWindow =
             [ "          "
-            , "1234567890"
+            , "     67890"
             , "1234567890" ]
 
 testEraseInDisplay02 :: TestTree
@@ -669,7 +669,7 @@ testEraseInDisplay02 =
         expCursor = (Position 1 4)
         expWindow =
             [ "1234567890"
-            , "1234567890"
+            , "1234      "
             , "          " ]
 
 testEraseInDisplay03 :: TestTree

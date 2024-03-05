@@ -219,17 +219,19 @@ eraseInLine t m = do
 eraseInDisplay :: VirtualTerminal -> EraseMode -> STM ()
 eraseInDisplay t m = do
     Size h w <- virtualWindowSize (virtualSettings t)
-    Position r _ <- readTVar (virtualCursor t)
+    Position r c <- readTVar (virtualCursor t)
     wndw  <- readTVar (virtualWindow t)
-    let w1  = take r wndw
-        w1E = replicate r (replicate w ' ') 
-        w2  = [wndw !! r]
+    let l   = wndw !! r
+        w1  = take r wndw
+        w1E = replicate r (replicate w ' ')
+        w2B = [replicate (c + 1) ' ' <> drop (c + 1) l]
+        w2F = [take c l <> replicate (w - c) ' ']
         w2E = [replicate w ' ']
         w3  = drop (r + 1) wndw
         w3E = replicate (h - r - 1) (replicate w ' ')
     writeTVar (virtualWindow t) $ case m of
-        EraseBackward -> w1E <> w2  <> w3
-        EraseForward  -> w1  <> w2  <> w3E
+        EraseBackward -> w1E <> w2B <> w3
+        EraseForward  -> w1  <> w2F <> w3E
         EraseAll      -> w1E <> w2E <> w3E
 
 setAutoWrap :: VirtualTerminal -> Bool -> STM ()
